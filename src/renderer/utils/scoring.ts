@@ -1,17 +1,8 @@
 import { ScoringSystem } from '../types/tournament';
+import { getDefaultScoringSystem as getDefaultScoringSystemFromConstants } from '@constants';
 
-export function getDefaultScoringSystem(playersPerMatch: number): ScoringSystem {
-  switch (playersPerMatch) {
-    case 2:
-      return { 1: 1, 2: 0 };
-    case 3:
-      return { 1: 3, 2: 1, 3: 0 };
-    case 4:
-      return { 1: 6, 2: 4, 3: 2, 4: 0 };
-    default:
-      return { 1: 1, 2: 0 };
-  }
-}
+// Re-export from constants for backwards compatibility
+export const getDefaultScoringSystem = getDefaultScoringSystemFromConstants;
 
 export function getTournamentPoints(position: number, scoringSystem: ScoringSystem): number {
   return scoringSystem[position] || 0;

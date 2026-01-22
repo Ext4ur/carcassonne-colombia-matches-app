@@ -9,6 +9,15 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src/renderer'),
+      '@repositories': path.resolve(__dirname, './src/renderer/repositories'),
+      '@services': path.resolve(__dirname, './src/renderer/services'),
+      '@hooks': path.resolve(__dirname, './src/renderer/hooks'),
+      '@components': path.resolve(__dirname, './src/renderer/components'),
+      '@types': path.resolve(__dirname, './src/renderer/types'),
+      '@constants': path.resolve(__dirname, './src/renderer/constants'),
+      '@config': path.resolve(__dirname, './src/renderer/config'),
+      '@api': path.resolve(__dirname, './src/renderer/api'),
+      '@auth': path.resolve(__dirname, './src/renderer/auth'),
     },
   },
   server: {

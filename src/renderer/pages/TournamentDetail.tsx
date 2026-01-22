@@ -88,6 +88,11 @@ export default function TournamentDetail() {
     try {
       const data = await DatabaseService.getRoundMatches(currentRound.id);
       setMatches(data);
+      // Load players and results after matches are loaded
+      if (data.length > 0) {
+        await loadMatchPlayers();
+        await loadMatchResults();
+      }
     } catch (error) {
       console.error('Error loading matches:', error);
     }
@@ -126,6 +131,34 @@ export default function TournamentDetail() {
       console.error('Error generating round:', error);
       addNotification({
         message: error.message || 'Error al generar la ronda',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFinalizeTournament = async () => {
+    if (!tournament?.id) return;
+    
+    if (!confirm('¿Estás seguro de finalizar el torneo? Una vez finalizado, no se podrán hacer más cambios.')) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await DatabaseService.updateTournament(tournament.id, { status: 'completed' });
+      await loadTournament(); // Reload tournament to get updated status
+      addNotification({
+        message: 'Torneo finalizado exitosamente. Ya no se pueden realizar más cambios.',
+        type: 'success',
+        duration: 5000,
+      });
+      setShowStats(true);
+    } catch (error: any) {
+      console.error('Error finalizing tournament:', error);
+      addNotification({
+        message: 'Error al finalizar el torneo',
         type: 'error',
       });
     } finally {
@@ -175,6 +208,7 @@ export default function TournamentDetail() {
   };
 
   const handleOpenMatchModal = (match: Match) => {
+    // Set the match and open modal - MatchResultForm will reload data via useEffect
     setSelectedMatch(match);
     setIsMatchModalOpen(true);
   };
@@ -232,6 +266,7 @@ export default function TournamentDetail() {
     setSelectedMatch(null);
     await loadMatches();
     await loadStandings();
+    await loadMatchResults();
     
     // Check if all matches in current round are completed
     if (currentRound) {
@@ -388,10 +423,12 @@ export default function TournamentDetail() {
   ];
 
   const [matchPlayersMap, setMatchPlayersMap] = useState<{ [matchId: number]: any[] }>({});
+  const [matchResultsMap, setMatchResultsMap] = useState<{ [matchId: number]: any[] }>({});
 
   useEffect(() => {
     if (matches.length > 0) {
       loadMatchPlayers();
+      loadMatchResults();
     }
   }, [matches]);
 
@@ -406,6 +443,74 @@ export default function TournamentDetail() {
     setMatchPlayersMap(map);
   };
 
+  const loadMatchResults = async () => {
+    const map: { [matchId: number]: any[] } = {};
+    for (const match of matches) {
+      if (match.id) {
+        // Load results for all matches (not just completed) to detect byes
+        const results = await DatabaseService.getMatchResults(match.id);
+        if (results.length > 0) {
+          map[match.id] = results;
+        }
+      }
+    }
+    setMatchResultsMap(map);
+  };
+
+  // Check if match is a bye (1 result, completed, typically 0 players in match_players)
+  const isByeMatch = (match: Match): boolean => {
+    if (match.status !== 'completed') return false;
+    const results = matchResultsMap[match.id!] || [];
+    const players = matchPlayersMap[match.id!] || [];
+    // Bye matches have exactly 1 result and typically 0 players in match_players
+    // (though sometimes they might have 1 player if it was added)
+    return results.length === 1 && players.length <= 1;
+  };
+
+  // Get position color classes
+  const getPositionColor = (position: number, playersPerMatch: number): string => {
+    // For 2-player matches, only 1st place has style, 2nd place has no style
+    if (playersPerMatch === 2 && position === 2) {
+      return ''; // No style for 2nd place in 2-player matches
+    }
+    
+    const colors: { [key: number]: string } = {
+      1: 'text-green-600 dark:text-green-400 font-bold', // Ganador
+      2: 'text-yellow-600 dark:text-yellow-400 font-bold', // 2do lugar (for 3+ players)
+      3: 'text-blue-600 dark:text-blue-400 font-bold', // 3er lugar
+      4: 'text-purple-600 dark:text-purple-400 font-bold', // 4to lugar
+      5: 'text-pink-600 dark:text-pink-400 font-bold', // 5to lugar (si hay 5 jugadores)
+    };
+    // Always return a styled color, defaulting to gray with bold for unknown positions
+    return colors[position] || 'text-gray-600 dark:text-gray-400 font-bold';
+  };
+
+  // Get legend items based on players per match
+  const getLegendItems = (playersPerMatch: number) => {
+    const items = [];
+    const labels = ['Ganador', '2do Lugar', '3er Lugar', '4to Lugar', '5to Lugar'];
+    const colors = [
+      'text-green-600 dark:text-green-400',
+      'text-yellow-600 dark:text-yellow-400',
+      'text-blue-600 dark:text-blue-400',
+      'text-purple-600 dark:text-purple-400',
+      'text-pink-600 dark:text-pink-400',
+    ];
+    
+    for (let i = 1; i <= playersPerMatch && i <= 5; i++) {
+      // For 2-player matches, skip 2nd place in legend (it has no style)
+      if (playersPerMatch === 2 && i === 2) {
+        continue;
+      }
+      items.push({
+        position: i,
+        label: labels[i - 1] || `${i}° Lugar`,
+        color: colors[i - 1] || 'text-gray-600 dark:text-gray-400',
+      });
+    }
+    return items;
+  };
+
   const matchesColumns: Column<Match>[] = [
     {
       key: 'match_number',
@@ -416,35 +521,110 @@ export default function TournamentDetail() {
       header: 'Jugadores',
       render: (match) => {
         const players = matchPlayersMap[match.id!] || [];
+        const results = matchResultsMap[match.id!] || [];
+        
+        // Check if it's a bye match first (before checking if players.length === 0)
+        const isBye = isByeMatch(match);
+        
+        if (isBye) {
+          // Bye match - show player in orange bold
+          // Get player name from results (bye matches typically don't have players in match_players)
+          let playerName = 'Jugador desconocido';
+          if (results.length > 0) {
+            // Get player name from result
+            const result = results[0];
+            playerName = result.player_name || 'Jugador desconocido';
+          } else if (players.length > 0) {
+            // Fallback to match_players if results not loaded yet
+            playerName = players[0].name;
+          }
+          return (
+            <span className="text-orange-600 dark:text-orange-400 font-bold">
+              {playerName}
+            </span>
+          );
+        }
+        
+        // Not a bye match, check if players are assigned
         if (players.length === 0) return 'Sin asignar';
+        
+        // Normal match - show players with position colors
+        if (match.status === 'completed') {
+          const results = matchResultsMap[match.id!] || [];
+          const playersWithResults = players.map((p: any) => {
+            const result = results.find((r: any) => r.player_id === p.id);
+            return {
+              ...p,
+              position: result?.position || players.length, // Default to last position if no result
+            };
+          }).sort((a: any, b: any) => a.position - b.position);
+          
+          return (
+            <div className="flex flex-wrap gap-2">
+              {playersWithResults.map((p: any, idx: number) => (
+                <span
+                  key={p.id || idx}
+                  className={getPositionColor(p.position, tournament.players_per_match)}
+                >
+                  {p.name}
+                </span>
+              ))}
+            </div>
+          );
+        }
+        
+        // Pending match - show players normally
         return players.map((p: any) => p.name).join(', ');
       },
     },
     {
       key: 'status',
       header: 'Estado',
-      render: (match) => (
-        <span className={`px-2 py-1 rounded text-xs font-medium ${
-          match.status === 'completed' 
-            ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
-            : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
-        }`}>
-          {match.status === 'completed' ? 'Completada' : 'Pendiente'}
-        </span>
-      ),
+      render: (match) => {
+        const isBye = isByeMatch(match);
+        if (isBye) {
+          return (
+            <span className="px-2 py-1 rounded text-xs font-medium bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200">
+              Bye
+            </span>
+          );
+        }
+        return (
+          <span className={`px-2 py-1 rounded text-xs font-medium ${
+            match.status === 'completed' 
+              ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
+              : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+          }`}>
+            {match.status === 'completed' ? 'Completada' : 'Pendiente'}
+          </span>
+        );
+      },
     },
     {
       key: 'actions',
       header: 'Acciones',
-      render: (match) => (
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => handleOpenMatchModal(match)}
-        >
-          {match.status === 'completed' ? 'Ver/Editar' : 'Ingresar Resultados'}
-        </Button>
-      ),
+      render: (match) => {
+        const isBye = isByeMatch(match);
+        // Don't show button for bye matches
+        if (isBye) {
+          return (
+            <span className="text-sm text-gray-500 dark:text-gray-400 italic">
+              Bye - No editable
+            </span>
+          );
+        }
+        
+        return (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => handleOpenMatchModal(match)}
+            disabled={tournament.status === 'completed'}
+          >
+            {match.status === 'completed' ? 'Ver Resultados' : 'Ingresar Resultados'}
+          </Button>
+        );
+      },
     },
   ];
 
@@ -469,7 +649,12 @@ export default function TournamentDetail() {
           <div>
             <h1 className="text-2xl font-bold mb-2">{tournament.name}</h1>
             <p className="text-gray-600 dark:text-gray-400">
-              {tournament.type === 'circuit' ? 'Circuito' : 'Clasificatorio'} • {new Date(tournament.date).toLocaleDateString()}
+              {tournament.type === 'circuit' ? 'Circuito' : 'Clasificatorio'} • {tournament.date ? (tournament.date.includes('T') ? tournament.date.split('T')[0] : tournament.date).split('-').reverse().join('/') : '-'}
+              {tournament.status === 'completed' && (
+                <span className="ml-2 px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded text-sm font-medium">
+                  Finalizado
+                </span>
+              )}
             </p>
           </div>
           <div className="flex space-x-2">
@@ -522,24 +707,56 @@ export default function TournamentDetail() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Rondas</h2>
             {rounds.length === 0 ? (
-              <Button onClick={handleGenerateFirstRound} isLoading={isLoading}>
+              <Button 
+                onClick={handleGenerateFirstRound} 
+                isLoading={isLoading}
+                disabled={tournament.status === 'completed'}
+              >
                 Generar Primera Ronda
               </Button>
             ) : (
-              // Check if max rounds reached
-              rounds.length >= (tournament.number_of_rounds || 999) ? (
+              tournament.status === 'completed' ? (
                 <Button 
                   onClick={() => setShowStats(true)} 
                   variant="primary"
+                  disabled
                 >
-                  Ver Resultados
+                  Torneo Finalizado
                 </Button>
               ) : (
-                // Show generate next round button only if current round is completed
-                currentRound?.status === 'completed' && (
-                  <Button onClick={handleGenerateNextRound} isLoading={isLoading}>
-                    Generar Siguiente Ronda
-                  </Button>
+                // Check if we've reached the maximum number of rounds
+                tournament.number_of_rounds && rounds.length >= tournament.number_of_rounds ? (
+                  // Check if all rounds are completed
+                  rounds.every(r => r.status === 'completed') ? (
+                    // Show finalize button when max rounds reached AND all completed
+                    <Button 
+                      onClick={handleFinalizeTournament} 
+                      variant="success"
+                      isLoading={isLoading}
+                    >
+                      Finalizar Torneo
+                    </Button>
+                  ) : (
+                    // Max rounds reached but not all completed
+                    <Button 
+                      onClick={() => setShowStats(true)} 
+                      variant="primary"
+                    >
+                      Ver Resultados
+                    </Button>
+                  )
+                ) : (
+                  // Not at max rounds yet
+                  currentRound?.status === 'completed' ? (
+                    <Button onClick={handleGenerateNextRound} isLoading={isLoading}>
+                      Generar Siguiente Ronda
+                    </Button>
+                  ) : (
+                    // Current round not completed yet
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      Completa la ronda actual para continuar
+                    </div>
+                  )
                 )
               )
             )}
@@ -605,6 +822,30 @@ export default function TournamentDetail() {
               </span>
             )}
           </div>
+          
+          {/* Legend */}
+          {currentRound && tournament && (
+            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Leyenda:
+              </div>
+              <div className="flex flex-wrap gap-4 text-sm">
+                {getLegendItems(tournament.players_per_match).map((item) => (
+                  <div key={item.position} className="flex items-center gap-1">
+                    <span className={`${item.color} font-bold`}>
+                      {item.label}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-1">
+                  <span className="text-orange-600 dark:text-orange-400 font-bold">
+                    Bye
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div className="overflow-x-auto">
             {currentRound ? (
               <Table
@@ -636,6 +877,7 @@ export default function TournamentDetail() {
             match={selectedMatch}
             tournamentId={tournament.id!}
             playersPerMatch={tournament.players_per_match}
+            tournamentStatus={tournament.status}
             onSave={handleMatchResultSaved}
             onCancel={() => {
               setIsMatchModalOpen(false);

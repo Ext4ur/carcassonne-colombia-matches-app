@@ -7,16 +7,21 @@ import Modal from '../common/Modal';
 import PlayerSearch from '../common/PlayerSearch';
 import Input from '../common/Input';
 import { Column } from '../common/Table';
+import { calculateNumberOfRounds } from '../../utils/tournament';
+import RoundsConfirmationModal from './RoundsConfirmationModal';
 
 interface PlayerRegistrationProps {
   tournamentId: number;
-  onComplete: () => void;
+  onComplete: (numberOfRounds: number) => void;
+  mode?: 'quick' | 'advanced';
 }
 
-export default function PlayerRegistration({ tournamentId, onComplete }: PlayerRegistrationProps) {
+export default function PlayerRegistration({ tournamentId, onComplete, mode = 'quick' }: PlayerRegistrationProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isNewPlayerModalOpen, setIsNewPlayerModalOpen] = useState(false);
+  const [isRoundsModalOpen, setIsRoundsModalOpen] = useState(false);
+  const [calculatedRounds, setCalculatedRounds] = useState(1);
   const [newPlayerData, setNewPlayerData] = useState({
     name: '',
     bga_username: '',
@@ -28,6 +33,16 @@ export default function PlayerRegistration({ tournamentId, onComplete }: PlayerR
   useEffect(() => {
     loadPlayers();
   }, [tournamentId]);
+
+  useEffect(() => {
+    // Calculate rounds dynamically when players change
+    if (players.length >= 2) {
+      const rounds = calculateNumberOfRounds(players.length);
+      setCalculatedRounds(rounds);
+    } else {
+      setCalculatedRounds(1);
+    }
+  }, [players.length]);
 
   const loadPlayers = async () => {
     try {
@@ -146,9 +161,18 @@ export default function PlayerRegistration({ tournamentId, onComplete }: PlayerR
       </div>
 
       <div>
-        <h3 className="text-lg font-medium mb-4">
-          Jugadores Inscritos ({players.length})
-        </h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium">
+            Jugadores Inscritos ({players.length})
+          </h3>
+          {players.length >= 2 && (
+            <div className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
+              <span className="text-sm font-medium text-primary-800 dark:text-primary-200">
+                Rondas calculadas: <strong>{calculatedRounds}</strong>
+              </span>
+            </div>
+          )}
+        </div>
         {isLoading ? (
           <p className="text-center py-8 text-gray-500">Cargando...</p>
         ) : (
@@ -163,11 +187,23 @@ export default function PlayerRegistration({ tournamentId, onComplete }: PlayerR
 
       {players.length >= 2 && (
         <div className="flex justify-end pt-4">
-          <Button onClick={onComplete} variant="primary" size="lg">
+          <Button onClick={() => setIsRoundsModalOpen(true)} variant="primary" size="lg">
             Continuar ({players.length} jugadores)
           </Button>
         </div>
       )}
+
+      <RoundsConfirmationModal
+        isOpen={isRoundsModalOpen}
+        onClose={() => setIsRoundsModalOpen(false)}
+        onConfirm={(numberOfRounds) => {
+          setIsRoundsModalOpen(false);
+          onComplete(numberOfRounds);
+        }}
+        numPlayers={players.length}
+        calculatedRounds={calculatedRounds}
+        mode={mode}
+      />
 
       <Modal
         isOpen={isNewPlayerModalOpen}
@@ -212,9 +248,17 @@ export default function PlayerRegistration({ tournamentId, onComplete }: PlayerR
             label="Edad"
             type="number"
             value={newPlayerData.age}
-            onChange={(e) => setNewPlayerData({ ...newPlayerData, age: e.target.value })}
-            min="0"
-            max="150"
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === '') {
+                setNewPlayerData({ ...newPlayerData, age: '' });
+              } else {
+                const numValue = parseInt(value, 10);
+                if (!isNaN(numValue) && numValue >= 0 && numValue <= 150) {
+                  setNewPlayerData({ ...newPlayerData, age: value });
+                }
+              }
+            }}
           />
         </div>
       </Modal>

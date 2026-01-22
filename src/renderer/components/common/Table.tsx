@@ -46,12 +46,12 @@ export default function Table<T extends Record<string, any>>({
             ))}
           </tr>
         </thead>
-        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+        <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
           {data.map((item, index) => (
             <tr 
               key={keyExtractor(item)} 
-              className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-                index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-750'
+              className={`hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'
               }`}
             >
               {columns.map((column) => (

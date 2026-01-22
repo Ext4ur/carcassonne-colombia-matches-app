@@ -203,12 +203,20 @@ export default function Circuits() {
     {
       key: 'start_date',
       header: 'Fecha Inicio',
-      render: (circuit) => circuit.start_date ? new Date(circuit.start_date).toLocaleDateString() : '-',
+      render: (circuit) => {
+        if (!circuit.start_date) return '-';
+        const dateStr = circuit.start_date.includes('T') ? circuit.start_date.split('T')[0] : circuit.start_date;
+        return dateStr.split('-').reverse().join('/');
+      },
     },
     {
       key: 'end_date',
       header: 'Fecha Fin',
-      render: (circuit) => circuit.end_date ? new Date(circuit.end_date).toLocaleDateString() : '-',
+      render: (circuit) => {
+        if (!circuit.end_date) return '-';
+        const dateStr = circuit.end_date.includes('T') ? circuit.end_date.split('T')[0] : circuit.end_date;
+        return dateStr.split('-').reverse().join('/');
+      },
     },
     {
       key: 'actions',

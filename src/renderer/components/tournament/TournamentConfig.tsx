@@ -158,8 +158,17 @@ export default function TournamentConfigComponent({
               label={`Posición ${position}`}
               type="number"
               value={scoringSystem[position]?.toString() || '0'}
-              onChange={(e) => updateScoring(position, e.target.value)}
-              min="0"
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '') {
+                  updateScoring(position, '0');
+                } else {
+                  const numValue = parseInt(value, 10);
+                  if (!isNaN(numValue) && numValue >= 0) {
+                    updateScoring(position, numValue.toString());
+                  }
+                }
+              }}
             />
           ))}
         </div>

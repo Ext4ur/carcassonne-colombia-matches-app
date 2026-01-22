@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import Home from './pages/Home';
@@ -13,7 +13,7 @@ function App() {
   return (
     <ThemeProvider>
       <NotificationProvider>
-        <BrowserRouter>
+        <HashRouter>
           <Layout>
             <Routes>
               <Route path="/" element={<Home />} />
@@ -24,7 +24,7 @@ function App() {
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </Layout>
-        </BrowserRouter>
+        </HashRouter>
       </NotificationProvider>
     </ThemeProvider>
   );

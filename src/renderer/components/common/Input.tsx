@@ -1,10 +1,14 @@
-import { InputHTMLAttributes, LabelHTMLAttributes } from 'react';
+import { InputHTMLAttributes, LabelHTMLAttributes, ChangeEvent, useMemo } from 'react';
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange'> {
   label?: string;
   error?: string;
   helperText?: string;
+  type?: 'text' | 'email' | 'password' | 'date' | 'tel' | 'number';
+  onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
 }
+
+let inputCounter = 0;
 
 export default function Input({
   label,
@@ -12,9 +16,27 @@ export default function Input({
   helperText,
   className = '',
   id,
+  type = 'text',
+  onChange,
+  value,
   ...props
 }: InputProps) {
-  const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
+  // Use a stable ID that doesn't change on re-renders
+  const inputId = useMemo(() => {
+    if (id) return id;
+    inputCounter++;
+    return `input-${inputCounter}`;
+  }, [id]);
+  
+  // Handle number input to only allow integers (no arrows, no decimals)
+  const handleNumberChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (onChange) {
+      onChange(e);
+    }
+  };
+  
+  // Ensure value is always a string for controlled inputs
+  const stringValue = value === undefined || value === null ? '' : String(value);
   
   return (
     <div className="w-full">
@@ -28,7 +50,10 @@ export default function Input({
       )}
       <input
         id={inputId}
-        className={`input ${error ? 'border-red-500 focus:ring-red-500' : ''} ${className}`}
+        type={type === 'number' ? 'text' : type}
+        className={`input ${error ? 'border-red-500 focus:ring-red-500' : ''} ${type === 'number' ? '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none' : ''} ${className}`}
+        onChange={type === 'number' ? handleNumberChange : onChange}
+        value={stringValue}
         {...props}
       />
       {error && (

@@ -141,8 +141,17 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
             label="Número de Rondas (opcional, se calculará automáticamente si se deja vacío)"
             type="number"
             value={formData.number_of_rounds}
-            onChange={(e) => setFormData({ ...formData, number_of_rounds: e.target.value })}
-            min="1"
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === '') {
+                setFormData({ ...formData, number_of_rounds: '' });
+              } else {
+                const numValue = parseInt(value, 10);
+                if (!isNaN(numValue) && numValue >= 1) {
+                  setFormData({ ...formData, number_of_rounds: value });
+                }
+              }
+            }}
             helperText="Se calculará como potencia de 2 según el número de jugadores si se deja vacío"
           />
         </>

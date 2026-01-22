@@ -111,11 +111,25 @@ export default function Tournaments() {
     }
   };
 
-  const handleRegistrationComplete = () => {
-    setIsModalOpen(false);
-    setWizardStep(null);
-    setCurrentTournament(null);
-    loadTournaments();
+  const handleRegistrationComplete = async (numberOfRounds: number) => {
+    try {
+      setIsLoading(true);
+      // Update tournament with the confirmed number of rounds
+      if (currentTournament?.id) {
+        await DatabaseService.updateTournament(currentTournament.id, {
+          number_of_rounds: numberOfRounds,
+        });
+      }
+      setIsModalOpen(false);
+      setWizardStep(null);
+      setCurrentTournament(null);
+      loadTournaments();
+    } catch (error) {
+      console.error('Error updating tournament rounds:', error);
+      alert('Error al actualizar el número de rondas');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleViewTournament = (tournament: Tournament) => {
@@ -156,7 +170,10 @@ export default function Tournaments() {
     {
       key: 'date',
       header: 'Fecha',
-      render: (tournament) => new Date(tournament.date).toLocaleDateString(),
+      render: (tournament) => {
+        const dateStr = tournament.date.includes('T') ? tournament.date.split('T')[0] : tournament.date;
+        return dateStr.split('-').reverse().join('/');
+      },
     },
     {
       key: 'status',
@@ -270,6 +287,7 @@ export default function Tournaments() {
           <PlayerRegistration
             tournamentId={currentTournament.id!}
             onComplete={handleRegistrationComplete}
+            mode={mode}
           />
         )}
       </Modal>

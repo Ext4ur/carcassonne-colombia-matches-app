@@ -12,6 +12,7 @@ interface MatchResultFormProps {
   playersPerMatch: number;
   onSave: () => void;
   onCancel: () => void;
+  tournamentStatus?: 'draft' | 'in_progress' | 'completed';
 }
 
 export default function MatchResultForm({
@@ -20,18 +21,33 @@ export default function MatchResultForm({
   playersPerMatch,
   onSave,
   onCancel,
+  tournamentStatus = 'in_progress',
 }: MatchResultFormProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [results, setResults] = useState<Array<{ player_id: number; points: number }>>([]);
   const [firstPlayerId, setFirstPlayerId] = useState<number | undefined>(undefined);
   const [calculatedPositions, setCalculatedPositions] = useState<Array<{ player_id: number; position: number; points: number }>>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   useEffect(() => {
-    loadData();
-  }, [match.id, tournamentId]);
+    if (match?.id) {
+      // Initialize with empty results structure immediately
+      // This allows inputs to render right away with valid values
+      const initialResults = Array(playersPerMatch).fill(null).map((_, i) => ({
+        player_id: 0,
+        points: 0,
+      }));
+      setResults(initialResults);
+      setIsLoadingData(true);
+      
+      // Then load actual data
+      loadData();
+    }
+  }, [match?.id, tournamentId, playersPerMatch]);
 
   const loadData = async () => {
+    setIsLoadingData(true);
     try {
       const [matchPlayers, existingResults, matchData] = await Promise.all([
         DatabaseService.getMatchPlayers(match.id!),
@@ -62,16 +78,20 @@ export default function MatchResultForm({
         // Calculate positions with first player info
         updatePositions(loadedResults, matchData[0]?.first_player_id);
       } else {
-        // Initialize with match players
-        const initialResults = matchPlayers.slice(0, playersPerMatch).map((p) => ({
-          player_id: p.id!,
-          points: 0,
-        }));
-        setResults(initialResults);
-        updatePositions(initialResults, undefined);
+        // Initialize with match players if available, otherwise keep the initial empty structure
+        if (matchPlayers.length > 0) {
+          const initialResults = matchPlayers.slice(0, playersPerMatch).map((p) => ({
+            player_id: p.id!,
+            points: 0,
+          }));
+          setResults(initialResults);
+          updatePositions(initialResults, undefined);
+        }
       }
     } catch (error) {
       console.error('Error loading match data:', error);
+    } finally {
+      setIsLoadingData(false);
     }
   };
 
@@ -165,14 +185,14 @@ export default function MatchResultForm({
         const position = getPlayerPosition(result.player_id);
         const player = players.find((p) => p.id === result.player_id);
         return (
-          <div key={index} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg mb-3 bg-gray-50 dark:bg-gray-700/50">
+          <div key={result.player_id || `result-${index}`} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg mb-3 bg-gray-50 dark:bg-gray-700/50">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
                   Jugador
                 </label>
                 <div className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-                  {player?.name || 'Sin asignar'}
+                  {isLoadingData ? 'Cargando...' : (player?.name || 'Sin asignar')}
                 </div>
               </div>
               <div>
@@ -181,9 +201,32 @@ export default function MatchResultForm({
                 </label>
                 <Input
                   type="number"
-                  value={result.points.toString()}
-                  onChange={(e) => updateResult(index, 'points', Number(e.target.value))}
-                  min="0"
+                  value={result && result.points !== undefined && result.points !== null 
+                    ? (result.points === 0 ? '' : String(result.points))
+                    : ''}
+                  disabled={isLoadingData}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Allow empty string for better UX while typing
+                    if (value === '') {
+                      updateResult(index, 'points', 0);
+                    } else {
+                      // Only allow digits
+                      if (/^\d*$/.test(value)) {
+                        const numValue = parseInt(value, 10);
+                        if (!isNaN(numValue) && numValue >= 0) {
+                          updateResult(index, 'points', numValue);
+                        }
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Normalize value on blur - ensure it's a valid number
+                    const value = e.target.value.trim();
+                    if (value === '' || value === '0' || isNaN(parseInt(value, 10))) {
+                      updateResult(index, 'points', 0);
+                    }
+                  }}
                   required
                 />
               </div>
@@ -201,6 +244,7 @@ export default function MatchResultForm({
                     type="checkbox"
                     checked={firstPlayerId === result.player_id}
                     onChange={() => handleFirstPlayerChange(result.player_id)}
+                    disabled={isLoadingData || tournamentStatus === 'completed'}
                     className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 w-4 h-4"
                   />
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -213,13 +257,23 @@ export default function MatchResultForm({
         );
       })}
 
+      {tournamentStatus === 'completed' && (
+        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            <strong>Nota:</strong> Este torneo está finalizado. Solo puedes ver los resultados, no puedes editarlos.
+          </p>
+        </div>
+      )}
+
       <div className="flex justify-end space-x-2 pt-4">
         <Button variant="secondary" onClick={onCancel}>
-          Cancelar
+          {tournamentStatus === 'completed' ? 'Cerrar' : 'Cancelar'}
         </Button>
-        <Button onClick={handleSave} isLoading={isLoading}>
-          Guardar Resultados
-        </Button>
+        {tournamentStatus !== 'completed' && (
+          <Button onClick={handleSave} isLoading={isLoading}>
+            Guardar Resultados
+          </Button>
+        )}
       </div>
     </div>
   );

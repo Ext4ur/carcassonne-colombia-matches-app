@@ -143,156 +143,134 @@ export class SwissPairingService {
     const byeHistory = await DatabaseService.getPlayerByes(tournamentId);
     const playersWithBye = new Set(byeHistory.map((b: any) => b.player_id));
 
-    for (const points of sortedPoints) {
-      const group = pointGroups[points];
-      const unpaired = group.filter((p) => !paired.has(p.player_id));
+    // Process all players across all point groups
+    // Pair players avoiding rematches
+    while (true) {
+      // Get all unpaired players, ordered by points (highest first)
+      const remaining: PlayerStanding[] = [];
+      for (const points of sortedPoints) {
+        const group = pointGroups[points];
+        const unpaired = group.filter((p) => !paired.has(p.player_id));
+        remaining.push(...unpaired);
+      }
+      
+      if (remaining.length === 0) break;
 
-      // Try to pair players avoiding rematches
-      for (let i = 0; i < unpaired.length; i += playersPerMatch) {
-        let matchPlayers = unpaired.slice(i, i + playersPerMatch);
+      // Get next group of players for a match
+      let matchPlayers = remaining.slice(0, playersPerMatch);
+      
+      // Handle bye if odd number of players remaining
+      if (remaining.length < playersPerMatch) {
+        // Need to assign bye to one player
+        let byePlayer = remaining[remaining.length - 1];
         
-        // Handle odd number of players
-        if (matchPlayers.length === 1 && i === unpaired.length - 1) {
-          // Bye needed - select player based on configuration
-          let byePlayer = matchPlayers[0];
-          
-          if (byeSelection === 'round_robin') {
-            // Select worst player who hasn't received bye
-            const candidatesWithoutBye = unpaired.filter((p) => !playersWithBye.has(p.player_id));
-            if (candidatesWithoutBye.length > 0) {
-              byePlayer = candidatesWithoutBye[candidatesWithoutBye.length - 1];
-            }
-          } else if (byeSelection === 'random') {
-            // Select random player
-            const candidates = byeSelection === 'round_robin' 
-              ? unpaired.filter((p) => !playersWithBye.has(p.player_id))
-              : unpaired;
-            if (candidates.length > 0) {
-              byePlayer = candidates[Math.floor(Math.random() * candidates.length)];
-            }
+        if (byeSelection === 'round_robin') {
+          // Select worst player who hasn't received bye
+          const candidatesWithoutBye = remaining.filter((p) => !playersWithBye.has(p.player_id));
+          if (candidatesWithoutBye.length > 0) {
+            byePlayer = candidatesWithoutBye[candidatesWithoutBye.length - 1];
+          }
+        } else if (byeSelection === 'random') {
+          // Select random player
+          const candidates = remaining.filter((p) => !playersWithBye.has(p.player_id));
+          if (candidates.length > 0) {
+            byePlayer = candidates[Math.floor(Math.random() * candidates.length)];
           } else {
-            // 'worst' - select worst player (last in standings)
-            byePlayer = unpaired[unpaired.length - 1];
+            byePlayer = remaining[Math.floor(Math.random() * remaining.length)];
           }
-          
-          const matchId = await DatabaseService.createMatch({
-            round_id: roundId,
-            match_number: matchNumber,
-            status: 'completed',
-          });
-
-          const scoringSystem = config?.scoring_system || { 1: 1, 2: 0 };
-          
-          await DatabaseService.createMatchResult({
-            match_id: matchId,
-            player_id: byePlayer.player_id,
-            position: 1,
-            points: 0,
-            tournament_points: scoringSystem[1] || 1,
-          });
-
-          await DatabaseService.updateMatch(matchId, {
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-          });
-
-          // Record the bye
-          await DatabaseService.addPlayerBye(tournamentId, byePlayer.player_id, nextRoundNumber);
-          playersWithBye.add(byePlayer.player_id);
-
-          paired.add(byePlayer.player_id);
-        } else if (matchPlayers.length < playersPerMatch && i === unpaired.length - matchPlayers.length) {
-          // Not enough players for a full match - need to handle bye
-          let byePlayer = matchPlayers[matchPlayers.length - 1];
-          
-          if (byeSelection === 'round_robin') {
-            // Select worst player who hasn't received bye
-            const candidatesWithoutBye = matchPlayers.filter((p) => !playersWithBye.has(p.player_id));
-            if (candidatesWithoutBye.length > 0) {
-              byePlayer = candidatesWithoutBye[candidatesWithoutBye.length - 1];
-            }
-          } else if (byeSelection === 'random') {
-            // Select random player
-            const candidates = byeSelection === 'round_robin' 
-              ? matchPlayers.filter((p) => !playersWithBye.has(p.player_id))
-              : matchPlayers;
-            if (candidates.length > 0) {
-              byePlayer = candidates[Math.floor(Math.random() * candidates.length)];
-            }
-          } else {
-            // 'worst' - select worst player (last in group)
-            byePlayer = matchPlayers[matchPlayers.length - 1];
-          }
-          
-          // Remove bye player from match
-          matchPlayers = matchPlayers.filter((p) => p.player_id !== byePlayer.player_id);
-          
-          // Create bye match
-          const byeMatchId = await DatabaseService.createMatch({
-            round_id: roundId,
-            match_number: matchNumber,
-            status: 'completed',
-          });
-
-          const scoringSystem = config?.scoring_system || { 1: 1, 2: 0 };
-          
-          await DatabaseService.createMatchResult({
-            match_id: byeMatchId,
-            player_id: byePlayer.player_id,
-            position: 1,
-            points: 0,
-            tournament_points: scoringSystem[1] || 1,
-          });
-
-          await DatabaseService.updateMatch(byeMatchId, {
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-          });
-
-          await DatabaseService.addPlayerBye(tournamentId, byePlayer.player_id, nextRoundNumber);
-          playersWithBye.add(byePlayer.player_id);
-          paired.add(byePlayer.player_id);
-          matchNumber++;
-
-          // Continue with remaining players if any
-          if (matchPlayers.length === 0) {
-            continue;
-          }
+        } else {
+          // 'worst' - select worst player (last in remaining)
+          byePlayer = remaining[remaining.length - 1];
         }
+        
+        // Create bye match
+        const byeMatchId = await DatabaseService.createMatch({
+          round_id: roundId,
+          match_number: matchNumber,
+          status: 'completed',
+        });
 
-        // Check for rematches if needed
-        let validPairing = true;
-        if (avoidRematches && matchPlayers.length === 2) {
-          const player1Opponents = previousOpponents[matchPlayers[0].player_id] || [];
-          if (player1Opponents.includes(matchPlayers[1].player_id)) {
-            // Try to find alternative pairing
-            validPairing = false;
-            for (let j = i + matchPlayers.length; j < unpaired.length; j++) {
-              const altOpponents = previousOpponents[matchPlayers[0].player_id] || [];
-              if (!altOpponents.includes(unpaired[j].player_id)) {
-                // Swap
-                [matchPlayers[1], unpaired[j]] = [unpaired[j], matchPlayers[1]];
-                validPairing = true;
-                break;
-              }
+        const scoringSystem = config?.scoring_system || { 1: 1, 2: 0 };
+        
+        await DatabaseService.createMatchResult({
+          match_id: byeMatchId,
+          player_id: byePlayer.player_id,
+          position: 1,
+          points: 0,
+          tournament_points: scoringSystem[1] || 1,
+        });
+
+        await DatabaseService.updateMatch(byeMatchId, {
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        });
+
+        await DatabaseService.addPlayerBye(tournamentId, byePlayer.player_id, nextRoundNumber);
+        playersWithBye.add(byePlayer.player_id);
+        paired.add(byePlayer.player_id);
+        matchNumber++;
+
+        // Remove bye player from matchPlayers if present
+        matchPlayers = matchPlayers.filter((p) => p.player_id !== byePlayer.player_id);
+        
+        // If no players left for match, continue to next iteration
+        if (matchPlayers.length === 0) {
+          continue;
+        }
+      }
+
+      // Check for rematches if needed (only for 2-player matches)
+      let validPairing = true;
+      if (avoidRematches && matchPlayers.length === 2) {
+        const player1Opponents = previousOpponents[matchPlayers[0].player_id] || [];
+        if (player1Opponents.includes(matchPlayers[1].player_id)) {
+          // Try to find alternative pairing from remaining unpaired players
+          validPairing = false;
+          const remainingUnpaired = remaining.filter((p) => 
+            p.player_id !== matchPlayers[0].player_id && 
+            p.player_id !== matchPlayers[1].player_id &&
+            !paired.has(p.player_id)
+          );
+          
+          for (const altPlayer of remainingUnpaired) {
+            const altOpponents = previousOpponents[matchPlayers[0].player_id] || [];
+            if (!altOpponents.includes(altPlayer.player_id)) {
+              // Swap
+              matchPlayers[1] = altPlayer;
+              validPairing = true;
+              break;
             }
           }
         }
+      }
 
-        if (validPairing && matchPlayers.length > 0) {
-          const matchId = await DatabaseService.createMatch({
-            round_id: roundId,
-            match_number: matchNumber,
-            status: 'pending',
-          });
+      // Create match if we have valid pairing
+      if (validPairing && matchPlayers.length > 0) {
+        const matchId = await DatabaseService.createMatch({
+          round_id: roundId,
+          match_number: matchNumber,
+          status: 'pending',
+        });
 
-          // Assign players to match
-          const playerIds = matchPlayers.map((p) => p.player_id);
-          await DatabaseService.setMatchPlayers(matchId, playerIds);
+        // Assign players to match
+        const playerIds = matchPlayers.map((p) => p.player_id);
+        await DatabaseService.setMatchPlayers(matchId, playerIds);
 
-          matchPlayers.forEach((p) => paired.add(p.player_id));
-          matchNumber++;
-        }
+        matchPlayers.forEach((p) => paired.add(p.player_id));
+        matchNumber++;
+      } else if (!validPairing) {
+        // If we can't avoid rematch, create match anyway (better than infinite loop)
+        const matchId = await DatabaseService.createMatch({
+          round_id: roundId,
+          match_number: matchNumber,
+          status: 'pending',
+        });
+
+        const playerIds = matchPlayers.map((p) => p.player_id);
+        await DatabaseService.setMatchPlayers(matchId, playerIds);
+
+        matchPlayers.forEach((p) => paired.add(p.player_id));
+        matchNumber++;
       }
     }
   }

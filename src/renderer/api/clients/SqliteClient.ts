@@ -1,4 +1,4 @@
-import { IApiClient } from '@repositories/base/IApiClient';
+import { IApiClient } from './IApiClient';
 
 /**
  * Cliente para acceder a SQLite a través de Electron IPC

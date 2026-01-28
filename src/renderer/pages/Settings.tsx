@@ -4,6 +4,7 @@ import { useNotifications } from '../contexts/NotificationContext';
 import Button from '../components/common/Button';
 import { ExportService } from '../services/export';
 import { ImportService } from '../services/import';
+import DatabaseStatus from '../components/common/DatabaseStatus';
 
 export default function Settings() {
   const { theme, toggleTheme } = useTheme();
@@ -83,6 +84,9 @@ export default function Settings() {
             </button>
           </div>
         </div>
+
+        {/* Database Status */}
+        <DatabaseStatus />
 
         {/* Export/Import */}
         <div className="card">

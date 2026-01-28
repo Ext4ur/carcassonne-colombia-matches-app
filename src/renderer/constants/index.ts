@@ -60,9 +60,14 @@ export type ByeSelection = typeof BYE_SELECTION_OPTIONS[number];
 
 /**
  * Configuración de base de datos
+ * 
+ * Modos disponibles:
+ * - 'local': Solo SQLite local
+ * - 'remote': Solo Supabase remoto
+ * - 'dual': SQLite + Supabase con sincronización (pendiente Sprint 3)
  */
 export const DB_CONFIG = {
-  mode: 'dual' as 'local' | 'remote' | 'dual',
+  mode: 'remote' as 'local' | 'remote' | 'dual', // Cambiar a 'remote' para usar Supabase
   syncOnStartup: true,
   syncInterval: 30000, // 30 segundos
   conflictResolution: 'last-write-wins' as 'last-write-wins' | 'manual',

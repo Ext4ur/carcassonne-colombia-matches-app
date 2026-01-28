@@ -18,6 +18,7 @@ export default defineConfig({
       '@config': path.resolve(__dirname, './src/renderer/config'),
       '@api': path.resolve(__dirname, './src/renderer/api'),
       '@auth': path.resolve(__dirname, './src/renderer/auth'),
+      '@utils': path.resolve(__dirname, './src/renderer/utils'),
     },
   },
   server: {

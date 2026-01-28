@@ -1,4 +1,5 @@
 import { DatabaseService } from './database';
+import { TiebreakService, TiebreakData } from './tiebreak';
 import { Tournament, Round, Match, MatchResult, PlayerStanding } from '../types/tournament';
 import { getTournamentPoints } from '../utils/scoring';
 import { calculateNumberOfRounds } from '../utils/tournament';
@@ -81,34 +82,46 @@ export class SwissPairingService {
     await DatabaseService.updateTournament(tournamentId, { status: 'in_progress' });
   }
 
-  static async generateNextRound(tournamentId: number): Promise<void> {
-    // Get current rounds
-    const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-    const lastRound = rounds[rounds.length - 1];
+  static async generateNextRound(tournamentId: number): Promise<{ standings: PlayerStanding[] }> {
+    const [rounds, tournamentData, players, config] = await Promise.all([
+      DatabaseService.getTournamentRounds(tournamentId),
+      DatabaseService.getTournamentById(tournamentId),
+      DatabaseService.getTournamentPlayers(tournamentId),
+      DatabaseService.getTournamentConfig(tournamentId),
+    ]);
+    const tournament = tournamentData as Tournament | null;
+    if (!tournament) throw new Error('Torneo no encontrado');
 
+    const lastRound = rounds[rounds.length - 1];
     if (!lastRound || lastRound.status !== 'completed') {
       throw new Error('La ronda anterior debe estar completada');
     }
 
-    // Check if we've reached the maximum number of rounds
-    const tournament = await DatabaseService.getTournamentById(tournamentId) as Tournament;
-    const numberOfRounds = tournament.number_of_rounds || calculateNumberOfRounds(
-      (await DatabaseService.getTournamentPlayers(tournamentId)).length
-    );
-    
+    const numberOfRounds = tournament.number_of_rounds || calculateNumberOfRounds(players.length);
     if (rounds.length >= numberOfRounds) {
       throw new Error(`Se ha alcanzado el número máximo de rondas (${numberOfRounds})`);
     }
 
-    // Get tournament config
-    const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const roundMatches = await Promise.all(
+      rounds.map((r) => DatabaseService.getRoundMatches(r.id!))
+    );
+    const allMatches = roundMatches.flat();
+    const allResults = await Promise.all(
+      allMatches.map((m) => DatabaseService.getMatchResults(m.id!))
+    );
+    const resultsByMatch: Record<number, any[]> = {};
+    allMatches.forEach((m, i) => {
+      resultsByMatch[m.id!] = allResults[i] || [];
+    });
+
     const avoidRematches = config?.avoid_rematches ?? true;
-
-    // Calculate standings
-    const standings = await this.calculateStandings(tournamentId, config?.tiebreak_criteria || []);
-
-    // Get previous opponents for each player
-    const previousOpponents = await this.getPreviousOpponents(tournamentId);
+    const standings = await this.calculateStandings(tournamentId, config?.tiebreak_criteria || [], {
+      players,
+      rounds,
+      roundMatches,
+      resultsByMatch,
+    });
+    const previousOpponents = this.getPreviousOpponentsFromData(rounds, roundMatches, resultsByMatch);
 
     // Create new round
     const nextRoundNumber = rounds.length + 1;
@@ -273,61 +286,116 @@ export class SwissPairingService {
         matchNumber++;
       }
     }
+
+    return { standings };
   }
 
   static async calculateStandings(
     tournamentId: number,
-    tiebreakCriteria: any[]
+    tiebreakCriteria: any[],
+    preFetched?: {
+      players?: any[];
+      rounds?: Round[];
+      roundMatches?: Match[][];
+      resultsByMatch?: Record<number, any[]>;
+    }
   ): Promise<PlayerStanding[]> {
-    // Get all players and their results
-    const players = await DatabaseService.getTournamentPlayers(tournamentId);
-    const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-    
-    const standings: PlayerStanding[] = [];
+    let players: any[];
+    let rounds: Round[];
+    let roundMatches: Match[][];
+    let resultsByMatch: Record<number, any[]>;
+
+    const hasFullPreFetched =
+      preFetched &&
+      preFetched.players != null &&
+      preFetched.rounds != null &&
+      preFetched.roundMatches != null &&
+      preFetched.resultsByMatch != null;
+
+    if (hasFullPreFetched) {
+      ({ players, rounds, roundMatches, resultsByMatch } = preFetched as Required<typeof preFetched>);
+    } else {
+      rounds =
+        preFetched?.rounds !== undefined
+          ? preFetched.rounds
+          : await DatabaseService.getTournamentRounds(tournamentId);
+      if (rounds.length === 0) return [];
+      players = await DatabaseService.getTournamentPlayers(tournamentId);
+      roundMatches = await Promise.all(
+        rounds.map((r) => DatabaseService.getRoundMatches(r.id!))
+      );
+      const allMatches = roundMatches.flat();
+      const allResults = await Promise.all(
+        allMatches.map((m) => DatabaseService.getMatchResults(m.id!))
+      );
+      resultsByMatch = {};
+      allMatches.forEach((m, i) => {
+        resultsByMatch[m.id!] = allResults[i] || [];
+      });
+    }
+
+    const playerTotalPoints: Record<number, number> = {};
+    const playerWins: Record<number, number> = {};
 
     for (const player of players) {
       if (!player.id) continue;
-
       let totalPoints = 0;
       let wins = 0;
-      const tiebreakValues: { [key: string]: number } = {};
-
-      // Get all match results for this player
-      for (const round of rounds) {
-        const matches = await DatabaseService.getRoundMatches(round.id!);
+      for (let r = 0; r < rounds.length; r++) {
+        const matches = roundMatches[r] || [];
         for (const match of matches) {
-          const results = await DatabaseService.getMatchResults(match.id!);
-          const playerResult = results.find((r) => r.player_id === player.id);
-          
+          const results = resultsByMatch[match.id!] || [];
+          const playerResult = results.find((r: any) => r.player_id === player.id);
           if (playerResult) {
             totalPoints += playerResult.tournament_points;
-            if (playerResult.position === 1) {
-              wins++;
-            }
+            if (playerResult.position === 1) wins++;
           }
         }
       }
+      playerTotalPoints[player.id] = totalPoints;
+      playerWins[player.id] = wins;
+    }
 
-      // Calculate tiebreak values
+    const tiebreakData: TiebreakData = {
+      rounds,
+      roundMatches,
+      resultsByMatch,
+      playerTotalPoints,
+    };
+
+    const standings: PlayerStanding[] = [];
+    for (const player of players) {
+      if (!player.id) continue;
+      const totalPoints = playerTotalPoints[player.id] ?? 0;
+      const wins = playerWins[player.id] ?? 0;
+      const tiebreakValues: { [key: string]: number } = {};
+
       for (const criterion of tiebreakCriteria) {
         if (!criterion.enabled) continue;
-
         switch (criterion.id) {
           case 'wins':
             tiebreakValues[criterion.id] = wins;
             break;
           case 'opponent_points_drop_worst':
-          case 'opponent_points_drop_best_worst':
-          case 'head_to_head':
-          case 'point_difference':
-            // These require more complex calculations
-            tiebreakValues[criterion.id] = await this.calculateTiebreakValue(
-              tournamentId,
-              player.id,
-              criterion.id,
-              rounds
+            tiebreakValues[criterion.id] = TiebreakService.calculateOpponentPointsFromData(
+              tiebreakData, player.id, true, false
             );
             break;
+          case 'opponent_points_drop_best_worst':
+            tiebreakValues[criterion.id] = TiebreakService.calculateOpponentPointsFromData(
+              tiebreakData, player.id, true, true
+            );
+            break;
+          case 'point_difference':
+            tiebreakValues[criterion.id] = TiebreakService.calculatePointDifferenceFromData(
+              tiebreakData, player.id
+            );
+            break;
+          case 'head_to_head':
+            tiebreakValues[criterion.id] = 0;
+            break;
+          default:
+            tiebreakValues[criterion.id] = 0;
         }
       }
 
@@ -340,29 +408,7 @@ export class SwissPairingService {
       });
     }
 
-    // Sort by criteria
-    const sorted = this.sortByTiebreak(standings, tiebreakCriteria);
-    return sorted;
-  }
-
-  private static async calculateTiebreakValue(
-    tournamentId: number,
-    playerId: number,
-    criterionId: string,
-    rounds: Round[]
-  ): Promise<number> {
-    const { TiebreakService } = await import('./tiebreak');
-    
-    switch (criterionId) {
-      case 'opponent_points_drop_worst':
-        return await TiebreakService.calculateOpponentPoints(tournamentId, playerId, true, false);
-      case 'opponent_points_drop_best_worst':
-        return await TiebreakService.calculateOpponentPoints(tournamentId, playerId, true, true);
-      case 'point_difference':
-        return await TiebreakService.calculatePointDifference(tournamentId, playerId);
-      default:
-        return 0;
-    }
+    return this.sortByTiebreak(standings, tiebreakCriteria);
   }
 
   private static sortByTiebreak(
@@ -393,21 +439,19 @@ export class SwissPairingService {
     return sorted;
   }
 
-  private static async getPreviousOpponents(tournamentId: number): Promise<{ [playerId: number]: number[] }> {
+  private static getPreviousOpponentsFromData(
+    rounds: Round[],
+    roundMatches: Match[][],
+    resultsByMatch: Record<number, any[]>
+  ): { [playerId: number]: number[] } {
     const opponents: { [playerId: number]: number[] } = {};
-    const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-
-    for (const round of rounds) {
-      const matches = await DatabaseService.getRoundMatches(round.id!);
+    for (let r = 0; r < rounds.length; r++) {
+      const matches = roundMatches[r] || [];
       for (const match of matches) {
-        const results = await DatabaseService.getMatchResults(match.id!);
-        const playerIds = results.map((r) => r.player_id);
-        
-        // Each player played against all others in the match
+        const results = resultsByMatch[match.id!] || [];
+        const playerIds = results.map((res: any) => res.player_id);
         for (const playerId of playerIds) {
-          if (!opponents[playerId]) {
-            opponents[playerId] = [];
-          }
+          if (!opponents[playerId]) opponents[playerId] = [];
           for (const opponentId of playerIds) {
             if (opponentId !== playerId && !opponents[playerId].includes(opponentId)) {
               opponents[playerId].push(opponentId);
@@ -416,7 +460,6 @@ export class SwissPairingService {
         }
       }
     }
-
     return opponents;
   }
 }

@@ -26,6 +26,7 @@ export default function TournamentDetail() {
   const [isMatchModalOpen, setIsMatchModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [showStats, setShowStats] = useState(false);
+  const [isLoadingStandings, setIsLoadingStandings] = useState(false);
   const [isRoundResultsModalOpen, setIsRoundResultsModalOpen] = useState(false);
   const [selectedRoundResults, setSelectedRoundResults] = useState<{ 
     round: Round; 
@@ -40,10 +41,16 @@ export default function TournamentDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (tournament) {
-      loadRounds();
-      loadStandings();
-    }
+    if (!tournament) return;
+    let cancelled = false;
+    (async () => {
+      const roundsData = await loadRounds();
+      if (cancelled) return;
+      await loadStandings(roundsData);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [tournament]);
 
   useEffect(() => {
@@ -51,6 +58,13 @@ export default function TournamentDetail() {
       loadMatches();
     }
   }, [currentRound]);
+
+  // Cargar estadísticas al abrir el panel solo si no hay datos (Leaderboard y estadísticas usan los mismos)
+  useEffect(() => {
+    if (showStats && tournament?.id && standings.length === 0 && !isLoadingStandings) {
+      loadStandings();
+    }
+  }, [showStats, tournament?.id, standings.length, isLoadingStandings]);
 
   const loadTournament = async () => {
     if (!id) return;
@@ -69,8 +83,8 @@ export default function TournamentDetail() {
     }
   };
 
-  const loadRounds = async () => {
-    if (!tournament?.id) return;
+  const loadRounds = async (): Promise<Round[]> => {
+    if (!tournament?.id) return [];
     try {
       const data = await DatabaseService.getTournamentRounds(tournament.id);
       setRounds(data);
@@ -78,37 +92,48 @@ export default function TournamentDetail() {
         const inProgress = data.find((r) => r.status === 'in_progress');
         setCurrentRound(inProgress || data[data.length - 1]);
       }
+      return data;
     } catch (error) {
       console.error('Error loading rounds:', error);
+      return [];
     }
   };
 
-  const loadMatches = async () => {
-    if (!currentRound?.id) return;
+  const loadMatches = async (roundId?: number) => {
+    const id = roundId ?? currentRound?.id;
+    if (!id) return;
     try {
-      const data = await DatabaseService.getRoundMatches(currentRound.id);
+      const data = await DatabaseService.getRoundMatches(id);
       setMatches(data);
-      // Load players and results after matches are loaded
       if (data.length > 0) {
-        await loadMatchPlayers();
-        await loadMatchResults();
+        await loadMatchPlayersForMatches(data);
+        await loadMatchResultsForMatches(data);
       }
     } catch (error) {
       console.error('Error loading matches:', error);
     }
   };
 
-  const loadStandings = async () => {
+  const loadStandings = async (preFetchedRounds?: Round[]) => {
     if (!tournament?.id) return;
+    setIsLoadingStandings(true);
     try {
       const config = await DatabaseService.getTournamentConfig(tournament.id);
       const data = await SwissPairingService.calculateStandings(
         tournament.id,
-        config?.tiebreak_criteria || []
+        config?.tiebreak_criteria || [],
+        preFetchedRounds?.length ? { rounds: preFetchedRounds } : undefined
       );
-      setStandings(data);
-    } catch (error) {
+      setStandings(data || []);
+    } catch (error: any) {
       console.error('Error loading standings:', error);
+      addNotification({
+        message: error?.message || 'Error al cargar las estadísticas',
+        type: 'error',
+      });
+      setStandings([]);
+    } finally {
+      setIsLoadingStandings(false);
     }
   };
 
@@ -119,13 +144,10 @@ export default function TournamentDetail() {
     try {
       setIsLoading(true);
       await SwissPairingService.generateFirstRound(tournament.id);
-      await loadRounds();
-      // Set current round to the newly created one
-      const updatedRounds = await DatabaseService.getTournamentRounds(tournament.id);
-      if (updatedRounds.length > 0) {
-        setCurrentRound(updatedRounds[0]);
+      const roundsData = await loadRounds();
+      if (roundsData.length > 0) {
+        await loadMatches(roundsData[0].id);
       }
-      await loadMatches();
       await loadStandings();
     } catch (error: any) {
       console.error('Error generating round:', error);
@@ -187,15 +209,14 @@ export default function TournamentDetail() {
 
     try {
       setIsLoading(true);
-      await SwissPairingService.generateNextRound(tournament.id);
-      await loadRounds();
-      // Set current round to the newly created one
-      const updatedRounds = await DatabaseService.getTournamentRounds(tournament.id);
-      if (updatedRounds.length > 0) {
-        setCurrentRound(updatedRounds[updatedRounds.length - 1]);
+      const { standings } = await SwissPairingService.generateNextRound(tournament.id);
+      setStandings(standings);
+      const roundsData = await loadRounds();
+      const newRound = roundsData.length > 0 ? roundsData[roundsData.length - 1] : null;
+      if (newRound) {
+        setCurrentRound(newRound);
+        await loadMatches(newRound.id);
       }
-      await loadMatches();
-      await loadStandings();
     } catch (error: any) {
       console.error('Error generating round:', error);
       addNotification({
@@ -264,44 +285,37 @@ export default function TournamentDetail() {
   const handleMatchResultSaved = async () => {
     setIsMatchModalOpen(false);
     setSelectedMatch(null);
-    await loadMatches();
+    if (!currentRound?.id || !tournament?.id) return;
+
+    // Una sola petición para obtener partidas actualizadas
+    const matches = await DatabaseService.getRoundMatches(currentRound.id);
+    setMatches(matches);
+    await loadMatchPlayersForMatches(matches);
+    await loadMatchResultsForMatches(matches);
+
+    const allCompleted = matches.every((m) => m.status === 'completed');
+    if (!allCompleted || currentRound.status === 'completed') return;
+
+    // Marcar ronda completada y refrescar lista de rondas
+    await DatabaseService.updateRound(currentRound.id, {
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+    });
+    const roundsAfter = await loadRounds();
     await loadStandings();
-    await loadMatchResults();
-    
-    // Check if all matches in current round are completed
-    if (currentRound) {
-      const allMatches = await DatabaseService.getRoundMatches(currentRound.id!);
-      const allCompleted = allMatches.every((m) => m.status === 'completed');
-      
-      if (allCompleted && currentRound.status !== 'completed') {
-        // Update round status
-        await DatabaseService.updateRound(currentRound.id!, {
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-        });
-        await loadRounds();
-        
-        // Check if we can generate next round
-        const tournament = await DatabaseService.getTournamentById(tournament.id!) as Tournament;
-        const numberOfRounds = tournament.number_of_rounds || 0;
-        const rounds = await DatabaseService.getTournamentRounds(tournament.id!);
-        
-        if (numberOfRounds === 0 || rounds.length < numberOfRounds) {
-          // Show option to generate next round
-          if (confirm('Todas las partidas de esta ronda están completadas. ¿Deseas generar la siguiente ronda?')) {
-            await handleGenerateNextRound();
-          }
-        } else if (rounds.length >= numberOfRounds) {
-          // Tournament completed - show message and final standings
-          await DatabaseService.updateTournament(tournament.id!, { status: 'completed' });
-          addNotification({
-            message: `¡Torneo completado! Se alcanzó el número máximo de rondas (${numberOfRounds}).`,
-            type: 'success',
-            duration: 5000,
-          });
-          await loadStandings();
-          setShowStats(true); // Show stats automatically
-        }
+
+    const effectiveMaxRounds = (tournament.number_of_rounds || 1);
+    if (roundsAfter.length < effectiveMaxRounds) {
+      if (confirm('Todas las partidas de esta ronda están completadas. ¿Deseas generar la siguiente ronda?')) {
+        await handleGenerateNextRound();
+      }
+    } else {
+      if (confirm('Has completado la última ronda. ¿Deseas finalizar el torneo?')) {
+        await DatabaseService.updateTournament(tournament.id, { status: 'completed' });
+        addNotification({ message: '¡Torneo completado!', type: 'success', duration: 5000 });
+        await loadTournament();
+        await loadStandings();
+        setShowStats(true);
       }
     }
   };
@@ -425,37 +439,29 @@ export default function TournamentDetail() {
   const [matchPlayersMap, setMatchPlayersMap] = useState<{ [matchId: number]: any[] }>({});
   const [matchResultsMap, setMatchResultsMap] = useState<{ [matchId: number]: any[] }>({});
 
-  useEffect(() => {
-    if (matches.length > 0) {
-      loadMatchPlayers();
-      loadMatchResults();
-    }
-  }, [matches]);
-
-  const loadMatchPlayers = async () => {
+  const loadMatchPlayersForMatches = async (matchList: Match[]) => {
+    if (matchList.length === 0) return;
+    const list = matchList.filter((m) => m.id);
+    const results = await Promise.all(list.map((m) => DatabaseService.getMatchPlayers(m.id!)));
     const map: { [matchId: number]: any[] } = {};
-    for (const match of matches) {
-      if (match.id) {
-        const players = await DatabaseService.getMatchPlayers(match.id);
-        map[match.id] = players;
-      }
-    }
+    list.forEach((m, i) => { map[m.id!] = results[i] || []; });
     setMatchPlayersMap(map);
   };
 
-  const loadMatchResults = async () => {
+  const loadMatchResultsForMatches = async (matchList: Match[]) => {
+    if (matchList.length === 0) return;
+    const list = matchList.filter((m) => m.id);
+    const results = await Promise.all(list.map((m) => DatabaseService.getMatchResults(m.id!)));
     const map: { [matchId: number]: any[] } = {};
-    for (const match of matches) {
-      if (match.id) {
-        // Load results for all matches (not just completed) to detect byes
-        const results = await DatabaseService.getMatchResults(match.id);
-        if (results.length > 0) {
-          map[match.id] = results;
-        }
-      }
-    }
+    list.forEach((m, i) => {
+      const r = results[i] || [];
+      if (r.length > 0) map[m.id!] = r;
+    });
     setMatchResultsMap(map);
   };
+
+  // Jugadores y resultados de partidas se cargan solo en loadMatches() y handleMatchResultSaved
+  // (no en useEffect por matches para evitar queries duplicadas)
 
   // Check if match is a bye (1 result, completed, typically 0 players in match_players)
   const isByeMatch = (match: Match): boolean => {
@@ -684,21 +690,37 @@ export default function TournamentDetail() {
 
       {showStats && (
         <div className="mb-6">
-          <TournamentStats tournament={tournament} standings={standings} tiebreakCriteria={tiebreakCriteria} />
+          {isLoadingStandings ? (
+            <div className="card p-8 text-center text-gray-600 dark:text-gray-400">
+              Cargando estadísticas…
+            </div>
+          ) : standings.length === 0 ? (
+            <div className="card p-8 text-center text-gray-600 dark:text-gray-400">
+              No hay datos de posiciones aún. Completa al menos una ronda con resultados para ver estadísticas.
+            </div>
+          ) : (
+            <TournamentStats tournament={tournament} standings={standings} tiebreakCriteria={tiebreakCriteria} />
+          )}
         </div>
       )}
 
-      {/* Leaderboard - Full width */}
+      {/* Leaderboard - mismos datos que estadísticas; se cargan al entrar al torneo */}
       <div className="card mb-6">
         <h2 className="text-xl font-bold mb-4">Leaderboard</h2>
-        <div className="overflow-x-auto">
-          <Table
-            columns={standingsColumns}
-            data={standings}
-            keyExtractor={(standing) => standing.player_id}
-            emptyMessage="No hay datos disponibles"
-          />
-        </div>
+        {isLoadingStandings && standings.length === 0 ? (
+          <div className="p-6 text-center text-gray-600 dark:text-gray-400">
+            Cargando leaderboard…
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table
+              columns={standingsColumns}
+              data={standings}
+              keyExtractor={(standing) => standing.player_id}
+              emptyMessage="No hay datos disponibles. Completa al menos una ronda con resultados."
+            />
+          </div>
+        )}
       </div>
 
       {/* Rounds and Matches - Side by side */}
@@ -724,40 +746,41 @@ export default function TournamentDetail() {
                   Torneo Finalizado
                 </Button>
               ) : (
-                // Check if we've reached the maximum number of rounds
-                tournament.number_of_rounds && rounds.length >= tournament.number_of_rounds ? (
-                  // Check if all rounds are completed
-                  rounds.every(r => r.status === 'completed') ? (
-                    // Show finalize button when max rounds reached AND all completed
-                    <Button 
-                      onClick={handleFinalizeTournament} 
-                      variant="success"
-                      isLoading={isLoading}
-                    >
-                      Finalizar Torneo
-                    </Button>
-                  ) : (
-                    // Max rounds reached but not all completed
-                    <Button 
-                      onClick={() => setShowStats(true)} 
-                      variant="primary"
-                    >
-                      Ver Resultados
-                    </Button>
-                  )
-                ) : (
-                  // Not at max rounds yet
-                  currentRound?.status === 'completed' ? (
-                    <Button onClick={handleGenerateNextRound} isLoading={isLoading}>
-                      Generar Siguiente Ronda
-                    </Button>
-                  ) : (
-                    // Current round not completed yet
+                (() => {
+                  const effectiveMaxRounds = tournament.number_of_rounds || 1;
+                  const atLastRound = rounds.length >= effectiveMaxRounds;
+                  const allRoundsCompleted = rounds.every(r => r.status === 'completed');
+                  if (atLastRound && allRoundsCompleted) {
+                    return (
+                      <Button 
+                        onClick={handleFinalizeTournament} 
+                        variant="success"
+                        isLoading={isLoading}
+                      >
+                        Finalizar Torneo
+                      </Button>
+                    );
+                  }
+                  if (atLastRound && !allRoundsCompleted) {
+                    return (
+                      <Button onClick={() => setShowStats(true)} variant="primary">
+                        Ver Resultados
+                      </Button>
+                    );
+                  }
+                  if (currentRound?.status === 'completed') {
+                    return (
+                      <Button onClick={handleGenerateNextRound} isLoading={isLoading}>
+                        Generar Siguiente Ronda
+                      </Button>
+                    );
+                  }
+                  return (
                     <div className="text-sm text-gray-500 dark:text-gray-400">
                       Completa la ronda actual para continuar
                     </div>
-                  )
-                )
+                  );
+                })()
               )
             )}
           </div>

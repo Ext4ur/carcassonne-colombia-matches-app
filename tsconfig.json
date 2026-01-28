@@ -17,7 +17,17 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/renderer/*"]
+      "@/*": ["src/renderer/*"],
+      "@repositories/*": ["src/renderer/repositories/*"],
+      "@services/*": ["src/renderer/services/*"],
+      "@hooks/*": ["src/renderer/hooks/*"],
+      "@components/*": ["src/renderer/components/*"],
+      "@types/*": ["src/renderer/types/*"],
+      "@constants/*": ["src/renderer/constants/*"],
+      "@config/*": ["src/renderer/config/*"],
+      "@api/*": ["src/renderer/api/*"],
+      "@auth/*": ["src/renderer/auth/*"],
+      "@utils/*": ["src/renderer/utils/*"]
     }
   },
   "include": ["src/renderer"],

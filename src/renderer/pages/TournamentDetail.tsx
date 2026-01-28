@@ -12,6 +12,7 @@ import MatchResultForm from '../components/tournament/MatchResultForm';
 import TournamentStats from '../components/tournament/TournamentStats';
 import { Column } from '../components/common/Table';
 import { useNotifications } from '../contexts/NotificationContext';
+import { calculateNumberOfRounds } from '../utils/tournament';
 
 export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -317,7 +318,8 @@ export default function TournamentDetail() {
     const roundsAfter = await loadRounds();
     await loadStandings();
 
-    const effectiveMaxRounds = (tournament.number_of_rounds || 1);
+    const players = await DatabaseService.getTournamentPlayers(tournament.id);
+    const effectiveMaxRounds = tournament.number_of_rounds || calculateNumberOfRounds(players.length);
     if (roundsAfter.length < effectiveMaxRounds) {
       if (confirm('Todas las partidas de esta ronda están completadas. ¿Deseas generar la siguiente ronda?')) {
         await handleGenerateNextRound();

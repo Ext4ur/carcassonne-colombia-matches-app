@@ -20,6 +20,7 @@ function wrapWithQueryCounter(client: IApiClient): IApiClient & { _client?: IApi
       return client.execute(sql, params);
     },
     async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<any[]> {
+      incrementQueryCount();
       return client.transaction(queries);
     },
     _client: client,

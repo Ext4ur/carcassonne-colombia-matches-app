@@ -245,8 +245,11 @@ export class DatabaseService {
     if (isSupabase) {
       const results = await this.query('SELECT * FROM tournaments WHERE id = ?', [id]);
       const tournament = results[0] || null;
-      if (!tournament || !tournament.circuit_id) result = tournament;
-      else {
+      if (!tournament) {
+        result = null;
+      } else if (!tournament.circuit_id) {
+        result = { ...tournament, circuit_name: null };
+      } else {
         const circuits = await this.query('SELECT * FROM circuits WHERE id = ?', [tournament.circuit_id]);
         result = { ...tournament, circuit_name: circuits[0]?.name ?? null };
       }

@@ -1,5 +1,6 @@
 import { TiebreakCriterion } from '@types/tournament';
 import { ScoringSystem } from '@types/tournament';
+import { isSupabaseConfigured } from '@api/clients/supabaseConfig';
 
 /**
  * Criterios de desempate por defecto
@@ -60,14 +61,19 @@ export type ByeSelection = typeof BYE_SELECTION_OPTIONS[number];
 
 /**
  * Configuración de base de datos
- * 
+ *
  * Modos disponibles:
- * - 'local': Solo SQLite local
- * - 'remote': Solo Supabase remoto
+ * - 'local': Solo SQLite local (fallback cuando Supabase no está configurado)
+ * - 'remote': Solo Supabase remoto (cuando VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY están configurados)
  * - 'dual': SQLite + Supabase con sincronización (pendiente Sprint 3)
+ *
+ * El modo se deriva automáticamente de la configuración: si Supabase está configurado, usa 'remote';
+ * si no, usa 'local' para degradar correctamente a SQLite sin fallos en runtime.
  */
 export const DB_CONFIG = {
-  mode: 'remote' as 'local' | 'remote' | 'dual', // Cambiar a 'remote' para usar Supabase
+  get mode(): 'local' | 'remote' | 'dual' {
+    return isSupabaseConfigured() ? 'remote' : 'local';
+  },
   syncOnStartup: true,
   syncInterval: 30000, // 30 segundos
   conflictResolution: 'last-write-wins' as 'last-write-wins' | 'manual',

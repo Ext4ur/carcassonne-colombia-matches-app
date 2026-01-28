@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DatabaseService } from '../services/database';
 import { SwissPairingService } from '../services/swiss';
@@ -43,10 +43,11 @@ export default function TournamentDetail() {
   useEffect(() => {
     if (!tournament) return;
     let cancelled = false;
+    const isCancelled = () => cancelled;
     (async () => {
       const roundsData = await loadRounds();
       if (cancelled) return;
-      await loadStandings(roundsData);
+      await loadStandings(roundsData, isCancelled);
     })();
     return () => {
       cancelled = true;
@@ -60,10 +61,16 @@ export default function TournamentDetail() {
   }, [currentRound]);
 
   // Cargar estadísticas al abrir el panel solo si no hay datos (Leaderboard y estadísticas usan los mismos)
+  const loadedStandingsForStatsRef = useRef(false);
   useEffect(() => {
-    if (showStats && tournament?.id && standings.length === 0 && !isLoadingStandings) {
-      loadStandings();
+    if (!showStats) {
+      loadedStandingsForStatsRef.current = false;
+      return;
     }
+    if (!tournament?.id || standings.length > 0 || isLoadingStandings) return;
+    if (loadedStandingsForStatsRef.current) return;
+    loadedStandingsForStatsRef.current = true;
+    loadStandings();
   }, [showStats, tournament?.id, standings.length, isLoadingStandings]);
 
   const loadTournament = async () => {
@@ -114,18 +121,24 @@ export default function TournamentDetail() {
     }
   };
 
-  const loadStandings = async (preFetchedRounds?: Round[]) => {
+  const loadStandings = async (
+    preFetchedRounds?: Round[],
+    isCancelled?: () => boolean
+  ) => {
     if (!tournament?.id) return;
     setIsLoadingStandings(true);
     try {
       const config = await DatabaseService.getTournamentConfig(tournament.id);
+      if (isCancelled?.()) return;
       const data = await SwissPairingService.calculateStandings(
         tournament.id,
         config?.tiebreak_criteria || [],
         preFetchedRounds?.length ? { rounds: preFetchedRounds } : undefined
       );
+      if (isCancelled?.()) return;
       setStandings(data || []);
     } catch (error: any) {
+      if (isCancelled?.()) return;
       console.error('Error loading standings:', error);
       addNotification({
         message: error?.message || 'Error al cargar las estadísticas',
@@ -133,7 +146,7 @@ export default function TournamentDetail() {
       });
       setStandings([]);
     } finally {
-      setIsLoadingStandings(false);
+      if (!isCancelled?.()) setIsLoadingStandings(false);
     }
   };
 

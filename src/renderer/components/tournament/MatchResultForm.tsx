@@ -113,6 +113,12 @@ export default function MatchResultForm({
       return;
     }
 
+    // Validate who started the match is selected (AC-012)
+    if (firstPlayerId === undefined || firstPlayerId === null) {
+      alert('Debes marcar quién empezó la partida para poder guardar los resultados.');
+      return;
+    }
+
     try {
       setIsLoading(true);
       const config = await DatabaseService.getTournamentConfig(tournamentId);
@@ -248,7 +254,7 @@ export default function MatchResultForm({
                     className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 w-4 h-4"
                   />
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Empezó la partida
+                    Empezó la partida <span className="text-red-500">*</span>
                   </span>
                 </label>
               </div>
@@ -270,7 +276,11 @@ export default function MatchResultForm({
           {tournamentStatus === 'completed' ? 'Cerrar' : 'Cancelar'}
         </Button>
         {tournamentStatus !== 'completed' && (
-          <Button onClick={handleSave} isLoading={isLoading}>
+          <Button
+            onClick={handleSave}
+            isLoading={isLoading}
+            disabled={firstPlayerId === undefined || firstPlayerId === null}
+          >
             Guardar Resultados
           </Button>
         )}

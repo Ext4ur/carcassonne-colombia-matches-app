@@ -140,11 +140,12 @@ export class DatabaseService {
     description?: string;
     start_date?: string;
     end_date?: string;
+    status?: 'active' | 'finalized';
   }) {
     const result = await this.execute(
-      `INSERT INTO circuits (name, description, start_date, end_date) 
-       VALUES (?, ?, ?, ?)`,
-      [circuit.name, circuit.description || null, circuit.start_date || null, circuit.end_date || null]
+      `INSERT INTO circuits (name, description, start_date, end_date, status) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [circuit.name, circuit.description || null, circuit.start_date || null, circuit.end_date || null, circuit.status || 'active']
     );
     dbCache.invalidate(dbCache.LIST_KEYS.circuits);
     return result.lastInsertRowid;
@@ -155,6 +156,7 @@ export class DatabaseService {
     description?: string;
     start_date?: string;
     end_date?: string;
+    status?: 'active' | 'finalized';
   }) {
     const updates: string[] = [];
     const params: any[] = [];
@@ -175,6 +177,10 @@ export class DatabaseService {
       updates.push('end_date = ?');
       params.push(circuit.end_date);
     }
+    if (circuit.status !== undefined) {
+      updates.push('status = ?');
+      params.push(circuit.status);
+    }
 
     if (updates.length === 0) return;
 
@@ -186,6 +192,14 @@ export class DatabaseService {
       params
     );
     dbCache.invalidate(dbCache.LIST_KEYS.circuits);
+  }
+
+  /** Tournaments of a circuit (completed only), ordered by date for "paradas" / stops. */
+  static async getCircuitTournaments(circuitId: number) {
+    return this.query(
+      `SELECT * FROM tournaments WHERE circuit_id = ? AND status = ? ORDER BY date ASC, id ASC`,
+      [circuitId, 'completed']
+    );
   }
 
   static async deleteCircuit(id: number) {
@@ -274,6 +288,12 @@ export class DatabaseService {
     players_per_match: number;
     number_of_rounds?: number;
   }) {
+    if (tournament.circuit_id) {
+      const circuit = await this.getCircuitById(tournament.circuit_id);
+      if (circuit?.status === 'finalized') {
+        throw new Error('No se pueden agregar torneos a un circuito finalizado.');
+      }
+    }
     const result = await this.execute(
       `INSERT INTO tournaments (name, type, circuit_id, date, players_per_match, number_of_rounds) 
        VALUES (?, ?, ?, ?, ?, ?)`,

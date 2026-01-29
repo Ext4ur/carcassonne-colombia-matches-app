@@ -53,10 +53,17 @@ function initializeSchema(database: Database.Database) {
       description TEXT,
       start_date DATE,
       end_date DATE,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'finalized')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // Migration: add status column to existing circuits tables (no-op if already present)
+  try {
+    database.exec(`ALTER TABLE circuits ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
+  } catch (_) {
+    // Column already exists
+  }
 
   // Tournaments table
   database.exec(`

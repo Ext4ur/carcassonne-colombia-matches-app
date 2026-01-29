@@ -5,6 +5,8 @@ export interface Column<T> {
   header: string;
   render?: (item: T, index?: number) => ReactNode;
   className?: string;
+  /** Optional width (e.g. "8%"). Columns without width share the remaining space. */
+  width?: string;
 }
 
 interface TableProps<T> {
@@ -17,8 +19,14 @@ interface TableProps<T> {
   scrollableBody?: boolean;
 }
 
-const colWidthPercent = (columns: Column<unknown>[]): number =>
-  columns.length > 0 ? 100 / columns.length : 100;
+function getColWidthStyle<T>(columns: Column<T>[], column: Column<T>): string {
+  if (column.width) return column.width;
+  const withWidth = columns.filter((c) => c.width);
+  const fixedTotal = withWidth.reduce((s, c) => s + parseFloat(String(c.width).replace('%', '')), 0);
+  const autoCount = columns.length - withWidth.length;
+  const autoPercent = autoCount > 0 ? (100 - fixedTotal) / autoCount : 0;
+  return `${autoPercent}%`;
+}
 
 function TableHeader<T extends Record<string, any>>({
   columns,
@@ -31,7 +39,7 @@ function TableHeader<T extends Record<string, any>>({
     <table className="min-w-full table-fixed border-collapse">
       <colgroup>
         {columns.map((col) => (
-          <col key={col.key} style={{ width: `${colWidthPercent(columns)}%` }} />
+          <col key={col.key} style={{ width: getColWidthStyle(columns, col) }} />
         ))}
       </colgroup>
       <thead className="bg-gray-50 dark:bg-gray-800">
@@ -72,7 +80,7 @@ export default function Table<T extends Record<string, any>>({
       <table className="min-w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700 border-collapse">
         <colgroup>
           {columns.map((col) => (
-            <col key={col.key} style={{ width: `${colWidthPercent(columns)}%` }} />
+            <col key={col.key} style={{ width: getColWidthStyle(columns, col) }} />
           ))}
         </colgroup>
         <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
@@ -123,7 +131,7 @@ export default function Table<T extends Record<string, any>>({
           <table className="min-w-full table-fixed border-collapse">
             <colgroup>
               {columns.map((col) => (
-                <col key={col.key} style={{ width: `${colWidthPercent(columns)}%` }} />
+                <col key={col.key} style={{ width: getColWidthStyle(columns, col) }} />
               ))}
             </colgroup>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">

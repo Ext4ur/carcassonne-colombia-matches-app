@@ -122,7 +122,9 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
           onChange={(e) => setFormData({ ...formData, circuit_id: e.target.value })}
           options={[
             { value: '', label: 'Seleccionar circuito...' },
-            ...circuits.map((c) => ({ value: c.id!.toString(), label: c.name })),
+            ...circuits
+              .filter((c) => c.status !== 'finalized')
+              .map((c) => ({ value: c.id!.toString(), label: c.name })),
           ]}
           error={errors.circuit_id}
         />

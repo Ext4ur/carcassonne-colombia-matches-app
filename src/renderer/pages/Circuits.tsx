@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatabaseService } from '../services/database';
-import { CircuitService } from '../services/circuit';
+import { CircuitService, CircuitPositionEvolution, CircuitPointsEvolution } from '../services/circuit';
 import { Circuit, CircuitStandings } from '../types/circuit';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
@@ -9,6 +9,29 @@ import Modal from '../components/common/Modal';
 import Input from '../components/common/Input';
 import Textarea from '../components/common/Textarea';
 import { Column } from '../components/common/Table';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 export default function Circuits() {
   const navigate = useNavigate();
@@ -18,6 +41,8 @@ export default function Circuits() {
   const [editingCircuit, setEditingCircuit] = useState<Circuit | null>(null);
   const [selectedCircuit, setSelectedCircuit] = useState<Circuit | null>(null);
   const [standings, setStandings] = useState<CircuitStandings[]>([]);
+  const [positionEvolution, setPositionEvolution] = useState<CircuitPositionEvolution | null>(null);
+  const [pointsEvolution, setPointsEvolution] = useState<CircuitPointsEvolution | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -47,12 +72,33 @@ export default function Circuits() {
   const loadStandings = async (circuitId: number) => {
     try {
       setIsLoading(true);
-      const data = await DatabaseService.getCircuitStandings(circuitId);
+      const [data, posEvo, ptsEvo] = await Promise.all([
+        DatabaseService.getCircuitStandings(circuitId),
+        CircuitService.getCircuitPositionEvolution(circuitId),
+        CircuitService.getCircuitPointsEvolution(circuitId),
+      ]);
       setStandings(data);
+      setPositionEvolution(posEvo);
+      setPointsEvolution(ptsEvo);
       setStandingsModalOpen(true);
     } catch (error) {
       console.error('Error loading standings:', error);
       alert('Error al cargar el acumulado');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFinalizeCircuit = async (circuit: Circuit) => {
+    if (!circuit.id) return;
+    if (!confirm(`¿Finalizar el circuito "${circuit.name}"? No se podrán agregar más torneos.`)) return;
+    try {
+      setIsLoading(true);
+      await DatabaseService.updateCircuit(circuit.id, { status: 'finalized' });
+      loadCircuits();
+    } catch (error) {
+      console.error('Error finalizing circuit:', error);
+      alert('Error al finalizar el circuito');
     } finally {
       setIsLoading(false);
     }
@@ -195,14 +241,28 @@ export default function Circuits() {
       header: 'Nombre',
     },
     {
-      key: 'description',
-      header: 'Descripción',
-      render: (circuit) => circuit.description || '-',
-      className: 'max-w-md truncate',
+      key: 'status',
+      header: 'Estado',
+      width: '8%',
+      render: (circuit) => {
+        const isFinalized = circuit.status === 'finalized';
+        return (
+          <span
+            className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
+              isFinalized
+                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200'
+                : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
+            }`}
+          >
+            {isFinalized ? 'Finalizado' : 'Activo'}
+          </span>
+        );
+      },
     },
     {
       key: 'start_date',
       header: 'Fecha Inicio',
+      width: '10%',
       render: (circuit) => {
         if (!circuit.start_date) return '-';
         const dateStr = circuit.start_date.includes('T') ? circuit.start_date.split('T')[0] : circuit.start_date;
@@ -212,6 +272,7 @@ export default function Circuits() {
     {
       key: 'end_date',
       header: 'Fecha Fin',
+      width: '10%',
       render: (circuit) => {
         if (!circuit.end_date) return '-';
         const dateStr = circuit.end_date.includes('T') ? circuit.end_date.split('T')[0] : circuit.end_date;
@@ -222,13 +283,13 @@ export default function Circuits() {
       key: 'actions',
       header: 'Acciones',
       render: (circuit) => (
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="primary"
             size="sm"
             onClick={() => handleViewStandings(circuit)}
           >
-            Ver Acumulado
+            Ver
           </Button>
           <Button
             variant="secondary"
@@ -237,6 +298,16 @@ export default function Circuits() {
           >
             Editar
           </Button>
+          {circuit.status !== 'finalized' && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleFinalizeCircuit(circuit)}
+              title="No se podrán agregar más torneos"
+            >
+              Finalizar
+            </Button>
+          )}
           <Button
             variant="danger"
             size="sm"
@@ -250,6 +321,11 @@ export default function Circuits() {
   ];
 
   const standingsColumns: Column<CircuitStandings>[] = [
+    {
+      key: 'position',
+      header: 'Pos.',
+      render: (_standing, index) => (index != null ? index + 1 : 1),
+    },
     {
       key: 'player_name',
       header: 'Jugador',
@@ -268,6 +344,53 @@ export default function Circuits() {
       header: 'Victorias',
     },
   ];
+
+  const CHART_COLORS = [
+    'rgb(59, 130, 246)',
+    'rgb(34, 197, 94)',
+    'rgb(251, 191, 36)',
+    'rgb(239, 68, 68)',
+    'rgb(168, 85, 247)',
+    'rgb(20, 184, 166)',
+    'rgb(249, 115, 22)',
+  ];
+
+  const positionChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top' as const },
+      title: { display: true, text: 'Posición en cada parada del circuito' },
+    },
+    scales: {
+      y: {
+        reverse: true,
+        min: 1,
+        title: { display: true, text: 'Posición' },
+      },
+      x: {
+        title: { display: true, text: 'Parada' },
+      },
+    },
+  };
+
+  const pointsChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top' as const },
+      title: { display: true, text: 'Puntos acumulados por parada' },
+    },
+    scales: {
+      y: {
+        min: 0,
+        title: { display: true, text: 'Puntos acumulados' },
+      },
+      x: {
+        title: { display: true, text: 'Parada' },
+      },
+    },
+  };
 
   return (
     <div className="px-4 py-6">
@@ -337,8 +460,12 @@ export default function Circuits() {
       <Modal
         isOpen={standingsModalOpen}
         onClose={() => setStandingsModalOpen(false)}
-        title={`Acumulado - ${selectedCircuit?.name}`}
-        size="lg"
+        title={
+          selectedCircuit?.status === 'finalized'
+            ? `Estadísticas finales - ${selectedCircuit?.name}`
+            : `Acumulado - ${selectedCircuit?.name}`
+        }
+        size="xl"
         footer={
           selectedCircuit && (
             <div className="flex space-x-2">
@@ -366,12 +493,84 @@ export default function Circuits() {
         {isLoading ? (
           <p className="text-center py-8 text-gray-500">Cargando...</p>
         ) : (
-          <Table
-            columns={standingsColumns}
-            data={standings}
-            keyExtractor={(standing) => standing.player_id}
-            emptyMessage="No hay datos de acumulado disponibles"
-          />
+          <div className="space-y-6">
+            {selectedCircuit?.status === 'finalized' && standings.length > 0 && (
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-4">
+                <h3 className="text-lg font-semibold mb-3">Podio final</h3>
+                <div className="flex flex-wrap gap-4 justify-center items-end">
+                  {standings[1] && (
+                    <div className="flex flex-col items-center order-2 md:order-1">
+                      <span className="text-2xl" aria-hidden>🥈</span>
+                      <div className="font-bold text-gray-700 dark:text-gray-300">{standings[1].player_name}</div>
+                      <div className="text-sm text-gray-500">{standings[1].total_points.toFixed(2)} pts</div>
+                    </div>
+                  )}
+                  {standings[0] && (
+                    <div className="flex flex-col items-center order-1 md:order-2">
+                      <span className="text-3xl" aria-hidden>🥇</span>
+                      <div className="font-bold text-gray-900 dark:text-white">{standings[0].player_name}</div>
+                      <div className="text-sm text-gray-500">{standings[0].total_points.toFixed(2)} pts</div>
+                    </div>
+                  )}
+                  {standings[2] && (
+                    <div className="flex flex-col items-center order-3">
+                      <span className="text-2xl" aria-hidden>🥉</span>
+                      <div className="font-bold text-gray-700 dark:text-gray-300">{standings[2].player_name}</div>
+                      <div className="text-sm text-gray-500">{standings[2].total_points.toFixed(2)} pts</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {positionEvolution && positionEvolution.stops.length > 0 && (
+              <div className="h-64">
+                <Line
+                  data={{
+                    labels: positionEvolution.stops,
+                    datasets: positionEvolution.players.slice(0, 10).map((p, i) => ({
+                      label: p.player_name,
+                      data: p.positions.map((pos) => (pos === null ? undefined : pos)),
+                      borderColor: CHART_COLORS[i % CHART_COLORS.length],
+                      backgroundColor: CHART_COLORS[i % CHART_COLORS.length].replace('rgb', 'rgba').replace(')', ', 0.1)'),
+                      tension: 0.2,
+                      spanGaps: true,
+                    })),
+                  }}
+                  options={positionChartOptions}
+                />
+              </div>
+            )}
+
+            {pointsEvolution && pointsEvolution.stops.length > 0 && (
+              <div className="h-64">
+                <Line
+                  data={{
+                    labels: pointsEvolution.stops,
+                    datasets: pointsEvolution.players.slice(0, 10).map((p, i) => ({
+                      label: p.player_name,
+                      data: p.pointsCumulative,
+                      borderColor: CHART_COLORS[i % CHART_COLORS.length],
+                      backgroundColor: CHART_COLORS[i % CHART_COLORS.length].replace('rgb', 'rgba').replace(')', ', 0.1)'),
+                      fill: true,
+                      tension: 0.2,
+                    })),
+                  }}
+                  options={pointsChartOptions}
+                />
+              </div>
+            )}
+
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Tabla de posiciones</h3>
+              <Table
+                columns={standingsColumns}
+                data={standings}
+                keyExtractor={(standing) => standing.player_id}
+                emptyMessage="No hay datos de acumulado disponibles"
+              />
+            </div>
+          </div>
         )}
       </Modal>
     </div>

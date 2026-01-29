@@ -300,6 +300,11 @@ export class SwissPairingService {
       resultsByMatch?: Record<number, any[]>;
     }
   ): Promise<PlayerStanding[]> {
+    // Use config order for tiebreak criteria (same order as in tournament config)
+    const criteria = [...(tiebreakCriteria || [])].sort(
+      (a, b) => (a.order ?? 0) - (b.order ?? 0)
+    );
+
     let players: any[];
     let rounds: Round[];
     let roundMatches: Match[][];
@@ -370,7 +375,7 @@ export class SwissPairingService {
       const wins = playerWins[player.id] ?? 0;
       const tiebreakValues: { [key: string]: number } = {};
 
-      for (const criterion of tiebreakCriteria) {
+      for (const criterion of criteria) {
         if (!criterion.enabled) continue;
         switch (criterion.id) {
           case 'wins':
@@ -408,22 +413,35 @@ export class SwissPairingService {
       });
     }
 
-    return this.sortByTiebreak(standings, tiebreakCriteria);
+    return this.sortByTiebreak(standings, criteria, tiebreakData);
   }
 
   private static sortByTiebreak(
     standings: PlayerStanding[],
-    criteria: any[]
+    criteria: any[],
+    tiebreakData?: TiebreakData
   ): PlayerStanding[] {
     const sorted = [...standings].sort((a, b) => {
-      // First by total points
+      // First by total points (from config scoring_system, stored in match results)
       if (b.total_points !== a.total_points) {
         return b.total_points - a.total_points;
       }
 
-      // Then by tiebreak criteria in order
+      // Then by tiebreak criteria in config order
       for (const criterion of criteria) {
         if (!criterion.enabled) continue;
+
+        // Head-to-head: pairwise comparison (who beat whom in direct match)
+        if (criterion.id === 'head_to_head' && tiebreakData) {
+          const h2h = TiebreakService.calculateHeadToHeadFromData(
+            tiebreakData,
+            a.player_id,
+            b.player_id
+          );
+          if (h2h === 1) return -1; // a beat b -> a first
+          if (h2h === -1) return 1; // b beat a -> b first
+          continue;
+        }
 
         const aValue = a.tiebreak_values[criterion.id] || 0;
         const bValue = b.tiebreak_values[criterion.id] || 0;

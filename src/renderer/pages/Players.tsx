@@ -291,7 +291,7 @@ export default function Players() {
         </div>
 
         {isLoading && players.length === 0 ? (
-          <p className="text-center py-8 text-gray-500">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
         ) : (
           <Table
             columns={columns}
@@ -344,9 +344,9 @@ export default function Players() {
                   name="display_preference"
                   checked={formData.display_preference === 'name'}
                   onChange={() => setFormData({ ...formData, display_preference: 'name' })}
-                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
                 />
-                <span className="ml-2 text-sm">Nombre</span>
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-200">Nombre</span>
               </label>
               <label className="inline-flex items-center">
                 <input
@@ -354,9 +354,9 @@ export default function Players() {
                   name="display_preference"
                   checked={formData.display_preference === 'username'}
                   onChange={() => setFormData({ ...formData, display_preference: 'username' })}
-                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
                 />
-                <span className="ml-2 text-sm">Username BGA</span>
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-200">Username BGA</span>
               </label>
             </div>
           </div>
@@ -422,7 +422,7 @@ export default function Players() {
         >
           <div className="space-y-4">
             {opponents.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">No hay oponentes registrados</p>
+              <p className="text-center text-gray-500 dark:text-gray-400 py-8">No hay oponentes registrados</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

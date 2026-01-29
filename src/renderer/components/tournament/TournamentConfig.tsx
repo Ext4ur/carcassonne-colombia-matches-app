@@ -84,7 +84,7 @@ export default function TournamentConfigComponent({
               type="checkbox"
               checked={avoidRematches}
               onChange={(e) => setAvoidRematches(e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
             />
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Evitar que un par de oponentes se enfrente 2 veces
@@ -149,10 +149,10 @@ export default function TournamentConfigComponent({
                           type="checkbox"
                           checked={criterion.enabled}
                           onChange={() => toggleCriterion(criterion.id)}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
                         />
                         <span className="flex-1 text-sm">{criterion.name}</span>
-                        <span className="text-xs text-gray-500">#{criterion.order}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">#{criterion.order}</span>
                       </div>
                     )}
                   </Draggable>

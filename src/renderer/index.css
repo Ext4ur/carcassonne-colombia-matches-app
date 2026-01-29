@@ -65,7 +65,13 @@
   }
   
   .modal-backdrop {
-    @apply fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75;
+    @apply fixed inset-0 transition-opacity bg-gray-500/75 dark:bg-black/70;
   }
+}
+
+/* Focus ring offset in dark mode for better visibility (gray-800 #1f2937) */
+.dark .btn:focus-visible,
+.dark .input:focus {
+  --tw-ring-offset-color: #1f2937;
 }
 

@@ -469,7 +469,7 @@ export default function Circuits() {
         </div>
 
         {isLoading && circuits.length === 0 ? (
-          <p className="text-center py-8 text-gray-500">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
         ) : (
           <Table
             columns={columns}
@@ -559,7 +559,7 @@ export default function Circuits() {
         }
       >
         {isLoading ? (
-          <p className="text-center py-8 text-gray-500">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
         ) : (
           <div className="space-y-6">
             {/* Filters */}
@@ -602,14 +602,14 @@ export default function Circuits() {
                     <div className="flex flex-col items-center order-1 md:order-2">
                       <span className="text-3xl" aria-hidden>🥇</span>
                       <div className="font-bold text-gray-900 dark:text-white">{standings[0].player_name}</div>
-                      <div className="text-sm text-gray-500">{standings[0].total_points.toFixed(2)} pts</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">{standings[0].total_points.toFixed(2)} pts</div>
                     </div>
                   )}
                   {standings[2] && (
                     <div className="flex flex-col items-center order-3">
                       <span className="text-2xl" aria-hidden>🥉</span>
                       <div className="font-bold text-gray-700 dark:text-gray-300">{standings[2].player_name}</div>
-                      <div className="text-sm text-gray-500">{standings[2].total_points.toFixed(2)} pts</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">{standings[2].total_points.toFixed(2)} pts</div>
                     </div>
                   )}
                 </div>

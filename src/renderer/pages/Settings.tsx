@@ -119,7 +119,7 @@ export default function Settings() {
           <p className="text-gray-600 dark:text-gray-400">
             Carcassonne Tournament Manager v1.0
           </p>
-          <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
             Aplicación para gestionar torneos presenciales de Carcassonne Colombia
           </p>
         </div>

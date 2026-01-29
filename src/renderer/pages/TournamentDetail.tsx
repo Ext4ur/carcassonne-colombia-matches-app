@@ -675,7 +675,7 @@ export default function TournamentDetail() {
   if (!tournament) {
     return (
       <div className="px-4 py-6">
-        <p className="text-center py-8 text-gray-500">Cargando...</p>
+        <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
       </div>
     );
   }

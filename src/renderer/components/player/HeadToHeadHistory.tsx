@@ -35,7 +35,7 @@ export default function HeadToHeadHistory({ player1, player2, onClose }: HeadToH
       {isLoading ? (
         <div className="text-center py-8">Cargando...</div>
       ) : !record ? (
-        <div className="text-center py-8 text-gray-500">No hay enfrentamientos registrados</div>
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400">No hay enfrentamientos registrados</div>
       ) : (
         <div className="space-y-6">
           {/* Summary */}
@@ -43,17 +43,17 @@ export default function HeadToHeadHistory({ player1, player2, onClose }: HeadToH
             <div className="card text-center">
               <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">{player1.name}</div>
               <div className="text-2xl font-bold text-green-600">{record.player1Wins}</div>
-              <div className="text-xs text-gray-500">Victorias</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Victorias</div>
             </div>
             <div className="card text-center">
               <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Empates</div>
               <div className="text-2xl font-bold">{record.ties}</div>
-              <div className="text-xs text-gray-500">Partidas</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Partidas</div>
             </div>
             <div className="card text-center">
               <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">{player2.name}</div>
               <div className="text-2xl font-bold text-green-600">{record.player2Wins}</div>
-              <div className="text-xs text-gray-500">Victorias</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Victorias</div>
             </div>
           </div>
 
@@ -103,7 +103,7 @@ export default function HeadToHeadHistory({ player1, player2, onClose }: HeadToH
                           ) : match.player2Position < match.player1Position ? (
                             <span className="text-green-600 font-medium">{player2.name} ganó</span>
                           ) : (
-                            <span className="text-gray-500">Empate</span>
+                            <span className="text-gray-500 dark:text-gray-400">Empate</span>
                           )}
                         </td>
                       </tr>

@@ -61,7 +61,7 @@ export default function DatabaseStatus() {
             {clientInfo.type === 'supabase' && 'Supabase (Remoto)'}
             {clientInfo.type === 'dual' && 'Dual (SQLite + Supabase)'}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {clientInfo.message}
           </p>
         </div>
@@ -97,7 +97,7 @@ export default function DatabaseStatus() {
               Reset
             </Button>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-500">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             Las queries a BD son las que llegan al cliente; desde caché son lecturas resueltas sin tocar la BD.
           </p>
         </div>

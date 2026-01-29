@@ -1,6 +1,5 @@
 import { ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import Button from './Button';
 
 interface ModalProps {
   isOpen: boolean;
@@ -50,7 +49,7 @@ export default function Modal({
     >
       <div className="flex items-center justify-center min-h-full min-w-full p-4">
         <div
-          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+          className="fixed inset-0 transition-opacity bg-gray-500/75 dark:bg-black/70"
           aria-hidden="true"
           onClick={onClose}
         />

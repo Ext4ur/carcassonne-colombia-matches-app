@@ -80,7 +80,7 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
   if (!stats) {
     return (
       <div className="p-6">
-        <div className="text-center text-gray-500">No hay estadísticas disponibles</div>
+        <div className="text-center text-gray-500 dark:text-gray-400">No hay estadísticas disponibles</div>
       </div>
     );
   }

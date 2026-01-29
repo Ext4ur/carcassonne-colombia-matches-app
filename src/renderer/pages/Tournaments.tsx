@@ -253,7 +253,7 @@ export default function Tournaments() {
         </div>
 
         {isLoading && tournaments.length === 0 ? (
-          <p className="text-center py-8 text-gray-500">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
         ) : (
           <Table
             columns={columns}

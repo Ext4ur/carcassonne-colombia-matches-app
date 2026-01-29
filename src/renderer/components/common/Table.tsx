@@ -83,7 +83,7 @@ export default function Table<T extends Record<string, any>>({
             <col key={col.key} style={{ width: getColWidthStyle(columns, col) }} />
           ))}
         </colgroup>
-        <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
+        <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.05)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.06)]">
           <tr>
             {columns.map((column) => (
               <th

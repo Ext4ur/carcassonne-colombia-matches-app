@@ -212,7 +212,7 @@ export default function PlayerRegistration({
         </div>
         <div className="max-h-[40vh] min-h-[120px] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg">
           {isLoading ? (
-            <p className="text-center py-8 text-gray-500">Cargando...</p>
+            <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
           ) : (
             <Table
               columns={columns}

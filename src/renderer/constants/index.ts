@@ -59,6 +59,9 @@ export type TournamentType = typeof TOURNAMENT_TYPES[number];
 export const BYE_SELECTION_OPTIONS = ['worst', 'random', 'round_robin'] as const;
 export type ByeSelection = typeof BYE_SELECTION_OPTIONS[number];
 
+/** Nombre del lugar por defecto creado por migración (no se puede eliminar). */
+export const DEFAULT_PLACE_NAME = 'Online';
+
 /**
  * Configuración de base de datos
  *

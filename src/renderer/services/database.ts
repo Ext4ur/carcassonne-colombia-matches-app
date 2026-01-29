@@ -1,6 +1,6 @@
 // Database service for interacting with database through API client
 import { getApiClient } from '@api/clients/clientFactory';
-import { DB_CONFIG } from '@constants';
+import { DB_CONFIG, DEFAULT_PLACE_NAME } from '@constants';
 import * as dbCache from './dbCache';
 import { getPlayerDisplayName } from '@utils/playerDisplayName';
 
@@ -203,8 +203,20 @@ export class DatabaseService {
 
   /** Tournaments of a circuit (completed only), ordered by date for "paradas" / stops. */
   static async getCircuitTournaments(circuitId: number) {
+    const isSupabase = DB_CONFIG.mode === 'remote';
+    if (isSupabase) {
+      const tournaments = await this.query(
+        `SELECT * FROM tournaments WHERE circuit_id = ? AND status = ? ORDER BY date ASC, id ASC`,
+        [circuitId, 'completed']
+      );
+      if (tournaments.length === 0) return [];
+      const placeIds = [...new Set((tournaments as any[]).map((t: any) => t.place_id).filter(Boolean))];
+      const places = placeIds.length ? await this.query('SELECT * FROM places WHERE id IN (' + placeIds.map(() => '?').join(',') + ')', placeIds) : [];
+      const placesMap = new Map((places as any[]).map((p: any) => [p.id, p]));
+      return (tournaments as any[]).map((t: any) => ({ ...t, place_name: t.place_id ? (placesMap.get(t.place_id)?.name || null) : null }));
+    }
     return this.query(
-      `SELECT * FROM tournaments WHERE circuit_id = ? AND status = ? ORDER BY date ASC, id ASC`,
+      `SELECT t.*, p.name as place_name FROM tournaments t LEFT JOIN places p ON t.place_id = p.id WHERE t.circuit_id = ? AND t.status = ? ORDER BY t.date ASC, t.id ASC`,
       [circuitId, 'completed']
     );
   }
@@ -215,32 +227,157 @@ export class DatabaseService {
     return result;
   }
 
+  // City operations
+  static async getAllCities() {
+    const cached = dbCache.get(dbCache.LIST_KEYS.cities);
+    if (cached !== undefined) return cached;
+    const data = await this.query('SELECT * FROM cities ORDER BY name');
+    dbCache.set(dbCache.LIST_KEYS.cities, data);
+    return data;
+  }
+
+  static async getCityById(id: number) {
+    const results = await this.query('SELECT * FROM cities WHERE id = ?', [id]);
+    return results[0] || null;
+  }
+
+  static async createCity(city: { name: string }) {
+    const result = await this.execute(
+      'INSERT INTO cities (name) VALUES (?)',
+      [city.name.trim()]
+    );
+    dbCache.invalidate(dbCache.LIST_KEYS.cities);
+    return result.lastInsertRowid;
+  }
+
+  static async updateCity(id: number, city: { name?: string }) {
+    if (city.name === undefined) return;
+    await this.execute('UPDATE cities SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [city.name.trim(), id]);
+    dbCache.invalidate(dbCache.LIST_KEYS.cities);
+    dbCache.invalidate(dbCache.LIST_KEYS.places);
+  }
+
+  static async deleteCity(id: number) {
+    const inUse = await this.query<{ count: number }>('SELECT COUNT(*) as count FROM places WHERE city_id = ?', [id]);
+    if (inUse[0]?.count && inUse[0].count > 0) {
+      throw new Error('No se puede eliminar la ciudad: hay lugares que la usan.');
+    }
+    await this.execute('DELETE FROM cities WHERE id = ?', [id]);
+    dbCache.invalidate(dbCache.LIST_KEYS.cities);
+    dbCache.invalidate(dbCache.LIST_KEYS.places);
+  }
+
+  // Place operations
+  static async getAllPlaces() {
+    const cached = dbCache.get(dbCache.LIST_KEYS.places);
+    if (cached !== undefined) return cached;
+    const isSupabase = DB_CONFIG.mode === 'remote';
+    let data: any[];
+    if (isSupabase) {
+      const places = await this.query('SELECT * FROM places ORDER BY name');
+      const cities = await this.query('SELECT * FROM cities');
+      const citiesMap = new Map(cities.map((c: any) => [c.id, c]));
+      data = places.map((p: any) => ({
+        ...p,
+        city_name: p.city_id ? (citiesMap.get(p.city_id)?.name || null) : null,
+      }));
+    } else {
+      data = await this.query(
+        'SELECT p.*, c.name as city_name FROM places p LEFT JOIN cities c ON p.city_id = c.id ORDER BY p.name'
+      );
+    }
+    dbCache.set(dbCache.LIST_KEYS.places, data);
+    return data;
+  }
+
+  static async getPlaceById(id: number) {
+    const isSupabase = DB_CONFIG.mode === 'remote';
+    if (isSupabase) {
+      const results = await this.query('SELECT * FROM places WHERE id = ?', [id]);
+      const place = results[0] || null;
+      if (!place) return null;
+      if (place.city_id) {
+        const cities = await this.query('SELECT * FROM cities WHERE id = ?', [place.city_id]);
+        return { ...place, city_name: cities[0]?.name ?? null };
+      }
+      return { ...place, city_name: null };
+    }
+    const results = await this.query(
+      'SELECT p.*, c.name as city_name FROM places p LEFT JOIN cities c ON p.city_id = c.id WHERE p.id = ?',
+      [id]
+    );
+    return results[0] || null;
+  }
+
+  static async getDefaultPlaceId(): Promise<number> {
+    const results = await this.query<{ id: number }>('SELECT id FROM places WHERE name = ? LIMIT 1', [DEFAULT_PLACE_NAME]);
+    const row = results[0];
+    if (!row) throw new Error(`Lugar por defecto "${DEFAULT_PLACE_NAME}" no encontrado. Ejecuta las migraciones.`);
+    return row.id;
+  }
+
+  static async createPlace(place: { name: string; city_id: number }) {
+    const result = await this.execute(
+      'INSERT INTO places (name, city_id) VALUES (?, ?)',
+      [place.name.trim(), place.city_id]
+    );
+    dbCache.invalidate(dbCache.LIST_KEYS.places);
+    return result.lastInsertRowid;
+  }
+
+  static async updatePlace(id: number, place: { name?: string; city_id?: number }) {
+    const updates: string[] = [];
+    const params: any[] = [];
+    if (place.name !== undefined) {
+      updates.push('name = ?');
+      params.push(place.name.trim());
+    }
+    if (place.city_id !== undefined) {
+      updates.push('city_id = ?');
+      params.push(place.city_id);
+    }
+    if (updates.length === 0) return;
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
+    await this.execute(`UPDATE places SET ${updates.join(', ')} WHERE id = ?`, params);
+    dbCache.invalidate(dbCache.LIST_KEYS.places);
+  }
+
+  static async deletePlace(id: number) {
+    const inUse = await this.query<{ count: number }>('SELECT COUNT(*) as count FROM tournaments WHERE place_id = ?', [id]);
+    if (inUse[0]?.count && inUse[0].count > 0) {
+      throw new Error('No se puede eliminar el lugar: hay torneos que lo usan.');
+    }
+    await this.execute('DELETE FROM places WHERE id = ?', [id]);
+    dbCache.invalidate(dbCache.LIST_KEYS.places);
+  }
+
   // Tournament operations
   static async getAllTournaments() {
     const cached = dbCache.get(dbCache.LIST_KEYS.tournaments);
     if (cached !== undefined) return cached;
-    // Para Supabase, hacer dos queries separadas y combinarlas
-    // porque el parser de JOINs es complejo
     const isSupabase = DB_CONFIG.mode === 'remote';
     let data: any[];
     if (isSupabase) {
-      // Obtener todos los torneos
       const tournaments = await this.query(`
         SELECT * FROM tournaments 
         ORDER BY date DESC, created_at DESC
       `);
-      // Obtener todos los circuitos
       const circuits = await this.query('SELECT * FROM circuits');
+      const places = await this.query('SELECT * FROM places');
       const circuitsMap = new Map(circuits.map((c: any) => [c.id, c]));
+      const placesMap = new Map(places.map((p: any) => [p.id, p]));
       data = tournaments.map((tournament: any) => ({
         ...tournament,
         circuit_name: tournament.circuit_id ? (circuitsMap.get(tournament.circuit_id)?.name || null) : null,
+        place_name: tournament.place_id ? (placesMap.get(tournament.place_id)?.name || null) : null,
       }));
     } else {
       data = await this.query(`
-        SELECT t.*, c.name as circuit_name 
+        SELECT t.*, c.name as circuit_name, p.name as place_name 
         FROM tournaments t 
         LEFT JOIN circuits c ON t.circuit_id = c.id 
+        LEFT JOIN places p ON t.place_id = p.id 
         ORDER BY t.date DESC, t.created_at DESC
       `);
     }
@@ -268,17 +405,23 @@ export class DatabaseService {
       const tournament = results[0] || null;
       if (!tournament) {
         result = null;
-      } else if (!tournament.circuit_id) {
-        result = { ...tournament, circuit_name: null };
       } else {
-        const circuits = await this.query('SELECT * FROM circuits WHERE id = ?', [tournament.circuit_id]);
-        result = { ...tournament, circuit_name: circuits[0]?.name ?? null };
+        const [circuits, places] = await Promise.all([
+          tournament.circuit_id ? this.query('SELECT * FROM circuits WHERE id = ?', [tournament.circuit_id]) : Promise.resolve([]),
+          tournament.place_id ? this.query('SELECT * FROM places WHERE id = ?', [tournament.place_id]) : Promise.resolve([]),
+        ]);
+        result = {
+          ...tournament,
+          circuit_name: circuits[0]?.name ?? null,
+          place_name: places[0]?.name ?? null,
+        };
       }
     } else {
       const results = await this.query(`
-        SELECT t.*, c.name as circuit_name 
+        SELECT t.*, c.name as circuit_name, p.name as place_name 
         FROM tournaments t 
         LEFT JOIN circuits c ON t.circuit_id = c.id 
+        LEFT JOIN places p ON t.place_id = p.id 
         WHERE t.id = ?
       `, [id]);
       result = results[0] || null;
@@ -294,6 +437,7 @@ export class DatabaseService {
     date: string;
     players_per_match: number;
     number_of_rounds?: number;
+    place_id?: number;
   }) {
     if (tournament.circuit_id) {
       const circuit = await this.getCircuitById(tournament.circuit_id);
@@ -301,10 +445,11 @@ export class DatabaseService {
         throw new Error('No se pueden agregar torneos a un circuito finalizado.');
       }
     }
+    const placeId = tournament.place_id ?? await this.getDefaultPlaceId();
     const result = await this.execute(
-      `INSERT INTO tournaments (name, type, circuit_id, date, players_per_match, number_of_rounds) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [tournament.name, tournament.type, tournament.circuit_id || null, tournament.date, tournament.players_per_match, tournament.number_of_rounds || null]
+      `INSERT INTO tournaments (name, type, circuit_id, date, players_per_match, number_of_rounds, place_id) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [tournament.name, tournament.type, tournament.circuit_id || null, tournament.date, tournament.players_per_match, tournament.number_of_rounds || null, placeId]
     );
     dbCache.invalidate(dbCache.LIST_KEYS.tournaments);
     return result.lastInsertRowid;
@@ -312,9 +457,11 @@ export class DatabaseService {
 
   static async updateTournament(id: number, tournament: {
     name?: string;
+    date?: string;
     status?: 'draft' | 'in_progress' | 'completed';
     players_per_match?: number;
     number_of_rounds?: number;
+    place_id?: number;
   }) {
     const updates: string[] = [];
     const params: any[] = [];
@@ -322,6 +469,10 @@ export class DatabaseService {
     if (tournament.name !== undefined) {
       updates.push('name = ?');
       params.push(tournament.name);
+    }
+    if (tournament.date !== undefined) {
+      updates.push('date = ?');
+      params.push(tournament.date);
     }
     if (tournament.status !== undefined) {
       updates.push('status = ?');
@@ -334,6 +485,10 @@ export class DatabaseService {
     if (tournament.number_of_rounds !== undefined) {
       updates.push('number_of_rounds = ?');
       params.push(tournament.number_of_rounds);
+    }
+    if (tournament.place_id !== undefined) {
+      updates.push('place_id = ?');
+      params.push(tournament.place_id);
     }
 
     if (updates.length === 0) return;

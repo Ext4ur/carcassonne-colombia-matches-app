@@ -6,6 +6,8 @@ import Tournaments from './pages/Tournaments';
 import TournamentDetail from './pages/TournamentDetail';
 import Circuits from './pages/Circuits';
 import Players from './pages/Players';
+import Places from './pages/Places';
+import Cities from './pages/Cities';
 import Settings from './pages/Settings';
 import Layout from './components/common/Layout';
 
@@ -21,6 +23,8 @@ function App() {
               <Route path="/tournament/:id" element={<TournamentDetail />} />
               <Route path="/circuits" element={<Circuits />} />
               <Route path="/players" element={<Players />} />
+              <Route path="/places" element={<Places />} />
+              <Route path="/cities" element={<Cities />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </Layout>

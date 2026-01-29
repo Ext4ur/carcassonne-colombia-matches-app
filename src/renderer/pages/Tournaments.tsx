@@ -11,7 +11,12 @@ import Modal from '../components/common/Modal';
 import TournamentForm, { TournamentFormRef } from '../components/tournament/TournamentForm';
 import TournamentConfigComponent from '../components/tournament/TournamentConfig';
 import PlayerRegistration from '../components/tournament/PlayerRegistration';
+import MultiSelect from '../components/common/MultiSelect';
+import Input from '../components/common/Input';
 import { Column } from '../components/common/Table';
+import { Place } from '../types/place';
+import { formatDateForDisplay } from '../utils/dateUtils';
+import { useNotifications } from '../contexts/NotificationContext';
 
 type WizardStep = 'form' | 'config' | 'registration' | null;
 
@@ -19,6 +24,7 @@ type ConfigDraft = Partial<TournamentConfig> & { bye_selection?: 'worst' | 'rand
 
 export default function Tournaments() {
   const navigate = useNavigate();
+  const { addNotification } = useNotifications();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<WizardStep>(null);
@@ -27,10 +33,14 @@ export default function Tournaments() {
   const [registrationPlayers, setRegistrationPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<'quick' | 'advanced'>('quick');
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [selectedPlaceIds, setSelectedPlaceIds] = useState<number[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const formRef = useRef<TournamentFormRef>(null);
 
   useEffect(() => {
     loadTournaments();
+    DatabaseService.getAllPlaces().then(setPlaces).catch(() => {});
   }, []);
 
   const loadTournaments = async () => {
@@ -40,7 +50,7 @@ export default function Tournaments() {
       setTournaments(data);
     } catch (error) {
       console.error('Error loading tournaments:', error);
-      alert('Error al cargar los torneos');
+      addNotification({ message: 'Error al cargar los torneos', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -74,6 +84,7 @@ export default function Tournaments() {
       date: tournamentData.date!,
       players_per_match: tournamentData.players_per_match || 2,
       number_of_rounds: tournamentData.number_of_rounds,
+      place_id: tournamentData.place_id,
     });
     if (mode === 'quick') {
       setConfigDraft({
@@ -103,7 +114,7 @@ export default function Tournaments() {
   /** Registration complete: create tournament + config + register players (only DB writes here). */
   const handleRegistrationComplete = async (numberOfRounds: number) => {
     if (!tournamentDraft?.name || !tournamentDraft?.type || !tournamentDraft?.date) {
-      alert('Faltan datos del torneo');
+      addNotification({ message: 'Faltan datos del torneo', type: 'error' });
       return;
     }
     try {
@@ -115,6 +126,7 @@ export default function Tournaments() {
         date: tournamentDraft.date,
         players_per_match: tournamentDraft.players_per_match || 2,
         number_of_rounds: numberOfRounds,
+        place_id: tournamentDraft.place_id,
       });
       if (configDraft) {
         await DatabaseService.createTournamentConfig({
@@ -139,7 +151,7 @@ export default function Tournaments() {
       loadTournaments();
     } catch (error) {
       console.error('Error al crear el torneo:', error);
-      alert('Error al crear el torneo');
+      addNotification({ message: 'Error al crear el torneo', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -159,7 +171,7 @@ export default function Tournaments() {
       loadTournaments();
     } catch (error) {
       console.error('Error deleting tournament:', error);
-      alert('Error al eliminar el torneo');
+      addNotification({ message: 'Error al eliminar el torneo', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -169,6 +181,8 @@ export default function Tournaments() {
     {
       key: 'name',
       header: 'Nombre',
+      render: (tournament) =>
+        `${tournament.place_name ?? '?'} - ${tournament.name}`,
     },
     {
       key: 'type',
@@ -183,10 +197,7 @@ export default function Tournaments() {
     {
       key: 'date',
       header: 'Fecha',
-      render: (tournament) => {
-        const dateStr = tournament.date.includes('T') ? tournament.date.split('T')[0] : tournament.date;
-        return dateStr.split('-').reverse().join('/');
-      },
+      render: (tournament) => formatDateForDisplay(tournament.date),
     },
     {
       key: 'status',
@@ -224,6 +235,20 @@ export default function Tournaments() {
     },
   ];
 
+  const filteredByPlace =
+    selectedPlaceIds.length > 0
+      ? tournaments.filter((t) => t.place_id != null && selectedPlaceIds.includes(t.place_id))
+      : tournaments;
+
+  const filteredTournaments = searchTerm.trim()
+    ? filteredByPlace.filter((t) => {
+        const term = searchTerm.toLowerCase();
+        const name = (t.name ?? '').toLowerCase();
+        const placeName = (t.place_name ?? '').toLowerCase();
+        return name.includes(term) || placeName.includes(term);
+      })
+    : filteredByPlace;
+
   const getWizardTitle = () => {
     switch (wizardStep) {
       case 'form':
@@ -252,12 +277,32 @@ export default function Tournaments() {
           </div>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-end gap-4">
+          <div className="min-w-[200px]">
+            <Input
+              placeholder="Buscar por nombre de torneo o lugar"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          {places.length > 0 && (
+            <MultiSelect
+              label="Filtrar por lugar"
+              options={places.map((p) => ({ value: p.id!, label: p.name }))}
+              value={selectedPlaceIds}
+              onChange={(v) => setSelectedPlaceIds(v as number[])}
+              placeholder="Todos los lugares"
+              className="max-w-xs"
+            />
+          )}
+        </div>
+
         {isLoading && tournaments.length === 0 ? (
           <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
         ) : (
           <Table
             columns={columns}
-            data={tournaments}
+            data={filteredTournaments}
             keyExtractor={(tournament) => tournament.id || Math.random()}
             emptyMessage="No hay torneos registrados"
           />

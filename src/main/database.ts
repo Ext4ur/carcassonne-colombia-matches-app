@@ -65,6 +65,26 @@ function initializeSchema(database: Database.Database) {
     // Column already exists
   }
 
+  // Cities table
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS cities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Places table (city_id added in migration 7)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS places (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Tournaments table
   database.exec(`
     CREATE TABLE IF NOT EXISTS tournaments (
@@ -248,6 +268,36 @@ function runMigrations(database: Database.Database) {
     const errorMsg = error.message || '';
     if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
       console.warn('Migration 5 warning:', errorMsg);
+    }
+  }
+
+  // Migration 6: Places and tournament place_id
+  try {
+    database.exec(`INSERT INTO places (name) SELECT 'Online' WHERE NOT EXISTS (SELECT 1 FROM places LIMIT 1)`);
+    database.exec(`ALTER TABLE tournaments ADD COLUMN place_id INTEGER REFERENCES places(id)`);
+    database.exec(`UPDATE tournaments SET place_id = (SELECT id FROM places WHERE name = 'Online' LIMIT 1) WHERE place_id IS NULL`);
+    // SQLite does not support ALTER COLUMN to add NOT NULL; app will enforce place_id on create/update
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 6 warning:', errorMsg);
+    }
+  }
+
+  // Migration 7: Cities and place city_id
+  try {
+    database.exec(`INSERT INTO cities (name) SELECT 'Bogotá' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Bogotá')`);
+    database.exec(`INSERT INTO cities (name) SELECT 'Chía' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Chía')`);
+    database.exec(`INSERT INTO cities (name) SELECT 'Medellín' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Medellín')`);
+    database.exec(`INSERT INTO cities (name) SELECT 'Cali' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Cali')`);
+    database.exec(`INSERT INTO cities (name) SELECT 'Ibagué' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Ibagué')`);
+    database.exec(`INSERT INTO cities (name) SELECT 'Neiva' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Neiva')`);
+    database.exec(`ALTER TABLE places ADD COLUMN city_id INTEGER REFERENCES cities(id)`);
+    database.exec(`UPDATE places SET city_id = (SELECT id FROM cities WHERE name = 'Bogotá' LIMIT 1) WHERE city_id IS NULL`);
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 7 warning:', errorMsg);
     }
   }
 }

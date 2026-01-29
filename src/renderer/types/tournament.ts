@@ -12,6 +12,10 @@ export interface Tournament {
   status: TournamentStatus;
   players_per_match: number;
   number_of_rounds?: number;
+  /** Required; default place is "Online". */
+  place_id: number;
+  /** From JOIN with places; for list/detail display. */
+  place_name?: string;
   created_at?: string;
   updated_at?: string;
 }

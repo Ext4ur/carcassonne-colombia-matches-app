@@ -41,4 +41,6 @@ export const LIST_KEYS = {
   players: 'list:players',
   circuits: 'list:circuits',
   tournaments: 'list:tournaments',
+  places: 'list:places',
+  cities: 'list:cities',
 } as const;

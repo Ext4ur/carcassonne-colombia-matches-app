@@ -49,6 +49,7 @@ export interface PlayerStatsRaw {
 export interface PlayerStatsFilters {
   tournamentIds?: number[];
   circuitIds?: (number | string)[];
+  placeIds?: number[];
 }
 
 /** Compute full stats from raw results, optionally filtered (client-side). */
@@ -69,6 +70,11 @@ export function computeStatsFromResults(
       if (r.tournament.circuit_id != null && circuitIds.includes(r.tournament.circuit_id)) return true;
       return false;
     });
+  }
+  if (filters?.placeIds?.length) {
+    results = results.filter(
+      (r) => r.tournament.place_id != null && filters!.placeIds!.includes(r.tournament.place_id)
+    );
   }
 
   const totalTournaments = results.length;

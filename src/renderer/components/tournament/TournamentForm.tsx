@@ -2,7 +2,10 @@ import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { DatabaseService } from '../../services/database';
 import { Tournament, TournamentType } from '../../types/tournament';
 import { Circuit } from '../../types/circuit';
+import { Place } from '../../types/place';
+import { DEFAULT_PLACE_NAME } from '../../constants';
 import { calculateNumberOfRounds } from '../../utils/tournament';
+import { getLocalDateString } from '../../utils/dateUtils';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
@@ -25,26 +28,30 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
   ref
 ) {
   const [circuits, setCircuits] = useState<Circuit[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
   const [formData, setFormData] = useState({
     name: tournament?.name || '',
     type: (tournament?.type || 'qualifier') as TournamentType,
     circuit_id: tournament?.circuit_id?.toString() || '',
-    date: tournament?.date || new Date().toISOString().split('T')[0],
+    date: tournament?.date || getLocalDateString(),
     players_per_match: tournament?.players_per_match || 2,
     number_of_rounds: tournament?.number_of_rounds?.toString() || '',
+    place_id: tournament?.place_id?.toString() || '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [estimatedRounds, setEstimatedRounds] = useState<number>(0);
 
   useEffect(() => {
     loadCircuits();
+    loadPlaces();
   }, []);
 
-  // Calculate estimated rounds when players_per_match changes
   useEffect(() => {
-    // This will be calculated when we know the number of players
-    // For now, we'll calculate it when the form is submitted
-  }, [formData.players_per_match]);
+    if (places.length > 0 && !formData.place_id) {
+      const defaultPlace = places.find((p) => p.name === DEFAULT_PLACE_NAME);
+      if (defaultPlace?.id) setFormData((prev) => ({ ...prev, place_id: defaultPlace.id!.toString() }));
+    }
+  }, [places]);
 
   const loadCircuits = async () => {
     try {
@@ -52,6 +59,15 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       setCircuits(data);
     } catch (error) {
       console.error('Error loading circuits:', error);
+    }
+  };
+
+  const loadPlaces = async () => {
+    try {
+      const data = await DatabaseService.getAllPlaces();
+      setPlaces(data);
+    } catch (error) {
+      console.error('Error loading places:', error);
     }
   };
 
@@ -68,6 +84,10 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
 
     if (!formData.date) {
       newErrors.date = 'La fecha es requerida';
+    }
+
+    if (!formData.place_id) {
+      newErrors.place_id = 'Debes seleccionar un lugar';
     }
 
     if (formData.players_per_match < 2 || formData.players_per_match > 4) {
@@ -88,6 +108,7 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       date: formData.date,
       players_per_match: formData.players_per_match,
       number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
+      place_id: formData.place_id ? Number(formData.place_id) : undefined,
     });
   };
 
@@ -129,6 +150,17 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
           error={errors.circuit_id}
         />
       )}
+
+      <Select
+        label="Lugar *"
+        value={formData.place_id}
+        onChange={(e) => setFormData({ ...formData, place_id: e.target.value })}
+        options={[
+          { value: '', label: 'Seleccionar lugar...' },
+          ...places.map((p) => ({ value: p.id!.toString(), label: p.name })),
+        ]}
+        error={errors.place_id}
+      />
 
       <Input
         label="Fecha *"

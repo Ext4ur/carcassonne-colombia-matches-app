@@ -1,4 +1,5 @@
 import { DatabaseService } from './database';
+import { getLocalDateString } from '../utils/dateUtils';
 
 export class ExportService {
   static async exportAll(): Promise<void> {
@@ -67,7 +68,7 @@ export class ExportService {
 
     // Save to file
     const data = JSON.stringify(exportData, null, 2);
-    const filename = `carcassonne_backup_${new Date().toISOString().split('T')[0]}.json`;
+    const filename = `carcassonne_backup_${getLocalDateString()}.json`;
     
     await window.electronAPI.saveFile(data, filename, 'json');
   }

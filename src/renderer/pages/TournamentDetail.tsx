@@ -11,9 +11,13 @@ import Modal from '../components/common/Modal';
 import MatchResultForm from '../components/tournament/MatchResultForm';
 import TournamentStats from '../components/tournament/TournamentStats';
 import MultiSelect from '../components/common/MultiSelect';
+import Input from '../components/common/Input';
+import Select from '../components/common/Select';
 import { Column } from '../components/common/Table';
+import { Place } from '../types/place';
 import { useNotifications } from '../contexts/NotificationContext';
 import { calculateNumberOfRounds } from '../utils/tournament';
+import { formatDateForDisplay } from '../utils/dateUtils';
 import type { TournamentConfig } from '../types/tournament';
 
 export default function TournamentDetail() {
@@ -40,6 +44,9 @@ export default function TournamentDetail() {
   const [matchPlayersMap, setMatchPlayersMap] = useState<{ [matchId: number]: any[] }>({});
   const [matchResultsMap, setMatchResultsMap] = useState<{ [matchId: number]: any[] }>({});
   const [tournamentConfig, setTournamentConfig] = useState<TournamentConfig | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({ name: '', date: '', place_id: '' });
+  const [places, setPlaces] = useState<Place[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -336,6 +343,47 @@ export default function TournamentDetail() {
         await loadStandings();
         setShowStats(true);
       }
+    }
+  };
+
+  const handleOpenEditModal = async () => {
+    if (!tournament) return;
+    const dateStr = tournament.date?.includes('T') ? tournament.date.split('T')[0] : tournament.date ?? '';
+    setEditFormData({
+      name: tournament.name ?? '',
+      date: dateStr,
+      place_id: tournament.place_id?.toString() ?? '',
+    });
+    try {
+      const data = await DatabaseService.getAllPlaces();
+      setPlaces(data);
+    } catch (e) {
+      console.error('Error loading places:', e);
+    }
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!tournament?.id) return;
+    if (!editFormData.name.trim()) {
+      addNotification({ message: 'El nombre es requerido', type: 'error' });
+      return;
+    }
+    try {
+      setIsLoading(true);
+      await DatabaseService.updateTournament(tournament.id, {
+        name: editFormData.name.trim(),
+        date: editFormData.date || undefined,
+        place_id: editFormData.place_id ? Number(editFormData.place_id) : undefined,
+      });
+      addNotification({ message: 'Torneo actualizado', type: 'success' });
+      setIsEditModalOpen(false);
+      await loadTournament();
+    } catch (error) {
+      console.error('Error updating tournament:', error);
+      addNotification({ message: 'Error al actualizar el torneo', type: 'error' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -691,9 +739,9 @@ export default function TournamentDetail() {
       <div className="card mb-6">
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-2xl font-bold mb-2">{tournament.name}</h1>
+            <h1 className="text-2xl font-bold mb-2">{tournament.place_name ?? '?'} - {tournament.name}</h1>
             <p className="text-gray-600 dark:text-gray-400">
-              {tournament.type === 'circuit' ? 'Circuito' : 'Clasificatorio'} • {tournament.date ? (tournament.date.includes('T') ? tournament.date.split('T')[0] : tournament.date).split('-').reverse().join('/') : '-'}
+              {tournament.type === 'circuit' ? 'Circuito' : 'Clasificatorio'} • {formatDateForDisplay(tournament.date)}
               {tournament.status === 'completed' && (
                 <span className="ml-2 px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded text-sm font-medium">
                   Finalizado
@@ -702,6 +750,9 @@ export default function TournamentDetail() {
             </p>
           </div>
           <div className="flex space-x-2">
+            <Button variant="secondary" size="sm" onClick={handleOpenEditModal}>
+              Editar datos
+            </Button>
             <Button variant="secondary" onClick={() => setShowStats(!showStats)}>
               {showStats ? 'Ocultar' : 'Ver'} Estadísticas
             </Button>
@@ -725,6 +776,46 @@ export default function TournamentDetail() {
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title="Editar datos del torneo"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEdit} isLoading={isLoading}>
+              Guardar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Nombre *"
+            value={editFormData.name}
+            onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+            required
+          />
+          <Input
+            label="Fecha"
+            type="date"
+            value={editFormData.date}
+            onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
+          />
+          <Select
+            label="Lugar"
+            value={editFormData.place_id}
+            onChange={(e) => setEditFormData({ ...editFormData, place_id: e.target.value })}
+            options={[
+              { value: '', label: 'Seleccionar lugar...' },
+              ...places.map((p) => ({ value: p.id!.toString(), label: p.name })),
+            ]}
+          />
+        </div>
+      </Modal>
 
       {/* Filtro por jugador: al inicio, aplica a estadísticas (excepto podio), leaderboard y partidas */}
       {standings.length > 0 && (

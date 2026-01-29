@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { PlayerStatistics, PlayerStatsService, PlayerStatsFilters, PlayerStatsRaw, computeStatsFromResults } from '../../services/playerStats';
 import { Player } from '../../types/player';
+import { Place } from '../../types/place';
+import { DatabaseService } from '../../services/database';
 import MultiSelect from '../common/MultiSelect';
 import { Bar, Line } from 'react-chartjs-2';
 import {
@@ -36,8 +38,10 @@ const QUALIFIER_OPTION = { value: 'qualifier' as const, label: 'Clasificatorio' 
 export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
   const [raw, setRaw] = useState<PlayerStatsRaw | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [places, setPlaces] = useState<Place[]>([]);
   const [selectedTournamentIds, setSelectedTournamentIds] = useState<number[]>([]);
   const [selectedCircuitIds, setSelectedCircuitIds] = useState<(string | number)[]>([]);
+  const [selectedPlaceIds, setSelectedPlaceIds] = useState<number[]>([]);
 
   // Load once (no filters); cache used by getAllTournaments, getTournamentConfig, etc.
   useEffect(() => {
@@ -57,16 +61,21 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
     return () => { cancelled = true; };
   }, [player.id]);
 
+  useEffect(() => {
+    DatabaseService.getAllPlaces().then(setPlaces).catch(() => {});
+  }, []);
+
   const filters: PlayerStatsFilters = {
     tournamentIds: selectedTournamentIds.length ? selectedTournamentIds : undefined,
     circuitIds: selectedCircuitIds.length ? selectedCircuitIds : undefined,
+    placeIds: selectedPlaceIds.length ? selectedPlaceIds : undefined,
   };
 
   // Filter client-side: no extra queries when user changes filters
   const stats = useMemo<PlayerStatistics | null>(() => {
     if (!raw) return null;
     return computeStatsFromResults(raw.player, raw, filters);
-  }, [raw, selectedTournamentIds, selectedCircuitIds]);
+  }, [raw, selectedTournamentIds, selectedCircuitIds, selectedPlaceIds]);
 
 
   if (isLoading) {
@@ -126,6 +135,7 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
     QUALIFIER_OPTION,
     ...(raw?.filterOptions?.circuits ?? []).map((c) => ({ value: c.id, label: c.name })),
   ];
+  const placeOptions = places.map((p) => ({ value: p.id!, label: p.name }));
 
   return (
     <div className="p-6 space-y-6">
@@ -140,7 +150,7 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
       </div>
 
       {/* Filters */}
-      {(tournamentOptions.length > 0 || circuitOptions.length > 1) && (
+      {(tournamentOptions.length > 0 || circuitOptions.length > 1 || placeOptions.length > 0) && (
         <div className="card grid grid-cols-1 md:grid-cols-2 gap-4">
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">Filtros</h3>
           {tournamentOptions.length > 0 && (
@@ -159,6 +169,15 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
             onChange={setSelectedCircuitIds}
             placeholder="Todos (clasificatorios y circuitos)"
           />
+          {placeOptions.length > 0 && (
+            <MultiSelect
+              label="Por lugar"
+              options={placeOptions}
+              value={selectedPlaceIds}
+              onChange={(v) => setSelectedPlaceIds(v as number[])}
+              placeholder="Todos los lugares"
+            />
+          )}
         </div>
       )}
 

@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { DatabaseService } from '../services/database';
 import { CircuitService, CircuitPositionEvolution, CircuitPointsEvolution } from '../services/circuit';
 import { Circuit, CircuitStandings } from '../types/circuit';
+import { Place } from '../types/place';
+import { formatDateForDisplay } from '../utils/dateUtils';
+import { useNotifications } from '../contexts/NotificationContext';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
@@ -36,6 +39,7 @@ ChartJS.register(
 
 export default function Circuits() {
   const navigate = useNavigate();
+  const { addNotification } = useNotifications();
   const [circuits, setCircuits] = useState<Circuit[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [standingsModalOpen, setStandingsModalOpen] = useState(false);
@@ -44,7 +48,9 @@ export default function Circuits() {
   const [standings, setStandings] = useState<CircuitStandings[]>([]);
   const [positionEvolution, setPositionEvolution] = useState<CircuitPositionEvolution | null>(null);
   const [pointsEvolution, setPointsEvolution] = useState<CircuitPointsEvolution | null>(null);
-  const [circuitTournaments, setCircuitTournaments] = useState<Array<{ id: number; name: string }>>([]);
+  const [circuitTournaments, setCircuitTournaments] = useState<Array<{ id: number; name: string; place_id?: number; place_name?: string }>>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [selectedPlaceIds, setSelectedPlaceIds] = useState<number[]>([]);
   const [selectedStopIds, setSelectedStopIds] = useState<number[]>([]);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,8 +59,10 @@ export default function Circuits() {
     description: '',
     start_date: '',
     end_date: '',
+    status: 'active' as 'active' | 'finalized',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     loadCircuits();
@@ -67,7 +75,7 @@ export default function Circuits() {
       setCircuits(data);
     } catch (error) {
       console.error('Error loading circuits:', error);
-      alert('Error al cargar los circuitos');
+      addNotification({ message: 'Error al cargar los circuitos', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -76,22 +84,32 @@ export default function Circuits() {
   const loadStandings = async (circuitId: number) => {
     try {
       setIsLoading(true);
-      const [data, posEvo, ptsEvo, stops] = await Promise.all([
+      const [data, posEvo, ptsEvo, stops, placesData] = await Promise.all([
         DatabaseService.getCircuitStandings(circuitId),
         CircuitService.getCircuitPositionEvolution(circuitId),
         CircuitService.getCircuitPointsEvolution(circuitId),
         DatabaseService.getCircuitTournaments(circuitId),
+        DatabaseService.getAllPlaces(),
       ]);
       setStandings(data);
       setPositionEvolution(posEvo);
       setPointsEvolution(ptsEvo);
-      setCircuitTournaments(stops.map((t: { id: number; name: string }) => ({ id: t.id, name: t.name })));
+      setCircuitTournaments(
+        (stops as any[]).map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          place_id: t.place_id,
+          place_name: t.place_name,
+        }))
+      );
+      setPlaces(placesData);
+      setSelectedPlaceIds([]);
       setSelectedStopIds([]);
       setSelectedPlayerIds([]);
       setStandingsModalOpen(true);
     } catch (error) {
       console.error('Error loading standings:', error);
-      alert('Error al cargar el acumulado');
+      addNotification({ message: 'Error al cargar el acumulado', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -106,7 +124,7 @@ export default function Circuits() {
       loadCircuits();
     } catch (error) {
       console.error('Error finalizing circuit:', error);
-      alert('Error al finalizar el circuito');
+      addNotification({ message: 'Error al finalizar el circuito', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -120,6 +138,7 @@ export default function Circuits() {
         description: circuit.description || '',
         start_date: circuit.start_date || '',
         end_date: circuit.end_date || '',
+        status: (circuit.status ?? 'active') as 'active' | 'finalized',
       });
     } else {
       setEditingCircuit(null);
@@ -128,6 +147,7 @@ export default function Circuits() {
         description: '',
         start_date: '',
         end_date: '',
+        status: 'active',
       });
     }
     setErrors({});
@@ -142,6 +162,7 @@ export default function Circuits() {
       description: '',
       start_date: '',
       end_date: '',
+      status: 'active',
     });
     setErrors({});
   };
@@ -172,6 +193,7 @@ export default function Circuits() {
           description: formData.description.trim() || undefined,
           start_date: formData.start_date || undefined,
           end_date: formData.end_date || undefined,
+          status: formData.status,
         });
       } else {
         await DatabaseService.createCircuit({
@@ -179,13 +201,14 @@ export default function Circuits() {
           description: formData.description.trim() || undefined,
           start_date: formData.start_date || undefined,
           end_date: formData.end_date || undefined,
+          status: formData.status,
         });
       }
       handleCloseModal();
       loadCircuits();
     } catch (error) {
       console.error('Error saving circuit:', error);
-      alert('Error al guardar el circuito');
+      addNotification({ message: 'Error al guardar el circuito', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -201,7 +224,7 @@ export default function Circuits() {
       loadCircuits();
     } catch (error) {
       console.error('Error deleting circuit:', error);
-      alert('Error al eliminar el circuito');
+      addNotification({ message: 'Error al eliminar el circuito', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -231,13 +254,13 @@ export default function Circuits() {
 
       const result = await window.electronAPI.saveFile(data, filename, type);
       if (result.success) {
-        alert('Reporte generado exitosamente');
+        addNotification({ message: 'Reporte generado exitosamente', type: 'success' });
       } else if (!result.canceled) {
-        alert('Error al generar el reporte: ' + (result.error || 'Error desconocido'));
+        addNotification({ message: 'Error al generar el reporte: ' + (result.error || 'Error desconocido'), type: 'error' });
       }
     } catch (error) {
       console.error('Error generating report:', error);
-      alert('Error al generar el reporte');
+      addNotification({ message: 'Error al generar el reporte', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -271,21 +294,13 @@ export default function Circuits() {
       key: 'start_date',
       header: 'Fecha Inicio',
       width: '10%',
-      render: (circuit) => {
-        if (!circuit.start_date) return '-';
-        const dateStr = circuit.start_date.includes('T') ? circuit.start_date.split('T')[0] : circuit.start_date;
-        return dateStr.split('-').reverse().join('/');
-      },
+      render: (circuit) => formatDateForDisplay(circuit.start_date),
     },
     {
       key: 'end_date',
       header: 'Fecha Fin',
       width: '10%',
-      render: (circuit) => {
-        if (!circuit.end_date) return '-';
-        const dateStr = circuit.end_date.includes('T') ? circuit.end_date.split('T')[0] : circuit.end_date;
-        return dateStr.split('-').reverse().join('/');
-      },
+      render: (circuit) => formatDateForDisplay(circuit.end_date),
     },
     {
       key: 'actions',
@@ -407,58 +422,115 @@ export default function Circuits() {
     },
   };
 
-  // Apply filters to standings and chart data
-  const filteredStandings =
-    selectedPlayerIds.length > 0
-      ? standings.filter((s) => selectedPlayerIds.includes(s.player_id))
-      : standings;
+  // Stop indices: by place filter and/or by parada (stop) filter.
+  // When the filter matches zero tournaments, stopIndices is [] - we treat that as "no filter" for consistency.
+  let stopIndices: number[] | null = null;
+  if (circuitTournaments.length > 0 && (selectedPlaceIds.length > 0 || selectedStopIds.length > 0)) {
+    const indices = circuitTournaments
+      .map((t, i) => {
+        if (selectedPlaceIds.length > 0 && (t.place_id == null || !selectedPlaceIds.includes(t.place_id))) return -1;
+        if (selectedStopIds.length > 0 && !selectedStopIds.includes(t.id)) return -1;
+        return i;
+      })
+      .filter((i) => i >= 0);
+    stopIndices = indices.length > 0 ? indices : null;
+  }
 
-  const stopIndices =
-    selectedStopIds.length > 0 && circuitTournaments.length > 0
-      ? circuitTournaments
-          .map((t, i) => (selectedStopIds.includes(t.id) ? i : -1))
-          .filter((i) => i >= 0)
-      : null;
+  const hasStopFilter = stopIndices !== null && stopIndices.length > 0;
+
+  // When filtering by place/parada, recompute standings from pointsEvolution for those stops only
+  const filteredStandings = (() => {
+    let base = standings;
+    if (hasStopFilter && pointsEvolution && positionEvolution) {
+      const filteredTotals = new Map<number, number>();
+      const filteredWins = new Map<number, number>();
+      for (const p of pointsEvolution.players) {
+        let total = 0;
+        let prevCum = 0;
+        for (let k = 0; k < p.pointsCumulative.length; k++) {
+          if (stopIndices!.includes(k)) {
+            total += p.pointsCumulative[k] - prevCum;
+          }
+          prevCum = p.pointsCumulative[k];
+        }
+        filteredTotals.set(p.player_id, total);
+        const posData = positionEvolution.players.find((x) => x.player_id === p.player_id);
+        const wins = posData
+          ? stopIndices!.filter((i) => posData.positions[i] === 1).length
+          : 0;
+        filteredWins.set(p.player_id, wins);
+      }
+      base = standings
+        .map((s) => ({
+          ...s,
+          total_points: filteredTotals.get(s.player_id) ?? 0,
+          tournaments_played: stopIndices!.length,
+          wins: filteredWins.get(s.player_id) ?? 0,
+        }))
+        .sort((a, b) => b.total_points - a.total_points);
+    }
+    if (selectedPlayerIds.length > 0) {
+      return base.filter((s) => selectedPlayerIds.includes(s.player_id));
+    }
+    return base;
+  })();
 
   const filteredPositionEvolution =
-    positionEvolution && (stopIndices !== null || selectedPlayerIds.length > 0)
+    positionEvolution && (hasStopFilter || selectedPlayerIds.length > 0)
       ? {
-          stops:
-            stopIndices !== null
-              ? stopIndices.map((i) => positionEvolution.stops[i])
-              : positionEvolution.stops,
+          stops: hasStopFilter
+            ? stopIndices!.map((i) => positionEvolution.stops[i])
+            : positionEvolution.stops,
           players: (selectedPlayerIds.length > 0
             ? positionEvolution.players.filter((p) => selectedPlayerIds.includes(p.player_id))
             : positionEvolution.players
           ).map((p) => ({
             ...p,
-            positions:
-              stopIndices !== null
-                ? stopIndices.map((i) => p.positions[i])
-                : p.positions,
+            positions: hasStopFilter
+              ? stopIndices!.map((i) => p.positions[i])
+              : p.positions,
           })),
         }
       : positionEvolution;
 
+  // Cumulative points chart: when filtering by stops, show cumulative *only from selected stops*
+  // (not the original cumulative values at those indices, which would include points from excluded stops).
   const filteredPointsEvolution =
-    pointsEvolution && (stopIndices !== null || selectedPlayerIds.length > 0)
+    pointsEvolution && (hasStopFilter || selectedPlayerIds.length > 0)
       ? {
-          stops:
-            stopIndices !== null
-              ? stopIndices.map((i) => pointsEvolution.stops[i])
-              : pointsEvolution.stops,
+          stops: hasStopFilter
+            ? stopIndices!.map((i) => pointsEvolution.stops[i])
+            : pointsEvolution.stops,
           players: (selectedPlayerIds.length > 0
             ? pointsEvolution.players.filter((p) => selectedPlayerIds.includes(p.player_id))
             : pointsEvolution.players
           ).map((p) => ({
             ...p,
-            pointsCumulative:
-              stopIndices !== null
-                ? stopIndices.map((i) => p.pointsCumulative[i])
-                : p.pointsCumulative,
+            pointsCumulative: hasStopFilter
+              ? (() => {
+                  const newCumulative: number[] = [];
+                  let running = 0;
+                  for (let j = 0; j < stopIndices!.length; j++) {
+                    const idx = stopIndices![j];
+                    const prevCum = idx > 0 ? p.pointsCumulative[idx - 1] : 0;
+                    running += p.pointsCumulative[idx] - prevCum;
+                    newCumulative.push(running);
+                  }
+                  return newCumulative;
+                })()
+              : p.pointsCumulative,
           })),
         }
       : pointsEvolution;
+
+  const filteredCircuits = searchTerm.trim()
+    ? circuits.filter((c) => {
+        const term = searchTerm.toLowerCase();
+        const name = (c.name ?? '').toLowerCase();
+        const desc = (c.description ?? '').toLowerCase();
+        return name.includes(term) || desc.includes(term);
+      })
+    : circuits;
 
   return (
     <div className="px-4 py-6">
@@ -468,12 +540,20 @@ export default function Circuits() {
           <Button onClick={() => handleOpenModal()}>Nuevo Circuito</Button>
         </div>
 
+        <div className="mb-4 max-w-xs">
+          <Input
+            placeholder="Buscar por nombre de circuito"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
         {isLoading && circuits.length === 0 ? (
           <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
         ) : (
           <Table
             columns={columns}
-            data={circuits}
+            data={filteredCircuits}
             keyExtractor={(circuit) => circuit.id || Math.random()}
             emptyMessage="No hay circuitos registrados"
           />
@@ -522,6 +602,22 @@ export default function Circuits() {
             onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
             error={errors.end_date}
           />
+          {editingCircuit && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'finalized' })}
+                className="input w-full"
+              >
+                <option value="active">Activo</option>
+                <option value="finalized">Finalizado</option>
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                En &quot;Finalizado&quot; no se podrán agregar más torneos al circuito.
+              </p>
+            </div>
+          )}
         </div>
       </Modal>
 
@@ -563,9 +659,18 @@ export default function Circuits() {
         ) : (
           <div className="space-y-6">
             {/* Filters */}
-            {(circuitTournaments.length > 0 || standings.length > 0) && (
+            {(circuitTournaments.length > 0 || standings.length > 0 || places.length > 0) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">Filtros</h3>
+                {places.length > 0 && (
+                  <MultiSelect
+                    label="Por lugar"
+                    options={places.map((p) => ({ value: p.id, label: p.name }))}
+                    value={selectedPlaceIds}
+                    onChange={(v) => setSelectedPlaceIds(v as number[])}
+                    placeholder="Todos los lugares"
+                  />
+                )}
                 {circuitTournaments.length > 0 && (
                   <MultiSelect
                     label="Por parada"

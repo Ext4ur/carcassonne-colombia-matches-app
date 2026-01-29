@@ -181,7 +181,10 @@ export class SupabaseClient implements IApiClient {
           return result;
         });
 
-        return transformedData as T[];
+        const result = parsed.hadDistinct
+          ? this.deduplicateRows(transformedData)
+          : transformedData;
+        return result as T[];
       }
       
       // Query sin JOIN
@@ -212,7 +215,9 @@ export class SupabaseClient implements IApiClient {
         throw new Error(`Supabase query error: ${error.message}`);
       }
 
-      return (data || []) as T[];
+      const rows = (data || []) as T[];
+      const result = parsed.hadDistinct ? this.deduplicateRows(rows) : rows;
+      return result;
     } catch (error: any) {
       console.error('Error en Supabase query:', error);
       throw error;
@@ -365,6 +370,8 @@ export class SupabaseClient implements IApiClient {
     hasJoin?: boolean;
     joinTable?: string;
     joinCondition?: string;
+    /** True when SELECT had DISTINCT and we stripped it (deduplicate in JS). */
+    hadDistinct?: boolean;
   } {
     const normalized = sql.trim().replace(/\s+/g, ' ');
     
@@ -377,7 +384,13 @@ export class SupabaseClient implements IApiClient {
       throw new Error(`Query SELECT no válida: ${sql}`);
     }
 
-    const columns = selectMatch[1].trim();
+    let columns = selectMatch[1].trim();
+    let hadDistinct = false;
+    // Supabase .select() no acepta la palabra DISTINCT; quitar y deduplicar en JS después
+    if (/^DISTINCT\s+/i.test(columns)) {
+      columns = columns.replace(/^DISTINCT\s+/i, '').trim();
+      hadDistinct = true;
+    }
     const table = selectMatch[2].trim();
     
     // Detectar si es COUNT(*)
@@ -442,8 +455,32 @@ export class SupabaseClient implements IApiClient {
       isCount,
       hasJoin,
       joinTable,
-      joinCondition
+      joinCondition,
+      hadDistinct,
     };
+  }
+
+  /**
+   * Deduplicate rows when SELECT had DISTINCT (Supabase doesn't support it).
+   * Uses a stable key (sorted object keys) so row identity is consistent.
+   */
+  private deduplicateRows<T = any>(rows: T[]): T[] {
+    if (rows.length <= 1) return rows;
+    const seen = new Set<string>();
+    return rows.filter((row) => {
+      const key = this.rowToStableKey(row);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private rowToStableKey(row: any): string {
+    if (row === null || typeof row !== 'object') return JSON.stringify(row);
+    const keys = Object.keys(row).sort();
+    const obj: Record<string, unknown> = {};
+    for (const k of keys) obj[k] = row[k];
+    return JSON.stringify(obj);
   }
 
   /**

@@ -9,6 +9,7 @@ import Modal from '../components/common/Modal';
 import Input from '../components/common/Input';
 import Textarea from '../components/common/Textarea';
 import { Column } from '../components/common/Table';
+import MultiSelect from '../components/common/MultiSelect';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -43,6 +44,9 @@ export default function Circuits() {
   const [standings, setStandings] = useState<CircuitStandings[]>([]);
   const [positionEvolution, setPositionEvolution] = useState<CircuitPositionEvolution | null>(null);
   const [pointsEvolution, setPointsEvolution] = useState<CircuitPointsEvolution | null>(null);
+  const [circuitTournaments, setCircuitTournaments] = useState<Array<{ id: number; name: string }>>([]);
+  const [selectedStopIds, setSelectedStopIds] = useState<number[]>([]);
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -72,14 +76,18 @@ export default function Circuits() {
   const loadStandings = async (circuitId: number) => {
     try {
       setIsLoading(true);
-      const [data, posEvo, ptsEvo] = await Promise.all([
+      const [data, posEvo, ptsEvo, stops] = await Promise.all([
         DatabaseService.getCircuitStandings(circuitId),
         CircuitService.getCircuitPositionEvolution(circuitId),
         CircuitService.getCircuitPointsEvolution(circuitId),
+        DatabaseService.getCircuitTournaments(circuitId),
       ]);
       setStandings(data);
       setPositionEvolution(posEvo);
       setPointsEvolution(ptsEvo);
+      setCircuitTournaments(stops.map((t: { id: number; name: string }) => ({ id: t.id, name: t.name })));
+      setSelectedStopIds([]);
+      setSelectedPlayerIds([]);
       setStandingsModalOpen(true);
     } catch (error) {
       console.error('Error loading standings:', error);
@@ -392,6 +400,59 @@ export default function Circuits() {
     },
   };
 
+  // Apply filters to standings and chart data
+  const filteredStandings =
+    selectedPlayerIds.length > 0
+      ? standings.filter((s) => selectedPlayerIds.includes(s.player_id))
+      : standings;
+
+  const stopIndices =
+    selectedStopIds.length > 0 && circuitTournaments.length > 0
+      ? circuitTournaments
+          .map((t, i) => (selectedStopIds.includes(t.id) ? i : -1))
+          .filter((i) => i >= 0)
+      : null;
+
+  const filteredPositionEvolution =
+    positionEvolution && (stopIndices !== null || selectedPlayerIds.length > 0)
+      ? {
+          stops:
+            stopIndices !== null
+              ? stopIndices.map((i) => positionEvolution.stops[i])
+              : positionEvolution.stops,
+          players: (selectedPlayerIds.length > 0
+            ? positionEvolution.players.filter((p) => selectedPlayerIds.includes(p.player_id))
+            : positionEvolution.players
+          ).map((p) => ({
+            ...p,
+            positions:
+              stopIndices !== null
+                ? stopIndices.map((i) => p.positions[i])
+                : p.positions,
+          })),
+        }
+      : positionEvolution;
+
+  const filteredPointsEvolution =
+    pointsEvolution && (stopIndices !== null || selectedPlayerIds.length > 0)
+      ? {
+          stops:
+            stopIndices !== null
+              ? stopIndices.map((i) => pointsEvolution.stops[i])
+              : pointsEvolution.stops,
+          players: (selectedPlayerIds.length > 0
+            ? pointsEvolution.players.filter((p) => selectedPlayerIds.includes(p.player_id))
+            : pointsEvolution.players
+          ).map((p) => ({
+            ...p,
+            pointsCumulative:
+              stopIndices !== null
+                ? stopIndices.map((i) => p.pointsCumulative[i])
+                : p.pointsCumulative,
+          })),
+        }
+      : pointsEvolution;
+
   return (
     <div className="px-4 py-6">
       <div className="card">
@@ -494,6 +555,31 @@ export default function Circuits() {
           <p className="text-center py-8 text-gray-500">Cargando...</p>
         ) : (
           <div className="space-y-6">
+            {/* Filters */}
+            {(circuitTournaments.length > 0 || standings.length > 0) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">Filtros</h3>
+                {circuitTournaments.length > 0 && (
+                  <MultiSelect
+                    label="Por parada"
+                    options={circuitTournaments.map((t) => ({ value: t.id, label: t.name }))}
+                    value={selectedStopIds}
+                    onChange={(v) => setSelectedStopIds(v as number[])}
+                    placeholder="Todas las paradas"
+                  />
+                )}
+                {standings.length > 0 && (
+                  <MultiSelect
+                    label="Por jugador"
+                    options={standings.map((s) => ({ value: s.player_id, label: s.player_name }))}
+                    value={selectedPlayerIds}
+                    onChange={(v) => setSelectedPlayerIds(v as number[])}
+                    placeholder="Todos los jugadores"
+                  />
+                )}
+              </div>
+            )}
+
             {selectedCircuit?.status === 'finalized' && standings.length > 0 && (
               <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-4">
                 <h3 className="text-lg font-semibold mb-3">Podio final</h3>
@@ -523,12 +609,12 @@ export default function Circuits() {
               </div>
             )}
 
-            {positionEvolution && positionEvolution.stops.length > 0 && (
+            {filteredPositionEvolution && filteredPositionEvolution.stops.length > 0 && (
               <div className="h-64">
                 <Line
                   data={{
-                    labels: positionEvolution.stops,
-                    datasets: positionEvolution.players.slice(0, 10).map((p, i) => ({
+                    labels: filteredPositionEvolution.stops,
+                    datasets: filteredPositionEvolution.players.slice(0, 10).map((p, i) => ({
                       label: p.player_name,
                       data: p.positions.map((pos) => (pos === null ? undefined : pos)),
                       borderColor: CHART_COLORS[i % CHART_COLORS.length],
@@ -542,12 +628,12 @@ export default function Circuits() {
               </div>
             )}
 
-            {pointsEvolution && pointsEvolution.stops.length > 0 && (
+            {filteredPointsEvolution && filteredPointsEvolution.stops.length > 0 && (
               <div className="h-64">
                 <Line
                   data={{
-                    labels: pointsEvolution.stops,
-                    datasets: pointsEvolution.players.slice(0, 10).map((p, i) => ({
+                    labels: filteredPointsEvolution.stops,
+                    datasets: filteredPointsEvolution.players.slice(0, 10).map((p, i) => ({
                       label: p.player_name,
                       data: p.pointsCumulative,
                       borderColor: CHART_COLORS[i % CHART_COLORS.length],
@@ -565,7 +651,7 @@ export default function Circuits() {
               <h3 className="text-lg font-semibold mb-2">Tabla de posiciones</h3>
               <Table
                 columns={standingsColumns}
-                data={standings}
+                data={filteredStandings}
                 keyExtractor={(standing) => standing.player_id}
                 emptyMessage="No hay datos de acumulado disponibles"
               />

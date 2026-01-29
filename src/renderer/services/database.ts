@@ -428,6 +428,15 @@ export class DatabaseService {
     dbCache.invalidateTournament(tournamentId);
   }
 
+  /** Get tournament IDs where a player is registered (single query, for player stats). */
+  static async getTournamentIdsForPlayer(playerId: number): Promise<number[]> {
+    const rows = await this.query<{ tournament_id: number }>(
+      'SELECT DISTINCT tournament_id FROM tournament_players WHERE player_id = ?',
+      [playerId]
+    );
+    return [...new Set(rows.map((r) => r.tournament_id))];
+  }
+
   // Tournament player registration
   static async getTournamentPlayers(tournamentId: number) {
     const isSupabase = DB_CONFIG.mode === 'remote';

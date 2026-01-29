@@ -24,12 +24,15 @@ ChartJS.register(
 
 interface TournamentStatsProps {
   tournament: Tournament;
+  /** Full standings for podium (not filtered). */
+  standingsForPodium: PlayerStanding[];
+  /** Filtered standings for charts (victories, tiebreak criteria). */
   standings: PlayerStanding[];
   tiebreakCriteria: any[];
 }
 
-export default function TournamentStats({ tournament, standings, tiebreakCriteria }: TournamentStatsProps) {
-  const top4 = standings.slice(0, 4);
+export default function TournamentStats({ tournament, standingsForPodium, standings, tiebreakCriteria }: TournamentStatsProps) {
+  const top4 = standingsForPodium.slice(0, 4);
 
   // Get enabled criteria (excluding wins which is already shown)
   const enabledCriteria = tiebreakCriteria.filter((c) => c.enabled && c.id !== 'wins');

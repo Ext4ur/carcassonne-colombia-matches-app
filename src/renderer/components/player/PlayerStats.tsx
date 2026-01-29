@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { PlayerStatistics, PlayerStatsService } from '../../services/playerStats';
+import { useEffect, useState, useMemo } from 'react';
+import { PlayerStatistics, PlayerStatsService, PlayerStatsFilters, PlayerStatsRaw, computeStatsFromResults } from '../../services/playerStats';
 import { Player } from '../../types/player';
+import MultiSelect from '../common/MultiSelect';
 import { Bar, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -30,26 +31,43 @@ interface PlayerStatsProps {
   onClose: () => void;
 }
 
-export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
-  const [stats, setStats] = useState<PlayerStatistics | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+const QUALIFIER_OPTION = { value: 'qualifier' as const, label: 'Clasificatorio' };
 
+export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
+  const [raw, setRaw] = useState<PlayerStatsRaw | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedTournamentIds, setSelectedTournamentIds] = useState<number[]>([]);
+  const [selectedCircuitIds, setSelectedCircuitIds] = useState<(string | number)[]>([]);
+
+  // Load once (no filters); cache used by getAllTournaments, getTournamentConfig, etc.
   useEffect(() => {
-    loadStats();
+    if (!player.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsLoading(true);
+        const data = await PlayerStatsService.getPlayerStatisticsRaw(player.id!);
+        if (!cancelled) setRaw(data ?? null);
+      } catch (error) {
+        if (!cancelled) console.error('Error loading player stats:', error);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [player.id]);
 
-  const loadStats = async () => {
-    if (!player.id) return;
-    try {
-      setIsLoading(true);
-      const playerStats = await PlayerStatsService.getPlayerStatistics(player.id);
-      setStats(playerStats);
-    } catch (error) {
-      console.error('Error loading player stats:', error);
-    } finally {
-      setIsLoading(false);
-    }
+  const filters: PlayerStatsFilters = {
+    tournamentIds: selectedTournamentIds.length ? selectedTournamentIds : undefined,
+    circuitIds: selectedCircuitIds.length ? selectedCircuitIds : undefined,
   };
+
+  // Filter client-side: no extra queries when user changes filters
+  const stats = useMemo<PlayerStatistics | null>(() => {
+    if (!raw) return null;
+    return computeStatsFromResults(raw.player, raw, filters);
+  }, [raw, selectedTournamentIds, selectedCircuitIds]);
+
 
   if (isLoading) {
     return (
@@ -93,6 +111,15 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
     ],
   };
 
+  const tournamentOptions = (raw?.filterOptions?.tournaments ?? []).map((t) => ({
+    value: t.id!,
+    label: t.name,
+  }));
+  const circuitOptions = [
+    QUALIFIER_OPTION,
+    ...(raw?.filterOptions?.circuits ?? []).map((c) => ({ value: c.id, label: c.name })),
+  ];
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center mb-4">
@@ -104,6 +131,29 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
           ✕
         </button>
       </div>
+
+      {/* Filters */}
+      {(tournamentOptions.length > 0 || circuitOptions.length > 1) && (
+        <div className="card grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">Filtros</h3>
+          {tournamentOptions.length > 0 && (
+            <MultiSelect
+              label="Por torneo"
+              options={tournamentOptions}
+              value={selectedTournamentIds}
+              onChange={(v) => setSelectedTournamentIds(v as number[])}
+              placeholder="Todos los torneos"
+            />
+          )}
+          <MultiSelect
+            label="Por circuito"
+            options={circuitOptions}
+            value={selectedCircuitIds}
+            onChange={setSelectedCircuitIds}
+            placeholder="Todos (clasificatorios y circuitos)"
+          />
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

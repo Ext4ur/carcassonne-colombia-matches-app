@@ -10,6 +10,7 @@ import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import MatchResultForm from '../components/tournament/MatchResultForm';
 import TournamentStats from '../components/tournament/TournamentStats';
+import MultiSelect from '../components/common/MultiSelect';
 import { Column } from '../components/common/Table';
 import { useNotifications } from '../contexts/NotificationContext';
 import { calculateNumberOfRounds } from '../utils/tournament';
@@ -34,6 +35,9 @@ export default function TournamentDetail() {
     matches: Match[]; 
     results: Array<{ match_number: number; results: Array<{ player_name: string; position: number; points: number }> }> 
   } | null>(null);
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
+  const [matchPlayersMap, setMatchPlayersMap] = useState<{ [matchId: number]: any[] }>({});
+  const [matchResultsMap, setMatchResultsMap] = useState<{ [matchId: number]: any[] }>({});
 
   useEffect(() => {
     if (id) {
@@ -451,8 +455,27 @@ export default function TournamentDetail() {
       })),
   ];
 
-  const [matchPlayersMap, setMatchPlayersMap] = useState<{ [matchId: number]: any[] }>({});
-  const [matchResultsMap, setMatchResultsMap] = useState<{ [matchId: number]: any[] }>({});
+  const filteredStandings =
+    selectedPlayerIds.length > 0
+      ? standings.filter((s) => selectedPlayerIds.includes(s.player_id))
+      : standings;
+
+  // Partidas en las que participan los jugadores seleccionados (por match_players o match_results), de la ronda actual
+  const filteredMatches =
+    selectedPlayerIds.length > 0
+      ? matches.filter((m) => {
+          const playerIdsInMatch = (matchPlayersMap[m.id!] || []).map(
+            (mp: { player_id?: number; id?: number }) => mp.player_id ?? mp.id
+          );
+          const playerIdsInResults = (matchResultsMap[m.id!] || []).map(
+            (r: { player_id?: number }) => r.player_id
+          );
+          const participantIds = [...new Set([...playerIdsInMatch, ...playerIdsInResults])].filter(
+            (id): id is number => id != null
+          );
+          return participantIds.some((pid) => selectedPlayerIds.includes(pid));
+        })
+      : matches;
 
   const loadMatchPlayersForMatches = async (matchList: Match[]) => {
     if (matchList.length === 0) return;
@@ -703,6 +726,26 @@ export default function TournamentDetail() {
         </div>
       </div>
 
+      {/* Filtro por jugador: al inicio, aplica a estadísticas (excepto podio), leaderboard y partidas */}
+      {standings.length > 0 && (
+        <div className="card mb-6">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Filtrar por jugador</h3>
+          <MultiSelect
+            label=""
+            options={standings.map((s) => ({ value: s.player_id, label: s.player_name }))}
+            value={selectedPlayerIds}
+            onChange={(v) => setSelectedPlayerIds(v as number[])}
+            placeholder="Todos los jugadores"
+            className="max-w-xs"
+          />
+          {selectedPlayerIds.length > 0 && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              El filtro aplica a distribuciones, leaderboard y partidas. El podio siempre muestra el resultado completo.
+            </p>
+          )}
+        </div>
+      )}
+
       {showStats && (
         <div className="mb-6">
           {isLoadingStandings ? (
@@ -714,12 +757,17 @@ export default function TournamentDetail() {
               No hay datos de posiciones aún. Completa al menos una ronda con resultados para ver estadísticas.
             </div>
           ) : (
-            <TournamentStats tournament={tournament} standings={standings} tiebreakCriteria={tiebreakCriteria} />
+            <TournamentStats
+              tournament={tournament}
+              standingsForPodium={standings}
+              standings={filteredStandings}
+              tiebreakCriteria={tiebreakCriteria}
+            />
           )}
         </div>
       )}
 
-      {/* Leaderboard - mismos datos que estadísticas; se cargan al entrar al torneo */}
+      {/* Leaderboard - usa el mismo filtro del inicio */}
       <div className="card mb-6">
         <h2 className="text-xl font-bold mb-4">Leaderboard</h2>
         {isLoadingStandings && standings.length === 0 ? (
@@ -730,7 +778,7 @@ export default function TournamentDetail() {
           <div className="overflow-x-auto">
             <Table
               columns={standingsColumns}
-              data={standings}
+              data={filteredStandings}
               keyExtractor={(standing) => standing.player_id}
               emptyMessage="No hay datos disponibles. Completa al menos una ronda con resultados."
             />
@@ -856,7 +904,8 @@ export default function TournamentDetail() {
             </h2>
             {currentRound && (
               <span className="text-sm text-gray-600 dark:text-gray-400">
-                {matches.filter((m) => m.status === 'completed').length} / {matches.length} completadas
+                {filteredMatches.filter((m) => m.status === 'completed').length} / {filteredMatches.length} completadas
+                {selectedPlayerIds.length > 0 && ' (filtrado por jugador)'}
               </span>
             )}
           </div>
@@ -888,9 +937,13 @@ export default function TournamentDetail() {
             {currentRound ? (
               <Table
                 columns={matchesColumns}
-                data={matches}
+                data={filteredMatches}
                 keyExtractor={(match) => match.id || Math.random()}
-                emptyMessage="No hay partidas en esta ronda"
+                emptyMessage={
+                  selectedPlayerIds.length > 0 && filteredMatches.length === 0
+                    ? 'Ninguna partida con los jugadores seleccionados'
+                    : 'No hay partidas en esta ronda'
+                }
               />
             ) : (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">

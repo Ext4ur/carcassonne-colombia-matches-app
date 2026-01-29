@@ -19,7 +19,7 @@ export class ExportService {
             const matches = await DatabaseService.getRoundMatches(round.id!);
             const matchesWithData = await Promise.all(
               matches.map(async (match) => {
-                const results = await DatabaseService.getMatchResults(match.id!);
+                const results = await DatabaseService.getMatchResults(match.id!, tournament.id!);
                 const matchPlayers = await DatabaseService.getMatchPlayers(match.id!);
                 return {
                   ...match,

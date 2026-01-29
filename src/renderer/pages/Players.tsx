@@ -22,6 +22,7 @@ export default function Players() {
   const [formData, setFormData] = useState({
     name: '',
     bga_username: '',
+    display_preference: 'name' as 'name' | 'username',
     phone: '',
     email: '',
     age: '',
@@ -72,6 +73,7 @@ export default function Players() {
       setFormData({
         name: player.name || '',
         bga_username: player.bga_username || '',
+        display_preference: player.display_preference ?? 'name',
         phone: player.phone || '',
         email: player.email || '',
         age: player.age?.toString() || '',
@@ -81,6 +83,7 @@ export default function Players() {
       setFormData({
         name: '',
         bga_username: '',
+        display_preference: 'name',
         phone: '',
         email: '',
         age: '',
@@ -96,6 +99,7 @@ export default function Players() {
     setFormData({
       name: '',
       bga_username: '',
+      display_preference: 'name',
       phone: '',
       email: '',
       age: '',
@@ -131,6 +135,7 @@ export default function Players() {
         await DatabaseService.updatePlayer(editingPlayer.id, {
           name: formData.name.trim(),
           bga_username: formData.bga_username.trim() || undefined,
+          display_preference: formData.display_preference,
           phone: formData.phone.trim() || undefined,
           email: formData.email.trim() || undefined,
           age: formData.age ? Number(formData.age) : undefined,
@@ -139,6 +144,7 @@ export default function Players() {
         await DatabaseService.createPlayer({
           name: formData.name.trim(),
           bga_username: formData.bga_username.trim() || undefined,
+          display_preference: formData.display_preference,
           phone: formData.phone.trim() || undefined,
           email: formData.email.trim() || undefined,
           age: formData.age ? Number(formData.age) : undefined,
@@ -324,6 +330,36 @@ export default function Players() {
             value={formData.bga_username}
             onChange={(e) => setFormData({ ...formData, bga_username: e.target.value })}
           />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Mostrar por defecto
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              Cuando tengas nombre y username, cuál mostrar en torneos (si el torneo lo permite).
+            </p>
+            <div className="flex gap-4">
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  name="display_preference"
+                  checked={formData.display_preference === 'name'}
+                  onChange={() => setFormData({ ...formData, display_preference: 'name' })}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm">Nombre</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  name="display_preference"
+                  checked={formData.display_preference === 'username'}
+                  onChange={() => setFormData({ ...formData, display_preference: 'username' })}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm">Username BGA</span>
+              </label>
+            </div>
+          </div>
           <Input
             label="Teléfono"
             type="tel"

@@ -25,18 +25,13 @@ export class ReportService {
         round: `Ronda ${round.round_number}`,
         matches: await Promise.all(
           matches.map(async (match) => {
-            const results = await DatabaseService.getMatchResults(match.id!);
-            const resultsWithPlayers = await Promise.all(
-              results.map(async (r) => {
-                const player = await DatabaseService.getPlayerById(r.player_id);
-                return {
-                  player: player?.name || 'Unknown',
-                  position: r.position,
-                  points: r.points,
-                  tournament_points: r.tournament_points,
-                };
-              })
-            );
+            const results = await DatabaseService.getMatchResults(match.id!, tournamentId);
+            const resultsWithPlayers = results.map((r) => ({
+              player: r.player_name ?? 'Unknown',
+              position: r.position,
+              points: r.points,
+              tournament_points: r.tournament_points,
+            }));
             return {
               match: match.match_number,
               results: resultsWithPlayers,
@@ -416,7 +411,9 @@ export class ReportService {
     const config = await DatabaseService.getTournamentConfig(tournamentId);
     return await SwissPairingService.calculateStandings(
       tournamentId,
-      config?.tiebreak_criteria || []
+      config?.tiebreak_criteria || [],
+      undefined,
+      config?.player_display_mode
     );
   }
 }

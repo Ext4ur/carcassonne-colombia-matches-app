@@ -16,6 +16,9 @@ export interface Tournament {
   updated_at?: string;
 }
 
+/** How to display player names in this tournament (configurable tournaments only). */
+export type PlayerDisplayMode = 'per_player' | 'names_only' | 'usernames_only';
+
 export interface TournamentConfig {
   id?: number;
   tournament_id: number;
@@ -23,6 +26,8 @@ export interface TournamentConfig {
   tiebreak_criteria: TiebreakCriterion[];
   scoring_system: ScoringSystem;
   bye_selection?: 'worst' | 'random' | 'round_robin';
+  /** Default: 'per_player'. per_player = use each player's preference; names_only = first two words; usernames_only = BGA username. */
+  player_display_mode?: PlayerDisplayMode;
   created_at?: string;
   updated_at?: string;
 }

@@ -42,7 +42,9 @@ export class CircuitService {
       const config = await DatabaseService.getTournamentConfig(t.id);
       const tourStandings = await SwissPairingService.calculateStandings(
         t.id,
-        config?.tiebreak_criteria || []
+        config?.tiebreak_criteria || [],
+        undefined,
+        config?.player_display_mode
       );
       const label = t.name.length > 20 ? t.name.slice(0, 17) + '…' : t.name;
       stops.push(label);
@@ -87,7 +89,9 @@ export class CircuitService {
       const config = await DatabaseService.getTournamentConfig(t.id);
       const tourStandings = await SwissPairingService.calculateStandings(
         t.id,
-        config?.tiebreak_criteria || []
+        config?.tiebreak_criteria || [],
+        undefined,
+        config?.player_display_mode
       );
       const label = t.name.length > 20 ? t.name.slice(0, 17) + '…' : t.name;
       stops.push(label);

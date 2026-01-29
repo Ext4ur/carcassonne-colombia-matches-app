@@ -230,6 +230,26 @@ function runMigrations(database: Database.Database) {
       console.warn('Migration 3 warning:', errorMsg);
     }
   }
+
+  // Migration 4: Add display_preference to players
+  try {
+    database.exec(`ALTER TABLE players ADD COLUMN display_preference TEXT DEFAULT 'name' CHECK(display_preference IN ('name', 'username'))`);
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 4 warning:', errorMsg);
+    }
+  }
+
+  // Migration 5: Add player_display_mode to tournament_configs
+  try {
+    database.exec(`ALTER TABLE tournament_configs ADD COLUMN player_display_mode TEXT DEFAULT 'per_player' CHECK(player_display_mode IN ('per_player', 'names_only', 'usernames_only'))`);
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 5 warning:', errorMsg);
+    }
+  }
 }
 
 export function closeDatabase() {

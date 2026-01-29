@@ -11,7 +11,7 @@ interface TournamentConfigProps {
   tournamentId: number;
   playersPerMatch: number;
   config?: TournamentConfig;
-  onSave: (config: Partial<TournamentConfig> & { bye_selection?: 'worst' | 'random' | 'round_robin' }) => void;
+  onSave: (config: Partial<TournamentConfig> & { bye_selection?: 'worst' | 'random' | 'round_robin'; player_display_mode?: 'per_player' | 'names_only' | 'usernames_only' }) => void;
   onCancel: () => void;
 }
 
@@ -30,6 +30,9 @@ export default function TournamentConfigComponent({
   );
   const [avoidRematches, setAvoidRematches] = useState(config?.avoid_rematches ?? true);
   const [byeSelection, setByeSelection] = useState<'worst' | 'random' | 'round_robin'>('worst');
+  const [playerDisplayMode, setPlayerDisplayMode] = useState<'per_player' | 'names_only' | 'usernames_only'>(
+    config?.player_display_mode ?? 'per_player'
+  );
 
   const handleDragEnd = (result: any) => {
     if (!result.destination) return;
@@ -68,6 +71,7 @@ export default function TournamentConfigComponent({
       tiebreak_criteria: tiebreakCriteria,
       scoring_system: scoringSystem,
       bye_selection: byeSelection,
+      player_display_mode: playerDisplayMode,
     });
   };
 
@@ -99,6 +103,20 @@ export default function TournamentConfigComponent({
               { value: 'round_robin', label: 'Round-robin (cada jugador máximo 1 bye)' },
             ]}
             helperText="El jugador que recibe el bye gana automáticamente la partida"
+          />
+        </div>
+
+        <div>
+          <Select
+            label="Visualización de jugadores"
+            value={playerDisplayMode}
+            onChange={(e) => setPlayerDisplayMode(e.target.value as 'per_player' | 'names_only' | 'usernames_only')}
+            options={[
+              { value: 'per_player', label: 'Ver todos por defecto (según preferencia de cada jugador)' },
+              { value: 'names_only', label: 'Ver solo nombres (primer nombre y primer apellido)' },
+              { value: 'usernames_only', label: 'Ver solo usernames' },
+            ]}
+            helperText="Cómo se muestran los nombres en el leaderboard y resultados del torneo"
           />
         </div>
       </div>

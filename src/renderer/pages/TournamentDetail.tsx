@@ -14,6 +14,7 @@ import MultiSelect from '../components/common/MultiSelect';
 import { Column } from '../components/common/Table';
 import { useNotifications } from '../contexts/NotificationContext';
 import { calculateNumberOfRounds } from '../utils/tournament';
+import type { TournamentConfig } from '../types/tournament';
 
 export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +39,7 @@ export default function TournamentDetail() {
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
   const [matchPlayersMap, setMatchPlayersMap] = useState<{ [matchId: number]: any[] }>({});
   const [matchResultsMap, setMatchResultsMap] = useState<{ [matchId: number]: any[] }>({});
+  const [tournamentConfig, setTournamentConfig] = useState<TournamentConfig | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -135,10 +137,12 @@ export default function TournamentDetail() {
     try {
       const config = await DatabaseService.getTournamentConfig(tournament.id);
       if (isCancelled?.()) return;
+      setTournamentConfig(config || null);
       const data = await SwissPairingService.calculateStandings(
         tournament.id,
         config?.tiebreak_criteria || [],
-        preFetchedRounds?.length ? { rounds: preFetchedRounds } : undefined
+        preFetchedRounds?.length ? { rounds: preFetchedRounds } : undefined,
+        config?.player_display_mode
       );
       if (isCancelled?.()) return;
       setStandings(data || []);
@@ -259,19 +263,15 @@ export default function TournamentDetail() {
       const matchesData: any[] = [];
 
       for (const match of roundMatches) {
-        const matchResults = await DatabaseService.getMatchResults(match.id!);
-        const matchPlayers = await DatabaseService.getMatchPlayers(match.id!);
+        const matchResults = await DatabaseService.getMatchResults(match.id!, tournament!.id!);
         
-        // Sort results by position
+        // Sort results by position (player_name already resolved by getMatchResults with tournament config)
         const sortedResults = matchResults
-          .map((result) => {
-            const player = matchPlayers.find((p) => p.id === result.player_id);
-            return {
-              player_name: player?.name || 'Desconocido',
-              position: result.position,
-              points: result.points,
-            };
-          })
+          .map((result) => ({
+            player_name: result.player_name ?? 'Desconocido',
+            position: result.position,
+            points: result.points,
+          }))
           .sort((a, b) => a.position - b.position);
 
         matchesData.push({
@@ -309,7 +309,7 @@ export default function TournamentDetail() {
     const matches = await DatabaseService.getRoundMatches(currentRound.id);
     setMatches(matches);
     await loadMatchPlayersForMatches(matches);
-    await loadMatchResultsForMatches(matches);
+    await loadMatchResultsForMatches(matches, tournament?.id);
 
     const allCompleted = matches.every((m) => m.status === 'completed');
     if (!allCompleted || currentRound.status === 'completed') return;
@@ -435,7 +435,7 @@ export default function TournamentDetail() {
     {
       key: 'position',
       header: '#',
-      render: (_, index) => index + 1,
+      render: (_, index) => (index ?? 0) + 1,
     },
     {
       key: 'player_name',
@@ -486,10 +486,10 @@ export default function TournamentDetail() {
     setMatchPlayersMap(map);
   };
 
-  const loadMatchResultsForMatches = async (matchList: Match[]) => {
+  const loadMatchResultsForMatches = async (matchList: Match[], tournamentId?: number) => {
     if (matchList.length === 0) return;
     const list = matchList.filter((m) => m.id);
-    const results = await Promise.all(list.map((m) => DatabaseService.getMatchResults(m.id!)));
+    const results = await Promise.all(list.map((m) => DatabaseService.getMatchResults(m.id!, tournamentId)));
     const map: { [matchId: number]: any[] } = {};
     list.forEach((m, i) => {
       const r = results[i] || [];
@@ -608,7 +608,7 @@ export default function TournamentDetail() {
               {playersWithResults.map((p: any, idx: number) => (
                 <span
                   key={p.id || idx}
-                  className={getPositionColor(p.position, tournament.players_per_match)}
+                  className={getPositionColor(p.position, tournament?.players_per_match ?? 2)}
                 >
                   {p.name}
                 </span>
@@ -663,7 +663,7 @@ export default function TournamentDetail() {
             variant="primary"
             size="sm"
             onClick={() => handleOpenMatchModal(match)}
-            disabled={tournament.status === 'completed'}
+            disabled={tournament?.status === 'completed'}
           >
             {match.status === 'completed' ? 'Ver Resultados' : 'Ingresar Resultados'}
           </Button>
@@ -795,7 +795,7 @@ export default function TournamentDetail() {
               <Button 
                 onClick={handleGenerateFirstRound} 
                 isLoading={isLoading}
-                disabled={tournament.status === 'completed'}
+                disabled={tournament?.status === 'completed'}
               >
                 Generar Primera Ronda
               </Button>

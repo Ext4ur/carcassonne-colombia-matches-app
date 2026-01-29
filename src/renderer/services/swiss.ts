@@ -3,6 +3,7 @@ import { TiebreakService, TiebreakData } from './tiebreak';
 import { Tournament, Round, Match, MatchResult, PlayerStanding } from '../types/tournament';
 import { getTournamentPoints } from '../utils/scoring';
 import { calculateNumberOfRounds } from '../utils/tournament';
+import { getPlayerDisplayName, type PlayerDisplayMode } from '../utils/playerDisplayName';
 
 interface PlayerWithPoints {
   player_id: number;
@@ -115,12 +116,12 @@ export class SwissPairingService {
     });
 
     const avoidRematches = config?.avoid_rematches ?? true;
-    const standings = await this.calculateStandings(tournamentId, config?.tiebreak_criteria || [], {
-      players,
-      rounds,
-      roundMatches,
-      resultsByMatch,
-    });
+    const standings = await this.calculateStandings(
+      tournamentId,
+      config?.tiebreak_criteria || [],
+      { players, rounds, roundMatches, resultsByMatch },
+      config?.player_display_mode
+    );
     const previousOpponents = this.getPreviousOpponentsFromData(rounds, roundMatches, resultsByMatch);
 
     // Create new round
@@ -298,7 +299,8 @@ export class SwissPairingService {
       rounds?: Round[];
       roundMatches?: Match[][];
       resultsByMatch?: Record<number, any[]>;
-    }
+    },
+    playerDisplayMode?: PlayerDisplayMode
   ): Promise<PlayerStanding[]> {
     // Use config order for tiebreak criteria (same order as in tournament config)
     const criteria = [...(tiebreakCriteria || [])].sort(
@@ -406,7 +408,10 @@ export class SwissPairingService {
 
       standings.push({
         player_id: player.id,
-        player_name: player.name,
+        player_name: getPlayerDisplayName(
+          { name: player.name, bga_username: player.bga_username, display_preference: player.display_preference },
+          playerDisplayMode ?? 'per_player'
+        ),
         total_points: totalPoints,
         wins,
         tiebreak_values: tiebreakValues,

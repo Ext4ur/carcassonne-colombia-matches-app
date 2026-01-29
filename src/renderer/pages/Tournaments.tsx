@@ -89,12 +89,13 @@ export default function Tournaments() {
   };
 
   /** Config submit: no DB write, store draft and go to registration. */
-  const handleConfigSubmit = (configData: Partial<TournamentConfig> & { bye_selection?: 'worst' | 'random' | 'round_robin' }) => {
+  const handleConfigSubmit = (configData: Partial<TournamentConfig> & { bye_selection?: 'worst' | 'random' | 'round_robin'; player_display_mode?: 'per_player' | 'names_only' | 'usernames_only' }) => {
     setConfigDraft({
       avoid_rematches: configData.avoid_rematches ?? true,
       tiebreak_criteria: configData.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
       scoring_system: configData.scoring_system || getDefaultScoringSystem(tournamentDraft!.players_per_match || 2),
       bye_selection: configData.bye_selection || 'worst',
+      player_display_mode: configData.player_display_mode ?? 'per_player',
     });
     setWizardStep('registration');
   };
@@ -122,6 +123,7 @@ export default function Tournaments() {
           tiebreak_criteria: configDraft.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
           scoring_system: configDraft.scoring_system || getDefaultScoringSystem(tournamentDraft.players_per_match || 2),
           bye_selection: configDraft.bye_selection || 'worst',
+          player_display_mode: configDraft.player_display_mode ?? 'per_player',
         });
       }
       for (const player of registrationPlayers) {

@@ -132,7 +132,12 @@ export class PlayerStatsService {
     for (const tournament of completed) {
       const tid = tournament.id!;
       const config = await DatabaseService.getTournamentConfig(tid);
-      const tournamentStandings = await SwissPairingService.calculateStandings(tid, config?.tiebreak_criteria || []);
+      const tournamentStandings = await SwissPairingService.calculateStandings(
+        tid,
+        config?.tiebreak_criteria || [],
+        undefined,
+        config?.player_display_mode
+      );
       const playerStanding = tournamentStandings.find((s) => s.player_id === playerId);
       if (!playerStanding) continue;
 
@@ -144,7 +149,7 @@ export class PlayerStatsService {
       for (const round of rounds) {
         const matches = await DatabaseService.getRoundMatches(round.id!);
         for (const match of matches) {
-          const results = await DatabaseService.getMatchResults(match.id!);
+          const results = await DatabaseService.getMatchResults(match.id!, tid);
           if (results.some((r) => r.player_id === playerId)) matchesPlayed++;
         }
       }

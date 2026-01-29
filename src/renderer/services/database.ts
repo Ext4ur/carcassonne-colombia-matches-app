@@ -2,6 +2,7 @@
 import { getApiClient } from '@api/clients/clientFactory';
 import { DB_CONFIG } from '@constants';
 import * as dbCache from './dbCache';
+import { getPlayerDisplayName } from '@utils/playerDisplayName';
 
 export class DatabaseService {
   private static getClient() {
@@ -54,14 +55,15 @@ export class DatabaseService {
   static async createPlayer(player: {
     name: string;
     bga_username?: string;
+    display_preference?: 'name' | 'username';
     phone?: string;
     email?: string;
     age?: number;
   }) {
     const result = await this.execute(
-      `INSERT INTO players (name, bga_username, phone, email, age) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [player.name, player.bga_username || null, player.phone || null, player.email || null, player.age || null]
+      `INSERT INTO players (name, bga_username, display_preference, phone, email, age) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [player.name, player.bga_username || null, player.display_preference || 'name', player.phone || null, player.email || null, player.age || null]
     );
     dbCache.invalidate(dbCache.LIST_KEYS.players);
     return result.lastInsertRowid;
@@ -70,6 +72,7 @@ export class DatabaseService {
   static async updatePlayer(id: number, player: {
     name?: string;
     bga_username?: string;
+    display_preference?: 'name' | 'username';
     phone?: string;
     email?: string;
     age?: number;
@@ -84,6 +87,10 @@ export class DatabaseService {
     if (player.bga_username !== undefined) {
       updates.push('bga_username = ?');
       params.push(player.bga_username);
+    }
+    if (player.display_preference !== undefined) {
+      updates.push('display_preference = ?');
+      params.push(player.display_preference);
     }
     if (player.phone !== undefined) {
       updates.push('phone = ?');
@@ -364,6 +371,11 @@ export class DatabaseService {
       if (results[0].bye_selection) {
         (config as any).bye_selection = results[0].bye_selection;
       }
+      if (results[0].player_display_mode) {
+        (config as any).player_display_mode = results[0].player_display_mode;
+      } else {
+        (config as any).player_display_mode = 'per_player';
+      }
     }
     dbCache.set(`tournament:${tournamentId}:config`, config);
     return config;
@@ -375,16 +387,18 @@ export class DatabaseService {
     tiebreak_criteria: any[];
     scoring_system: any;
     bye_selection?: 'worst' | 'random' | 'round_robin';
+    player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
   }) {
     await this.execute(
-      `INSERT INTO tournament_configs (tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection) 
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO tournament_configs (tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection, player_display_mode) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         config.tournament_id,
         config.avoid_rematches ? 1 : 0,
         JSON.stringify(config.tiebreak_criteria),
         JSON.stringify(config.scoring_system),
         config.bye_selection || 'worst',
+        config.player_display_mode || 'per_player',
       ]
     );
     dbCache.invalidateTournament(config.tournament_id);
@@ -395,6 +409,7 @@ export class DatabaseService {
     tiebreak_criteria?: any[];
     scoring_system?: any;
     bye_selection?: 'worst' | 'random' | 'round_robin';
+    player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
   }) {
     const updates: string[] = [];
     const params: any[] = [];
@@ -414,6 +429,10 @@ export class DatabaseService {
     if (config.bye_selection !== undefined) {
       updates.push('bye_selection = ?');
       params.push(config.bye_selection);
+    }
+    if (config.player_display_mode !== undefined) {
+      updates.push('player_display_mode = ?');
+      params.push(config.player_display_mode);
     }
 
     if (updates.length === 0) return;
@@ -609,8 +628,9 @@ export class DatabaseService {
     );
   }
 
-  // Match result operations
-  static async getMatchResults(matchId: number) {
+  // Match result operations. When tournamentId is provided, player_name is resolved using tournament player_display_mode.
+  static async getMatchResults(matchId: number, tournamentId?: number) {
+    const mode = tournamentId != null ? (await this.getTournamentConfig(tournamentId))?.player_display_mode ?? 'per_player' : null;
     const isSupabase = DB_CONFIG.mode === 'remote';
     if (isSupabase) {
       const matchResults = await this.query(
@@ -620,34 +640,65 @@ export class DatabaseService {
       if (matchResults.length === 0) return [];
       const playerIds = [...new Set(matchResults.map((mr: any) => mr.player_id))];
       if (playerIds.length > 0) {
+        let playersMap = new Map<number, any>();
         const raw = this.getRawClient() as any;
-        if (raw.client) {
+        if (raw?.client) {
           const { data: players, error } = await raw.client
             .from('players')
             .select('*')
             .in('id', playerIds);
-          
           if (error) throw new Error(`Error fetching players: ${error.message}`);
-          
-          const playersMap = new Map((players || []).map((p: any) => [p.id, p]));
-          
-          return matchResults.map((mr: any) => ({
-            ...mr,
-            player_name: playersMap.get(mr.player_id)?.name || null,
-          }));
+          playersMap = new Map((players || []).map((p: any) => [p.id, p]));
+        } else {
+          for (const pid of playerIds) {
+            const p = await this.getPlayerById(pid);
+            if (p) playersMap.set(pid, p);
+          }
         }
+        return matchResults.map((mr: any) => {
+          const player = playersMap.get(mr.player_id);
+          const player_name = mode != null && player
+            ? getPlayerDisplayName(
+                { name: player.name, bga_username: player.bga_username, display_preference: player.display_preference },
+                mode
+              )
+            : (player?.name ?? null);
+          return { ...mr, player_name };
+        });
       }
-      
       return matchResults;
     } else {
-      // Para SQLite: usar la query original con JOIN
-      return this.query(`
-        SELECT mr.*, p.name as player_name 
-        FROM match_results mr 
-        JOIN players p ON mr.player_id = p.id 
-        WHERE mr.match_id = ? 
+      if (mode == null) {
+        return this.query(`
+          SELECT mr.*, p.name as player_name
+          FROM match_results mr
+          JOIN players p ON mr.player_id = p.id
+          WHERE mr.match_id = ?
+          ORDER BY mr.position
+        `, [matchId]);
+      }
+      const rows = await this.query<Record<string, unknown>>(`
+        SELECT mr.*, p.name, p.bga_username, p.display_preference
+        FROM match_results mr
+        JOIN players p ON mr.player_id = p.id
+        WHERE mr.match_id = ?
         ORDER BY mr.position
       `, [matchId]);
+      return rows.map((r) => ({
+        match_id: r.match_id,
+        player_id: r.player_id,
+        position: r.position,
+        points: r.points,
+        tournament_points: r.tournament_points,
+        player_name: getPlayerDisplayName(
+          {
+            name: (r.name as string) ?? '',
+            bga_username: (r.bga_username as string | null) ?? null,
+            display_preference: (r.display_preference as 'name' | 'username' | null) ?? null,
+          },
+          mode
+        ),
+      }));
     }
   }
 
@@ -717,7 +768,7 @@ export class DatabaseService {
         // Si no hay rondas, retornar jugadores con estadísticas en 0
         return (players || []).map((p: any) => ({
           player_id: p.id,
-          player_name: p.name,
+          player_name: getPlayerDisplayName({ name: p.name, bga_username: p.bga_username, display_preference: p.display_preference }, 'per_player'),
           total_points: 0,
           tournaments_played: new Set((tournamentPlayers || []).filter((tp: any) => tp.player_id === p.id).map((tp: any) => tp.tournament_id)).size,
           wins: 0,
@@ -737,7 +788,7 @@ export class DatabaseService {
       if (matchIds.length === 0) {
         return (players || []).map((p: any) => ({
           player_id: p.id,
-          player_name: p.name,
+          player_name: getPlayerDisplayName({ name: p.name, bga_username: p.bga_username, display_preference: p.display_preference }, 'per_player'),
           total_points: 0,
           tournaments_played: new Set((tournamentPlayers || []).filter((tp: any) => tp.player_id === p.id).map((tp: any) => tp.tournament_id)).size,
           wins: 0,
@@ -767,7 +818,7 @@ export class DatabaseService {
         if (player) {
           standingsMap.set(playerId, {
             player_id: playerId,
-            player_name: player.name,
+            player_name: getPlayerDisplayName({ name: player.name, bga_username: player.bga_username, display_preference: player.display_preference }, 'per_player'),
             total_points: 0,
             tournaments_played: new Set(),
             wins: new Set(),
@@ -816,11 +867,13 @@ export class DatabaseService {
       
       return standings;
     } else {
-      // Para SQLite: usar la query original con JOINs
-      return this.query(`
+      // Para SQLite: JOINs y resolver player_name con preferencia del jugador
+      const rows = await this.query<{ player_id: number; name: string; bga_username: string | null; display_preference: string | null; total_points: number; tournaments_played: number; wins: number }>(`
         SELECT 
           p.id as player_id,
-          p.name as player_name,
+          p.name,
+          p.bga_username,
+          p.display_preference,
           SUM(mr.tournament_points) as total_points,
           COUNT(DISTINCT t.id) as tournaments_played,
           COUNT(DISTINCT CASE WHEN mr.position = 1 THEN mr.match_id END) as wins
@@ -831,9 +884,19 @@ export class DatabaseService {
         JOIN matches m ON r.id = m.round_id
         JOIN match_results mr ON m.id = mr.match_id AND mr.player_id = p.id
         WHERE t.circuit_id = ? AND t.status = 'completed'
-        GROUP BY p.id, p.name
+        GROUP BY p.id
         ORDER BY total_points DESC, wins DESC
       `, [circuitId]);
+      return rows.map((row) => ({
+        player_id: row.player_id,
+        player_name: getPlayerDisplayName(
+          { name: row.name, bga_username: row.bga_username ?? undefined, display_preference: (row.display_preference as 'name' | 'username') ?? undefined },
+          'per_player'
+        ),
+        total_points: row.total_points,
+        tournaments_played: row.tournaments_played,
+        wins: row.wins,
+      }));
     }
   }
 

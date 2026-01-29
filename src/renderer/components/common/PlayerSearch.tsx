@@ -81,7 +81,7 @@ export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 
         onKeyDown={handleKeyDown}
       />
       {showResults && results.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
           {results.map((player, index) => (
             <div
               key={player.id}
@@ -101,7 +101,7 @@ export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 
         </div>
       )}
       {showResults && searchTerm.length >= 2 && results.length === 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4">
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4">
           <p className="text-gray-500 dark:text-gray-400">No se encontraron jugadores</p>
         </div>
       )}

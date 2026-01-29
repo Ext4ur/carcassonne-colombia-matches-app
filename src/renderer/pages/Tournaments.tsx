@@ -1,27 +1,33 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatabaseService } from '../services/database';
 import { Tournament, TournamentConfig } from '../types/tournament';
+import { Player } from '../types/player';
 import { getDefaultScoringSystem } from '../utils/scoring';
 import { DEFAULT_TIEBREAK_CRITERIA } from '../utils/tiebreak';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
-import TournamentForm from '../components/tournament/TournamentForm';
+import TournamentForm, { TournamentFormRef } from '../components/tournament/TournamentForm';
 import TournamentConfigComponent from '../components/tournament/TournamentConfig';
 import PlayerRegistration from '../components/tournament/PlayerRegistration';
 import { Column } from '../components/common/Table';
 
 type WizardStep = 'form' | 'config' | 'registration' | null;
 
+type ConfigDraft = Partial<TournamentConfig> & { bye_selection?: 'worst' | 'random' | 'round_robin' };
+
 export default function Tournaments() {
   const navigate = useNavigate();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<WizardStep>(null);
-  const [currentTournament, setCurrentTournament] = useState<Tournament | null>(null);
+  const [tournamentDraft, setTournamentDraft] = useState<Partial<Tournament> | null>(null);
+  const [configDraft, setConfigDraft] = useState<ConfigDraft | null>(null);
+  const [registrationPlayers, setRegistrationPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<'quick' | 'advanced'>('quick');
+  const formRef = useRef<TournamentFormRef>(null);
 
   useEffect(() => {
     loadTournaments();
@@ -42,91 +48,96 @@ export default function Tournaments() {
 
   const handleCreateTournament = (mode: 'quick' | 'advanced') => {
     setMode(mode);
-    setCurrentTournament(null);
+    setTournamentDraft(null);
+    setConfigDraft(null);
+    setRegistrationPlayers([]);
     setWizardStep('form');
     setIsModalOpen(true);
   };
 
-  const handleFormSubmit = async (tournamentData: Partial<Tournament>) => {
-    try {
-      setIsLoading(true);
-      
-      // Calculate number of rounds if not provided
-      let numberOfRounds = tournamentData.number_of_rounds;
-      if (!numberOfRounds && mode === 'quick') {
-        // For quick mode, we'll calculate it after players are registered
-        numberOfRounds = undefined;
-      }
-      
-      const tournamentId = await DatabaseService.createTournament({
-        name: tournamentData.name!,
-        type: tournamentData.type!,
-        circuit_id: tournamentData.circuit_id,
-        date: tournamentData.date!,
-        players_per_match: tournamentData.players_per_match || 2,
-        number_of_rounds: numberOfRounds,
-      });
-
-      const tournament = await DatabaseService.getTournamentById(tournamentId);
-      setCurrentTournament(tournament as Tournament);
-
-      if (mode === 'quick') {
-        // Quick mode: use defaults and go to registration
-        await DatabaseService.createTournamentConfig({
-          tournament_id: tournamentId,
-          avoid_rematches: true,
-          tiebreak_criteria: DEFAULT_TIEBREAK_CRITERIA,
-          scoring_system: getDefaultScoringSystem(tournamentData.players_per_match || 2),
-          bye_selection: 'worst',
-        });
-        setWizardStep('registration');
-      } else {
-        // Advanced mode: go to config
-        setWizardStep('config');
-      }
-    } catch (error) {
-      console.error('Error creating tournament:', error);
-      alert('Error al crear el torneo');
-    } finally {
-      setIsLoading(false);
+  const handleCancelWizard = () => {
+    if (confirm('¿Cancelar? No se creará el torneo y se perderán los datos del formulario.')) {
+      setIsModalOpen(false);
+      setWizardStep(null);
+      setTournamentDraft(null);
+      setConfigDraft(null);
+      setRegistrationPlayers([]);
     }
   };
 
-  const handleConfigSubmit = async (configData: Partial<TournamentConfig> & { bye_selection?: 'worst' | 'random' | 'round_robin' }) => {
-    try {
-      setIsLoading(true);
-      await DatabaseService.createTournamentConfig({
-        tournament_id: currentTournament!.id!,
-        avoid_rematches: configData.avoid_rematches ?? true,
-        tiebreak_criteria: configData.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
-        scoring_system: configData.scoring_system || getDefaultScoringSystem(currentTournament!.players_per_match),
-        bye_selection: configData.bye_selection || 'worst',
+  /** Form submit: no DB write, store draft and go to config or registration. */
+  const handleFormSubmit = async (tournamentData: Partial<Tournament>) => {
+    setTournamentDraft({
+      name: tournamentData.name!,
+      type: tournamentData.type!,
+      circuit_id: tournamentData.circuit_id,
+      date: tournamentData.date!,
+      players_per_match: tournamentData.players_per_match || 2,
+      number_of_rounds: tournamentData.number_of_rounds,
+    });
+    if (mode === 'quick') {
+      setConfigDraft({
+        avoid_rematches: true,
+        tiebreak_criteria: DEFAULT_TIEBREAK_CRITERIA,
+        scoring_system: getDefaultScoringSystem(tournamentData.players_per_match || 2),
+        bye_selection: 'worst',
       });
       setWizardStep('registration');
-    } catch (error) {
-      console.error('Error saving config:', error);
-      alert('Error al guardar la configuración');
-    } finally {
-      setIsLoading(false);
+    } else {
+      setWizardStep('config');
     }
   };
 
+  /** Config submit: no DB write, store draft and go to registration. */
+  const handleConfigSubmit = (configData: Partial<TournamentConfig> & { bye_selection?: 'worst' | 'random' | 'round_robin' }) => {
+    setConfigDraft({
+      avoid_rematches: configData.avoid_rematches ?? true,
+      tiebreak_criteria: configData.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
+      scoring_system: configData.scoring_system || getDefaultScoringSystem(tournamentDraft!.players_per_match || 2),
+      bye_selection: configData.bye_selection || 'worst',
+    });
+    setWizardStep('registration');
+  };
+
+  /** Registration complete: create tournament + config + register players (only DB writes here). */
   const handleRegistrationComplete = async (numberOfRounds: number) => {
+    if (!tournamentDraft?.name || !tournamentDraft?.type || !tournamentDraft?.date) {
+      alert('Faltan datos del torneo');
+      return;
+    }
     try {
       setIsLoading(true);
-      // Update tournament with the confirmed number of rounds
-      if (currentTournament?.id) {
-        await DatabaseService.updateTournament(currentTournament.id, {
-          number_of_rounds: numberOfRounds,
+      const tournamentId = await DatabaseService.createTournament({
+        name: tournamentDraft.name,
+        type: tournamentDraft.type,
+        circuit_id: tournamentDraft.circuit_id,
+        date: tournamentDraft.date,
+        players_per_match: tournamentDraft.players_per_match || 2,
+        number_of_rounds: numberOfRounds,
+      });
+      if (configDraft) {
+        await DatabaseService.createTournamentConfig({
+          tournament_id: tournamentId,
+          avoid_rematches: configDraft.avoid_rematches ?? true,
+          tiebreak_criteria: configDraft.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
+          scoring_system: configDraft.scoring_system || getDefaultScoringSystem(tournamentDraft.players_per_match || 2),
+          bye_selection: configDraft.bye_selection || 'worst',
         });
+      }
+      for (const player of registrationPlayers) {
+        if (player.id) {
+          await DatabaseService.registerPlayerToTournament(tournamentId, player.id);
+        }
       }
       setIsModalOpen(false);
       setWizardStep(null);
-      setCurrentTournament(null);
+      setTournamentDraft(null);
+      setConfigDraft(null);
+      setRegistrationPlayers([]);
       loadTournaments();
     } catch (error) {
-      console.error('Error updating tournament rounds:', error);
-      alert('Error al actualizar el número de rondas');
+      console.error('Error al crear el torneo:', error);
+      alert('Error al crear el torneo');
     } finally {
       setIsLoading(false);
     }
@@ -253,40 +264,52 @@ export default function Tournaments() {
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => {
-          if (confirm('¿Estás seguro de cancelar? Se perderán los datos no guardados.')) {
-            setIsModalOpen(false);
-            setWizardStep(null);
-            setCurrentTournament(null);
-          }
-        }}
+        onClose={handleCancelWizard}
         title={getWizardTitle()}
         size="lg"
+        footer={
+          wizardStep === 'form' ? (
+            <>
+              <Button variant="secondary" onClick={handleCancelWizard}>
+                Cancelar
+              </Button>
+              <Button onClick={() => formRef.current?.submit()}>
+                Continuar
+              </Button>
+            </>
+          ) : wizardStep === 'config' ? (
+            <Button variant="secondary" onClick={handleCancelWizard}>
+              Cancelar
+            </Button>
+          ) : undefined
+        }
       >
         {wizardStep === 'form' && (
           <TournamentForm
+            ref={formRef}
             onSave={handleFormSubmit}
-            onCancel={() => {
-              setIsModalOpen(false);
-              setWizardStep(null);
-            }}
+            onCancel={handleCancelWizard}
             mode={mode}
+            hideActions
           />
         )}
 
-        {wizardStep === 'config' && currentTournament && (
+        {wizardStep === 'config' && tournamentDraft && (
           <TournamentConfigComponent
-            tournamentId={currentTournament.id!}
-            playersPerMatch={currentTournament.players_per_match}
+            tournamentId={0}
+            playersPerMatch={tournamentDraft.players_per_match || 2}
             onSave={handleConfigSubmit}
             onCancel={() => setWizardStep('form')}
           />
         )}
 
-        {wizardStep === 'registration' && currentTournament && (
+        {wizardStep === 'registration' && tournamentDraft && (
           <PlayerRegistration
-            tournamentId={currentTournament.id!}
+            tournamentId={null}
+            draftPlayers={registrationPlayers}
+            onDraftPlayersChange={setRegistrationPlayers}
             onComplete={handleRegistrationComplete}
+            onCancel={handleCancelWizard}
             mode={mode}
           />
         )}

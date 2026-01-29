@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { DatabaseService } from '../../services/database';
 import { Tournament, TournamentType } from '../../types/tournament';
 import { Circuit } from '../../types/circuit';
@@ -7,14 +7,23 @@ import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
 
+export interface TournamentFormRef {
+  submit: () => void;
+}
+
 interface TournamentFormProps {
   tournament?: Tournament;
   onSave: (tournament: Partial<Tournament>) => void;
   onCancel: () => void;
   mode?: 'quick' | 'advanced';
+  /** When true, buttons are not rendered (e.g. when parent puts them in modal footer). */
+  hideActions?: boolean;
 }
 
-export default function TournamentForm({ tournament, onSave, onCancel, mode = 'quick' }: TournamentFormProps) {
+const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(function TournamentForm(
+  { tournament, onSave, onCancel, mode = 'quick', hideActions = false },
+  ref
+) {
   const [circuits, setCircuits] = useState<Circuit[]>([]);
   const [formData, setFormData] = useState({
     name: tournament?.name || '',
@@ -81,6 +90,10 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
       number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
     });
   };
+
+  useImperativeHandle(ref, () => ({
+    submit: handleSubmit,
+  }));
 
   return (
     <div className="space-y-4">
@@ -157,15 +170,16 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
         </>
       )}
 
-      <div className="flex justify-end space-x-2 pt-4">
-        <Button variant="secondary" onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button onClick={handleSubmit}>
-          {tournament ? 'Actualizar' : 'Continuar'}
-        </Button>
-      </div>
+      {!hideActions && (
+        <div className="flex justify-end space-x-2 pt-4">
+          <Button onClick={handleSubmit}>
+            {tournament ? 'Actualizar' : 'Continuar'}
+          </Button>
+        </div>
+      )}
     </div>
   );
-}
+});
+
+export default TournamentForm;
 

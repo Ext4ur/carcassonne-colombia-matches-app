@@ -91,9 +91,15 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
       {
         label: 'Posición',
         data: stats.recentTournaments.map((t) => t.position),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-        tension: 0.1,
+        borderColor: '#3b82f6',
+        backgroundColor: '#3b82f6',
+        borderWidth: 3,
+        tension: 0.3,
+        fill: false,
+        pointBackgroundColor: '#3b82f6',
+        pointBorderColor: '#1e40af',
+        pointBorderWidth: 2,
+        pointRadius: 5,
       },
     ],
   };
@@ -104,9 +110,10 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
       {
         label: 'Torneos',
         data: [stats.qualifierStats.tournaments, stats.circuitStats.tournaments],
-        backgroundColor: ['rgba(34, 197, 94, 0.5)', 'rgba(251, 191, 36, 0.5)'],
-        borderColor: ['rgba(34, 197, 94, 1)', 'rgba(251, 191, 36, 1)'],
-        borderWidth: 1,
+        backgroundColor: ['#22c55e', '#f59e0b'],
+        borderColor: ['#16a34a', '#d97706'],
+        borderWidth: 2,
+        borderRadius: 6,
       },
     ],
   };
@@ -208,24 +215,43 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
             <p>Posición Promedio: {stats.circuitStats.averagePosition.toFixed(1)}</p>
           </div>
         </div>
-        <Bar data={tournamentTypeData} options={{ responsive: true }} />
+        <Bar
+          data={tournamentTypeData}
+          options={{
+            responsive: true,
+            plugins: {
+              legend: { display: true, position: 'top' },
+              tooltip: { padding: 12 },
+            },
+            scales: {
+              y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } },
+              x: { grid: { display: false } },
+            },
+          }}
+        />
       </div>
 
       {/* Recent Tournaments */}
       {stats.recentTournaments.length > 0 && (
         <div className="card">
           <h3 className="text-lg font-bold mb-4">Últimos Torneos</h3>
-          <Line 
-            data={positionData} 
-            options={{ 
+          <Line
+            data={positionData}
+            options={{
               responsive: true,
+              plugins: {
+                legend: { display: true, position: 'top' },
+                tooltip: { padding: 12 },
+              },
               scales: {
                 y: {
                   reverse: true,
                   beginAtZero: false,
+                  grid: { color: 'rgba(0,0,0,0.06)' },
                 },
+                x: { grid: { display: false } },
               },
-            }} 
+            }}
           />
           <div className="mt-4 space-y-2">
             {stats.recentTournaments.map((t, index) => (

@@ -353,14 +353,15 @@ export default function Circuits() {
     },
   ];
 
+  // Paleta sólida (sin transparencia) para líneas del circuito
   const CHART_COLORS = [
-    'rgb(59, 130, 246)',
-    'rgb(34, 197, 94)',
-    'rgb(251, 191, 36)',
-    'rgb(239, 68, 68)',
-    'rgb(168, 85, 247)',
-    'rgb(20, 184, 166)',
-    'rgb(249, 115, 22)',
+    '#3b82f6',
+    '#22c55e',
+    '#f59e0b',
+    '#ef4444',
+    '#a855f7',
+    '#14b8a6',
+    '#f97316',
   ];
 
   const positionChartOptions = {
@@ -369,15 +370,18 @@ export default function Circuits() {
     plugins: {
       legend: { position: 'top' as const },
       title: { display: true, text: 'Posición en cada parada del circuito' },
+      tooltip: { padding: 12 },
     },
     scales: {
       y: {
         reverse: true,
         min: 1,
         title: { display: true, text: 'Posición' },
+        grid: { color: 'rgba(0,0,0,0.06)' },
       },
       x: {
         title: { display: true, text: 'Parada' },
+        grid: { display: false },
       },
     },
   };
@@ -388,14 +392,17 @@ export default function Circuits() {
     plugins: {
       legend: { position: 'top' as const },
       title: { display: true, text: 'Puntos acumulados por parada' },
+      tooltip: { padding: 12 },
     },
     scales: {
       y: {
         min: 0,
         title: { display: true, text: 'Puntos acumulados' },
+        grid: { color: 'rgba(0,0,0,0.06)' },
       },
       x: {
         title: { display: true, text: 'Parada' },
+        grid: { display: false },
       },
     },
   };
@@ -614,14 +621,23 @@ export default function Circuits() {
                 <Line
                   data={{
                     labels: filteredPositionEvolution.stops,
-                    datasets: filteredPositionEvolution.players.slice(0, 10).map((p, i) => ({
-                      label: p.player_name,
-                      data: p.positions.map((pos) => (pos === null ? undefined : pos)),
-                      borderColor: CHART_COLORS[i % CHART_COLORS.length],
-                      backgroundColor: CHART_COLORS[i % CHART_COLORS.length].replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                      tension: 0.2,
-                      spanGaps: true,
-                    })),
+                    datasets: filteredPositionEvolution.players.slice(0, 10).map((p, i) => {
+                      const color = CHART_COLORS[i % CHART_COLORS.length];
+                      return {
+                        label: p.player_name,
+                        data: p.positions.map((pos) => (pos === null ? undefined : pos)),
+                        borderColor: color,
+                        backgroundColor: color,
+                        borderWidth: 3,
+                        tension: 0.3,
+                        spanGaps: true,
+                        fill: false,
+                        pointBackgroundColor: color,
+                        pointBorderColor: '#1f2937',
+                        pointBorderWidth: 1,
+                        pointRadius: 4,
+                      };
+                    }),
                   }}
                   options={positionChartOptions}
                 />
@@ -633,14 +649,22 @@ export default function Circuits() {
                 <Line
                   data={{
                     labels: filteredPointsEvolution.stops,
-                    datasets: filteredPointsEvolution.players.slice(0, 10).map((p, i) => ({
-                      label: p.player_name,
-                      data: p.pointsCumulative,
-                      borderColor: CHART_COLORS[i % CHART_COLORS.length],
-                      backgroundColor: CHART_COLORS[i % CHART_COLORS.length].replace('rgb', 'rgba').replace(')', ', 0.1)'),
-                      fill: true,
-                      tension: 0.2,
-                    })),
+                    datasets: filteredPointsEvolution.players.slice(0, 10).map((p, i) => {
+                      const color = CHART_COLORS[i % CHART_COLORS.length];
+                      return {
+                        label: p.player_name,
+                        data: p.pointsCumulative,
+                        borderColor: color,
+                        backgroundColor: color,
+                        borderWidth: 3,
+                        tension: 0.3,
+                        fill: false,
+                        pointBackgroundColor: color,
+                        pointBorderColor: '#1f2937',
+                        pointBorderWidth: 1,
+                        pointRadius: 4,
+                      };
+                    }),
                   }}
                   options={pointsChartOptions}
                 />

@@ -26,6 +26,15 @@
     "postinstall": "electron-builder install-app-deps",
     "rebuild-sqlite": "electron-rebuild -f -w better-sqlite3"
   },
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "src/**/*.{json,css,md}": [
+      "prettier --write"
+    ]
+  },
   "keywords": [
     "carcassonne",
     "tournament",
@@ -51,6 +60,7 @@
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",
     "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "postcss": "^8.4.32",
     "prettier": "^3.8.1",
     "tailwindcss": "^3.3.6",

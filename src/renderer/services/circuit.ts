@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
 import { SwissPairingService } from './swiss';
 import { CircuitStandings } from '../types/circuit';
@@ -26,9 +27,18 @@ export class CircuitService {
   /** Position (1-based) of each player at each circuit stop. For chart: evolución de posición. */
   static async getCircuitPositionEvolution(circuitId: number): Promise<CircuitPositionEvolution> {
     const tournaments = await DatabaseService.getCircuitTournaments(circuitId);
-    const circuitStandings = await DatabaseService.getCircuitStandings(circuitId);
+    const circuitStandings = (await DatabaseService.getCircuitStandings(
+      circuitId
+    )) as CircuitStandings[];
     if (tournaments.length === 0) {
-      return { stops: [], players: circuitStandings.map((s) => ({ player_id: s.player_id, player_name: s.player_name, positions: [] })) };
+      return {
+        stops: [],
+        players: circuitStandings.map((s) => ({
+          player_id: s.player_id,
+          player_name: s.player_name,
+          positions: [],
+        })),
+      };
     }
 
     const stops: string[] = [];
@@ -68,9 +78,18 @@ export class CircuitService {
   /** Cumulative points after each stop. For chart: evolución de puntos acumulados. */
   static async getCircuitPointsEvolution(circuitId: number): Promise<CircuitPointsEvolution> {
     const tournaments = await DatabaseService.getCircuitTournaments(circuitId);
-    const circuitStandings = await DatabaseService.getCircuitStandings(circuitId);
+    const circuitStandings = (await DatabaseService.getCircuitStandings(
+      circuitId
+    )) as CircuitStandings[];
     if (tournaments.length === 0) {
-      return { stops: [], players: circuitStandings.map((s) => ({ player_id: s.player_id, player_name: s.player_name, pointsCumulative: [] })) };
+      return {
+        stops: [],
+        players: circuitStandings.map((s) => ({
+          player_id: s.player_id,
+          player_name: s.player_name,
+          pointsCumulative: [],
+        })),
+      };
     }
 
     const stops: string[] = [];
@@ -118,8 +137,8 @@ export class CircuitService {
   }
 
   static async generateCircuitExcel(circuitId: number): Promise<any> {
-    const circuit = await DatabaseService.getCircuitById(circuitId);
-    const standings = await DatabaseService.getCircuitStandings(circuitId);
+    // const circuit = await DatabaseService.getCircuitById(circuitId);
+    const standings = (await DatabaseService.getCircuitStandings(circuitId)) as CircuitStandings[];
 
     const headers = ['Posición', 'Jugador', 'Puntos Totales', 'Torneos Jugados', 'Victorias'];
     const rows = standings.map((s, index) => [
@@ -142,7 +161,7 @@ export class CircuitService {
   }
 
   static async generateCircuitCSV(circuitId: number): Promise<any> {
-    const standings = await DatabaseService.getCircuitStandings(circuitId);
+    const standings = (await DatabaseService.getCircuitStandings(circuitId)) as CircuitStandings[];
 
     const headers = ['Posición', 'Jugador', 'Puntos Totales', 'Torneos Jugados', 'Victorias'];
     const rows = standings.map((s, index) => ({
@@ -156,6 +175,3 @@ export class CircuitService {
     return { headers, rows };
   }
 }
-
-
-

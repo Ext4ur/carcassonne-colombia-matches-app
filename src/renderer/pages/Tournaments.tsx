@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatabaseService } from '../services/database';
 import { Tournament, TournamentConfig } from '../types/tournament';
@@ -20,7 +21,9 @@ import { useNotifications } from '../contexts/NotificationContext';
 
 type WizardStep = 'form' | 'config' | 'registration' | null;
 
-type ConfigDraft = Partial<TournamentConfig> & { bye_selection?: 'worst' | 'random' | 'round_robin' };
+type ConfigDraft = Partial<TournamentConfig> & {
+  bye_selection?: 'worst' | 'random' | 'round_robin';
+};
 
 export default function Tournaments() {
   const navigate = useNavigate();
@@ -38,12 +41,7 @@ export default function Tournaments() {
   const [searchTerm, setSearchTerm] = useState('');
   const formRef = useRef<TournamentFormRef>(null);
 
-  useEffect(() => {
-    loadTournaments();
-    DatabaseService.getAllPlaces().then(setPlaces).catch(() => {});
-  }, []);
-
-  const loadTournaments = async () => {
+  const loadTournaments = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await DatabaseService.getAllTournaments();
@@ -54,7 +52,14 @@ export default function Tournaments() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [addNotification]);
+
+  useEffect(() => {
+    loadTournaments();
+    DatabaseService.getAllPlaces()
+      .then(setPlaces)
+      .catch(() => {});
+  }, [loadTournaments]);
 
   const handleCreateTournament = (mode: 'quick' | 'advanced') => {
     setMode(mode);
@@ -100,11 +105,18 @@ export default function Tournaments() {
   };
 
   /** Config submit: no DB write, store draft and go to registration. */
-  const handleConfigSubmit = (configData: Partial<TournamentConfig> & { bye_selection?: 'worst' | 'random' | 'round_robin'; player_display_mode?: 'per_player' | 'names_only' | 'usernames_only' }) => {
+  const handleConfigSubmit = (
+    configData: Partial<TournamentConfig> & {
+      bye_selection?: 'worst' | 'random' | 'round_robin';
+      player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
+    }
+  ) => {
     setConfigDraft({
       avoid_rematches: configData.avoid_rematches ?? true,
       tiebreak_criteria: configData.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
-      scoring_system: configData.scoring_system || getDefaultScoringSystem(tournamentDraft!.players_per_match || 2),
+      scoring_system:
+        configData.scoring_system ||
+        getDefaultScoringSystem(tournamentDraft!.players_per_match || 2),
       bye_selection: configData.bye_selection || 'worst',
       player_display_mode: configData.player_display_mode ?? 'per_player',
     });
@@ -133,7 +145,9 @@ export default function Tournaments() {
           tournament_id: tournamentId,
           avoid_rematches: configDraft.avoid_rematches ?? true,
           tiebreak_criteria: configDraft.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
-          scoring_system: configDraft.scoring_system || getDefaultScoringSystem(tournamentDraft.players_per_match || 2),
+          scoring_system:
+            configDraft.scoring_system ||
+            getDefaultScoringSystem(tournamentDraft.players_per_match || 2),
           bye_selection: configDraft.bye_selection || 'worst',
           player_display_mode: configDraft.player_display_mode ?? 'per_player',
         });
@@ -181,13 +195,12 @@ export default function Tournaments() {
     {
       key: 'name',
       header: 'Nombre',
-      render: (tournament) =>
-        `${tournament.place_name ?? '?'} - ${tournament.name}`,
+      render: (tournament) => `${tournament.place_name ?? '?'} - ${tournament.name}`,
     },
     {
       key: 'type',
       header: 'Tipo',
-      render: (tournament) => tournament.type === 'circuit' ? 'Circuito' : 'Clasificatorio',
+      render: (tournament) => (tournament.type === 'circuit' ? 'Circuito' : 'Clasificatorio'),
     },
     {
       key: 'circuit_name',
@@ -216,18 +229,10 @@ export default function Tournaments() {
       header: 'Acciones',
       render: (tournament) => (
         <div className="flex space-x-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => handleViewTournament(tournament)}
-          >
+          <Button variant="primary" size="sm" onClick={() => handleViewTournament(tournament)}>
             Ver
           </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => handleDelete(tournament)}
-          >
+          <Button variant="danger" size="sm" onClick={() => handleDelete(tournament)}>
             Eliminar
           </Button>
         </div>
@@ -271,9 +276,7 @@ export default function Tournaments() {
             <Button variant="secondary" onClick={() => handleCreateTournament('quick')}>
               Torneo Rápido
             </Button>
-            <Button onClick={() => handleCreateTournament('advanced')}>
-              Nuevo Torneo
-            </Button>
+            <Button onClick={() => handleCreateTournament('advanced')}>Nuevo Torneo</Button>
           </div>
         </div>
 
@@ -320,9 +323,7 @@ export default function Tournaments() {
               <Button variant="secondary" onClick={handleCancelWizard}>
                 Cancelar
               </Button>
-              <Button onClick={() => formRef.current?.submit()}>
-                Continuar
-              </Button>
+              <Button onClick={() => formRef.current?.submit()}>Continuar</Button>
             </>
           ) : wizardStep === 'config' ? (
             <Button variant="secondary" onClick={handleCancelWizard}>

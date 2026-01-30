@@ -19,6 +19,3 @@ export interface PlayerWithStats extends Player {
   total_wins?: number;
   total_points?: number;
 }
-
-
-

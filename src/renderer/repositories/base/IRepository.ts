@@ -2,6 +2,7 @@
  * Interface base para todos los repositorios
  * Define las operaciones CRUD estándar que todos los repositorios deben implementar
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export interface IRepository<T, TCreate = Partial<T>, TUpdate = Partial<T>> {
   /**
    * Obtener todos los registros, opcionalmente filtrados

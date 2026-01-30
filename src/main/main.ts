@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { app, BrowserWindow, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -18,7 +19,7 @@ function createWindow() {
   const preloadPath = path.join(__dirname, '../preload/preload.js');
   console.log('Preload path:', preloadPath);
   console.log('Preload exists:', fs.existsSync(preloadPath));
-  
+
   const rendererPath = path.join(__dirname, '../renderer/index.html');
   console.log('Renderer path:', rendererPath);
   console.log('Renderer exists:', fs.existsSync(rendererPath));
@@ -69,7 +70,7 @@ app.whenReady().then(async () => {
     console.log('__dirname:', __dirname);
     console.log('app.getAppPath():', app.getAppPath());
     console.log('process.resourcesPath:', process.resourcesPath);
-    
+
     // Initialize database
     console.log('Initializing database...');
     try {
@@ -77,15 +78,18 @@ app.whenReady().then(async () => {
       console.log('Database initialized successfully');
     } catch (dbError: any) {
       console.error('Database initialization error:', dbError);
-      dialog.showErrorBox('Error de Base de Datos', `No se pudo inicializar la base de datos: ${dbError?.message || String(dbError)}\n\nEsto puede deberse a un problema con better-sqlite3.`);
+      dialog.showErrorBox(
+        'Error de Base de Datos',
+        `No se pudo inicializar la base de datos: ${dbError?.message || String(dbError)}\n\nEsto puede deberse a un problema con better-sqlite3.`
+      );
       throw dbError;
     }
-    
+
     // Setup IPC handlers
     console.log('Setting up IPC handlers...');
     setupIpcHandlers();
     console.log('IPC handlers set up');
-    
+
     // Create window
     console.log('Creating window...');
     createWindow();
@@ -100,7 +104,10 @@ app.whenReady().then(async () => {
     console.error('Error during app initialization:', error);
     console.error('Error stack:', error?.stack);
     // Show error dialog
-    dialog.showErrorBox('Error de Inicialización', `No se pudo inicializar la aplicación: ${error?.message || String(error)}\n\nPor favor, revisa la consola para más detalles.`);
+    dialog.showErrorBox(
+      'Error de Inicialización',
+      `No se pudo inicializar la aplicación: ${error?.message || String(error)}\n\nPor favor, revisa la consola para más detalles.`
+    );
   }
 });
 
@@ -109,4 +116,3 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
-

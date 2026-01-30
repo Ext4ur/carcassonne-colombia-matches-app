@@ -20,6 +20,3 @@ export function calculateNumberOfRounds(numPlayers: number): number {
 export function getMaxPlayersForRounds(rounds: number): number {
   return Math.pow(2, rounds);
 }
-
-
-

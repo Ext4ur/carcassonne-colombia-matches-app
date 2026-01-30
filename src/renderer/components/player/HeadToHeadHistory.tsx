@@ -14,28 +14,35 @@ export default function HeadToHeadHistory({ player1, player2, onClose }: HeadToH
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const loadHeadToHead = async () => {
+      if (!player1.id || !player2.id) return;
+      try {
+        setIsLoading(true);
+        const h2h = await HeadToHeadService.getHeadToHead(player1.id, player2.id);
+        setRecord(h2h);
+      } catch (error) {
+        console.error('Error loading head-to-head:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     loadHeadToHead();
   }, [player1.id, player2.id]);
 
-  const loadHeadToHead = async () => {
-    if (!player1.id || !player2.id) return;
-    try {
-      setIsLoading(true);
-      const h2h = await HeadToHeadService.getHeadToHead(player1.id, player2.id);
-      setRecord(h2h);
-    } catch (error) {
-      console.error('Error loading head-to-head:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Enfrentamiento: ${player1.name} vs ${player2.name}`} size="xl">
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={`Enfrentamiento: ${player1.name} vs ${player2.name}`}
+      size="xl"
+    >
       {isLoading ? (
         <div className="text-center py-8">Cargando...</div>
       ) : !record ? (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400">No hay enfrentamientos registrados</div>
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+          No hay enfrentamientos registrados
+        </div>
       ) : (
         <div className="space-y-6">
           {/* Summary */}
@@ -79,11 +86,21 @@ export default function HeadToHeadHistory({ player1, player2, onClose }: HeadToH
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-800">
                     <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Torneo</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Ronda</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">{player1.name}</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">{player2.name}</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Resultado</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Torneo
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Ronda
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        {player1.name}
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        {player2.name}
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Resultado
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -118,5 +135,3 @@ export default function HeadToHeadHistory({ player1, player2, onClose }: HeadToH
     </Modal>
   );
 }
-
-

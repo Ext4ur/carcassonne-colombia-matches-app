@@ -19,6 +19,3 @@ export interface CircuitStandings {
   tournaments_played: number;
   wins: number;
 }
-
-
-

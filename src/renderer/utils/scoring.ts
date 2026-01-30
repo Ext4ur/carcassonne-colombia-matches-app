@@ -30,7 +30,11 @@ export function calculatePositions(
   });
 
   // Special case: if only 2 players and they're tied, first player gets position 2
-  if (results.length === 2 && sorted[0].points === sorted[1].points && firstPlayerId !== undefined) {
+  if (
+    results.length === 2 &&
+    sorted[0].points === sorted[1].points &&
+    firstPlayerId !== undefined
+  ) {
     const positioned: Array<{ player_id: number; position: number; points: number }> = [];
     for (const result of sorted) {
       if (result.player_id === firstPlayerId) {
@@ -53,14 +57,14 @@ export function calculatePositions(
   // Assign positions normally
   let currentPosition = 1;
   const positioned: Array<{ player_id: number; position: number; points: number }> = [];
-  
+
   for (let i = 0; i < sorted.length; i++) {
     const result = sorted[i];
     // If this player has different points than previous, update position
     if (i > 0 && sorted[i - 1].points !== result.points) {
       currentPosition = i + 1;
     }
-    
+
     positioned.push({
       player_id: result.player_id,
       position: currentPosition,
@@ -70,4 +74,3 @@ export function calculatePositions(
 
   return positioned;
 }
-

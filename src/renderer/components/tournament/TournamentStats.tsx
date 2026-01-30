@@ -1,4 +1,4 @@
-import React from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Tournament, PlayerStanding } from '../../types/tournament';
 import { Bar } from 'react-chartjs-2';
 import {
@@ -11,14 +11,7 @@ import {
   Legend,
 } from 'chart.js';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 interface TournamentStatsProps {
   tournament: Tournament;
@@ -29,7 +22,11 @@ interface TournamentStatsProps {
   tiebreakCriteria: any[];
 }
 
-export default function TournamentStats({ tournament, standingsForPodium, standings, tiebreakCriteria }: TournamentStatsProps) {
+export default function TournamentStats({
+  standingsForPodium,
+  standings,
+  tiebreakCriteria,
+}: TournamentStatsProps) {
   const top4 = standingsForPodium.slice(0, 4);
 
   // Get enabled criteria (excluding wins which is already shown)
@@ -45,7 +42,8 @@ export default function TournamentStats({ tournament, standingsForPodium, standi
       const value = s.tiebreak_values[criterionId];
       return value !== undefined && value !== null ? value : 0;
     });
-    const color = CHART_COLORS[enabledCriteria.findIndex((c) => c.id === criterionId) % CHART_COLORS.length];
+    const color =
+      CHART_COLORS[enabledCriteria.findIndex((c) => c.id === criterionId) % CHART_COLORS.length];
     return {
       labels,
       datasets: [
@@ -64,13 +62,13 @@ export default function TournamentStats({ tournament, standingsForPodium, standi
   const getCriterionLabel = (criterionId: string): string => {
     const criterion = tiebreakCriteria.find((c) => c.id === criterionId);
     if (!criterion) return criterionId;
-    
+
     const labels: { [key: string]: string } = {
-      'wins': 'Victorias',
-      'opponent_points_drop_worst': 'Puntos Oponentes (-peor)',
-      'opponent_points_drop_best_worst': 'Puntos Oponentes (-mejor/peor)',
-      'head_to_head': 'Enfrentamiento Directo',
-      'point_difference': 'Diferencia de Puntos',
+      wins: 'Victorias',
+      opponent_points_drop_worst: 'Puntos Oponentes (-peor)',
+      opponent_points_drop_best_worst: 'Puntos Oponentes (-mejor/peor)',
+      head_to_head: 'Enfrentamiento Directo',
+      point_difference: 'Diferencia de Puntos',
     };
     return labels[criterionId] || criterion.name;
   };
@@ -101,9 +99,7 @@ export default function TournamentStats({ tournament, standingsForPodium, standi
                 <span className="text-2xl font-bold">🥈 2</span>
               </div>
               <p className="font-medium">{top4[1].player_name}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {top4[1].wins} 🏆
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{top4[1].wins} 🏆</p>
             </div>
           )}
           {top4[0] && (
@@ -112,9 +108,7 @@ export default function TournamentStats({ tournament, standingsForPodium, standi
                 <span className="text-2xl font-bold">🥇 1</span>
               </div>
               <p className="font-medium">{top4[0].player_name}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {top4[0].wins} 🏆
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{top4[0].wins} 🏆</p>
             </div>
           )}
           {top4[2] && (
@@ -123,9 +117,7 @@ export default function TournamentStats({ tournament, standingsForPodium, standi
                 <span className="text-2xl font-bold">🥉 3</span>
               </div>
               <p className="font-medium">{top4[2].player_name}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {top4[2].wins} 🏆
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{top4[2].wins} 🏆</p>
             </div>
           )}
           {top4[3] && (
@@ -134,9 +126,7 @@ export default function TournamentStats({ tournament, standingsForPodium, standi
                 <span className="text-xl font-bold">4</span>
               </div>
               <p className="font-medium text-sm">{top4[3].player_name}</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                {top4[3].wins} 🏆
-              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">{top4[3].wins} 🏆</p>
             </div>
           )}
         </div>

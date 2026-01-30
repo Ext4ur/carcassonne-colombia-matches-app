@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Caché en memoria para lecturas de torneo (getTournamentById, getTournamentRounds, getTournamentConfig)
  * y listados (getAllPlayers, getAllCircuits, getAllTournaments).

@@ -24,14 +24,33 @@ class ErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', fontFamily: 'Arial, sans-serif', padding: '20px', textAlign: 'center' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100vh',
+            flexDirection: 'column',
+            fontFamily: 'Arial, sans-serif',
+            padding: '20px',
+            textAlign: 'center',
+          }}
+        >
           <h1 style={{ color: '#dc2626', marginBottom: '20px' }}>Error en la aplicación</h1>
           <p style={{ color: '#666', maxWidth: '600px', marginBottom: '10px' }}>
             {this.state.error?.message || 'Ocurrió un error inesperado'}
           </p>
-          <button 
-            onClick={() => window.location.reload()} 
-            style={{ padding: '10px 20px', marginTop: '20px', cursor: 'pointer', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px' }}
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '10px 20px',
+              marginTop: '20px',
+              cursor: 'pointer',
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+            }}
           >
             Recargar aplicación
           </button>
@@ -71,19 +90,19 @@ if (!window.electronAPI) {
 } else {
   console.log('electronAPI is available:', typeof window.electronAPI);
   console.log('Starting React app...');
-  
+
   try {
     const root = document.getElementById('root');
     if (!root) {
       throw new Error('Root element not found');
     }
-    
+
     ReactDOM.createRoot(root).render(
       <React.StrictMode>
         <ErrorBoundary>
           <App />
         </ErrorBoundary>
-      </React.StrictMode>,
+      </React.StrictMode>
     );
     console.log('React app rendered successfully');
   } catch (error) {
@@ -102,6 +121,3 @@ if (!window.electronAPI) {
     `;
   }
 }
-
-
-

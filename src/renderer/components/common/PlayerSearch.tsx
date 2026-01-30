@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { DatabaseService } from '../../services/database';
 import { Player } from '../../types/player';
 import Input from './Input';
@@ -9,7 +9,11 @@ interface PlayerSearchProps {
   placeholder?: string;
 }
 
-export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 'Buscar jugador...' }: PlayerSearchProps) {
+export default function PlayerSearch({
+  onSelect,
+  excludeIds = [],
+  placeholder = 'Buscar jugador...',
+}: PlayerSearchProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<Player[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -27,6 +31,21 @@ export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const searchPlayers = useCallback(
+    async (term: string) => {
+      try {
+        const players = await DatabaseService.searchPlayers(term);
+        const filtered = players.filter((p) => !excludeIds.includes(p.id!));
+        setResults(filtered);
+        setShowResults(true);
+        setSelectedIndex(-1);
+      } catch (error) {
+        console.error('Error searching players:', error);
+      }
+    },
+    [excludeIds]
+  );
+
   useEffect(() => {
     if (searchTerm.length >= 2) {
       searchPlayers(searchTerm);
@@ -34,19 +53,7 @@ export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 
       setResults([]);
       setShowResults(false);
     }
-  }, [searchTerm]);
-
-  const searchPlayers = async (term: string) => {
-    try {
-      const players = await DatabaseService.searchPlayers(term);
-      const filtered = players.filter((p) => !excludeIds.includes(p.id!));
-      setResults(filtered);
-      setShowResults(true);
-      setSelectedIndex(-1);
-    } catch (error) {
-      console.error('Error searching players:', error);
-    }
-  };
+  }, [searchTerm, searchPlayers]);
 
   const handleSelect = (player: Player) => {
     onSelect(player);
@@ -108,6 +115,3 @@ export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 
     </div>
   );
 }
-
-
-

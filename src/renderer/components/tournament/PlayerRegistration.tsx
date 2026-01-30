@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect, useCallback } from 'react';
 import { DatabaseService } from '../../services/database';
 import { Player } from '../../types/player';
 import Table from '../common/Table';
@@ -45,22 +46,7 @@ export default function PlayerRegistration({
   const isDraftMode = tournamentId === null;
   const players = isDraftMode ? draftPlayers : dbPlayers;
 
-  useEffect(() => {
-    if (!isDraftMode && tournamentId) {
-      loadPlayers();
-    }
-  }, [tournamentId, isDraftMode]);
-
-  useEffect(() => {
-    if (players.length >= 2) {
-      const rounds = calculateNumberOfRounds(players.length);
-      setCalculatedRounds(rounds);
-    } else {
-      setCalculatedRounds(1);
-    }
-  }, [players.length]);
-
-  const loadPlayers = async () => {
+  const loadPlayers = useCallback(async () => {
     if (!tournamentId) return;
     try {
       setIsLoading(true);
@@ -72,7 +58,22 @@ export default function PlayerRegistration({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (!isDraftMode && tournamentId) {
+      loadPlayers();
+    }
+  }, [tournamentId, isDraftMode, loadPlayers]);
+
+  useEffect(() => {
+    if (players.length >= 2) {
+      const rounds = calculateNumberOfRounds(players.length);
+      setCalculatedRounds(rounds);
+    } else {
+      setCalculatedRounds(1);
+    }
+  }, [players.length]);
 
   const handleSelectPlayer = async (player: Player) => {
     if (!player.id) return;
@@ -164,11 +165,7 @@ export default function PlayerRegistration({
       key: 'actions',
       header: 'Acciones',
       render: (player) => (
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => handleRemovePlayer(player)}
-        >
+        <Button variant="danger" size="sm" onClick={() => handleRemovePlayer(player)}>
           Eliminar
         </Button>
       ),
@@ -190,18 +187,14 @@ export default function PlayerRegistration({
               placeholder="Buscar jugador existente..."
             />
           </div>
-          <Button onClick={() => setIsNewPlayerModalOpen(true)}>
-            Nuevo Jugador
-          </Button>
+          <Button onClick={() => setIsNewPlayerModalOpen(true)}>Nuevo Jugador</Button>
         </div>
       </div>
 
       {/* Table section: fixed max height so only this area scrolls, modal stays same size */}
       <div className="flex-none flex flex-col overflow-hidden relative z-0 min-h-0">
         <div className="flex justify-between items-center mb-2 flex-none">
-          <h3 className="text-lg font-medium">
-            Jugadores Inscritos ({players.length})
-          </h3>
+          <h3 className="text-lg font-medium">Jugadores Inscritos ({players.length})</h3>
           {players.length >= 2 && (
             <div className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
               <span className="text-sm font-medium text-primary-800 dark:text-primary-200">
@@ -262,9 +255,7 @@ export default function PlayerRegistration({
             <Button variant="secondary" onClick={() => setIsNewPlayerModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleCreateAndAdd}>
-              Crear e Inscribir
-            </Button>
+            <Button onClick={handleCreateAndAdd}>Crear e Inscribir</Button>
           </>
         }
       >
@@ -313,6 +304,3 @@ export default function PlayerRegistration({
     </div>
   );
 }
-
-
-

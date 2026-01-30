@@ -1,5 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
-import { PlayerStatistics, PlayerStatsService, PlayerStatsFilters, PlayerStatsRaw, computeStatsFromResults } from '../../services/playerStats';
+import {
+  PlayerStatistics,
+  PlayerStatsService,
+  PlayerStatsFilters,
+  PlayerStatsRaw,
+  computeStatsFromResults,
+} from '../../services/playerStats';
 import { Player } from '../../types/player';
 import { Place } from '../../types/place';
 import { DatabaseService } from '../../services/database';
@@ -58,25 +64,27 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
         if (!cancelled) setIsLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [player.id]);
 
   useEffect(() => {
-    DatabaseService.getAllPlaces().then(setPlaces).catch(() => {});
+    DatabaseService.getAllPlaces()
+      .then(setPlaces)
+      .catch(() => {});
   }, []);
-
-  const filters: PlayerStatsFilters = {
-    tournamentIds: selectedTournamentIds.length ? selectedTournamentIds : undefined,
-    circuitIds: selectedCircuitIds.length ? selectedCircuitIds : undefined,
-    placeIds: selectedPlaceIds.length ? selectedPlaceIds : undefined,
-  };
 
   // Filter client-side: no extra queries when user changes filters
   const stats = useMemo<PlayerStatistics | null>(() => {
     if (!raw) return null;
+    const filters: PlayerStatsFilters = {
+      tournamentIds: selectedTournamentIds.length ? selectedTournamentIds : undefined,
+      circuitIds: selectedCircuitIds.length ? selectedCircuitIds : undefined,
+      placeIds: selectedPlaceIds.length ? selectedPlaceIds : undefined,
+    };
     return computeStatsFromResults(raw.player, raw, filters);
   }, [raw, selectedTournamentIds, selectedCircuitIds, selectedPlaceIds]);
-
 
   if (isLoading) {
     return (
@@ -89,7 +97,9 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
   if (!stats) {
     return (
       <div className="p-6">
-        <div className="text-center text-gray-500 dark:text-gray-400">No hay estadísticas disponibles</div>
+        <div className="text-center text-gray-500 dark:text-gray-400">
+          No hay estadísticas disponibles
+        </div>
       </div>
     );
   }
@@ -152,7 +162,9 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
       {/* Filters */}
       {(tournamentOptions.length > 0 || circuitOptions.length > 1 || placeOptions.length > 0) && (
         <div className="card grid grid-cols-1 md:grid-cols-2 gap-4">
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">Filtros</h3>
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">
+            Filtros
+          </h3>
           {tournamentOptions.length > 0 && (
             <MultiSelect
               label="Por torneo"
@@ -274,7 +286,10 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
           />
           <div className="mt-4 space-y-2">
             {stats.recentTournaments.map((t, index) => (
-              <div key={index} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded">
+              <div
+                key={index}
+                className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded"
+              >
                 <span className="font-medium">{t.tournament.name}</span>
                 <span className="text-sm text-gray-600 dark:text-gray-400">
                   Posición #{t.position} • {t.points.toFixed(2)} pts
@@ -287,5 +302,3 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
     </div>
   );
 }
-
-

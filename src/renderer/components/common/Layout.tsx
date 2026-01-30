@@ -27,7 +27,9 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex justify-between items-center h-16 gap-4">
             <div className="flex min-w-0 flex-1 items-center">
               <div className="flex-shrink-0 flex items-center">
-                <span className="text-2xl font-bold text-primary-600 dark:text-primary-400">Carcassonne Tournament Manager</span>
+                <span className="text-2xl font-bold text-primary-600 dark:text-primary-400">
+                  Carcassonne Tournament Manager
+                </span>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8 sm:flex-1 sm:min-w-0 sm:overflow-x-auto sm:justify-end">
                 {navItems.map((item) => (
@@ -58,11 +60,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </div>
       </nav>
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {children}
-      </main>
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">{children}</main>
     </div>
   );
 }
-
-

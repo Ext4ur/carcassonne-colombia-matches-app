@@ -1,6 +1,6 @@
 /**
  * Configuración de Supabase
- * 
+ *
  * Para usar Supabase, necesitas:
  * 1. Crear un proyecto en https://supabase.com
  * 2. Obtener la URL y la publishable key desde Settings > API

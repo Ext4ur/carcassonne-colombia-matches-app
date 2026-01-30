@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect, useCallback } from 'react';
+
 import { DatabaseService } from '../services/database';
-import { CircuitService, CircuitPositionEvolution, CircuitPointsEvolution } from '../services/circuit';
+import {
+  CircuitService,
+  CircuitPositionEvolution,
+  CircuitPointsEvolution,
+} from '../services/circuit';
 import { Circuit, CircuitStandings } from '../types/circuit';
 import { Place } from '../types/place';
 import { formatDateForDisplay } from '../utils/dateUtils';
@@ -38,7 +43,7 @@ ChartJS.register(
 );
 
 export default function Circuits() {
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
   const { addNotification } = useNotifications();
   const [circuits, setCircuits] = useState<Circuit[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,7 +53,9 @@ export default function Circuits() {
   const [standings, setStandings] = useState<CircuitStandings[]>([]);
   const [positionEvolution, setPositionEvolution] = useState<CircuitPositionEvolution | null>(null);
   const [pointsEvolution, setPointsEvolution] = useState<CircuitPointsEvolution | null>(null);
-  const [circuitTournaments, setCircuitTournaments] = useState<Array<{ id: number; name: string; place_id?: number; place_name?: string }>>([]);
+  const [circuitTournaments, setCircuitTournaments] = useState<
+    Array<{ id: number; name: string; place_id?: number; place_name?: string }>
+  >([]);
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlaceIds, setSelectedPlaceIds] = useState<number[]>([]);
   const [selectedStopIds, setSelectedStopIds] = useState<number[]>([]);
@@ -64,11 +71,7 @@ export default function Circuits() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    loadCircuits();
-  }, []);
-
-  const loadCircuits = async () => {
+  const loadCircuits = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await DatabaseService.getAllCircuits();
@@ -79,7 +82,11 @@ export default function Circuits() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [addNotification]);
+
+  useEffect(() => {
+    loadCircuits();
+  }, [loadCircuits]);
 
   const loadStandings = async (circuitId: number) => {
     try {
@@ -117,7 +124,8 @@ export default function Circuits() {
 
   const handleFinalizeCircuit = async (circuit: Circuit) => {
     if (!circuit.id) return;
-    if (!confirm(`¿Finalizar el circuito "${circuit.name}"? No se podrán agregar más torneos.`)) return;
+    if (!confirm(`¿Finalizar el circuito "${circuit.name}"? No se podrán agregar más torneos.`))
+      return;
     try {
       setIsLoading(true);
       await DatabaseService.updateCircuit(circuit.id, { status: 'finalized' });
@@ -256,7 +264,10 @@ export default function Circuits() {
       if (result.success) {
         addNotification({ message: 'Reporte generado exitosamente', type: 'success' });
       } else if (!result.canceled) {
-        addNotification({ message: 'Error al generar el reporte: ' + (result.error || 'Error desconocido'), type: 'error' });
+        addNotification({
+          message: 'Error al generar el reporte: ' + (result.error || 'Error desconocido'),
+          type: 'error',
+        });
       }
     } catch (error) {
       console.error('Error generating report:', error);
@@ -307,18 +318,10 @@ export default function Circuits() {
       header: 'Acciones',
       render: (circuit) => (
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => handleViewStandings(circuit)}
-          >
+          <Button variant="primary" size="sm" onClick={() => handleViewStandings(circuit)}>
             Ver
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => handleOpenModal(circuit)}
-          >
+          <Button variant="secondary" size="sm" onClick={() => handleOpenModal(circuit)}>
             Editar
           </Button>
           {circuit.status !== 'finalized' && (
@@ -331,11 +334,7 @@ export default function Circuits() {
               Finalizar
             </Button>
           )}
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => handleDelete(circuit)}
-          >
+          <Button variant="danger" size="sm" onClick={() => handleDelete(circuit)}>
             Eliminar
           </Button>
         </div>
@@ -425,10 +424,17 @@ export default function Circuits() {
   // Stop indices: by place filter and/or by parada (stop) filter.
   // When the filter matches zero tournaments, stopIndices is [] - we treat that as "no filter" for consistency.
   let stopIndices: number[] | null = null;
-  if (circuitTournaments.length > 0 && (selectedPlaceIds.length > 0 || selectedStopIds.length > 0)) {
+  if (
+    circuitTournaments.length > 0 &&
+    (selectedPlaceIds.length > 0 || selectedStopIds.length > 0)
+  ) {
     const indices = circuitTournaments
       .map((t, i) => {
-        if (selectedPlaceIds.length > 0 && (t.place_id == null || !selectedPlaceIds.includes(t.place_id))) return -1;
+        if (
+          selectedPlaceIds.length > 0 &&
+          (t.place_id == null || !selectedPlaceIds.includes(t.place_id))
+        )
+          return -1;
         if (selectedStopIds.length > 0 && !selectedStopIds.includes(t.id)) return -1;
         return i;
       })
@@ -455,9 +461,7 @@ export default function Circuits() {
         }
         filteredTotals.set(p.player_id, total);
         const posData = positionEvolution.players.find((x) => x.player_id === p.player_id);
-        const wins = posData
-          ? stopIndices!.filter((i) => posData.positions[i] === 1).length
-          : 0;
+        const wins = posData ? stopIndices!.filter((i) => posData.positions[i] === 1).length : 0;
         filteredWins.set(p.player_id, wins);
       }
       base = standings
@@ -486,9 +490,7 @@ export default function Circuits() {
             : positionEvolution.players
           ).map((p) => ({
             ...p,
-            positions: hasStopFilter
-              ? stopIndices!.map((i) => p.positions[i])
-              : p.positions,
+            positions: hasStopFilter ? stopIndices!.map((i) => p.positions[i]) : p.positions,
           })),
         }
       : positionEvolution;
@@ -604,10 +606,14 @@ export default function Circuits() {
           />
           {editingCircuit && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Estado
+              </label>
               <select
                 value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'finalized' })}
+                onChange={(e) =>
+                  setFormData({ ...formData, status: e.target.value as 'active' | 'finalized' })
+                }
                 className="input w-full"
               >
                 <option value="active">Activo</option>
@@ -661,11 +667,15 @@ export default function Circuits() {
             {/* Filters */}
             {(circuitTournaments.length > 0 || standings.length > 0 || places.length > 0) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">Filtros</h3>
+                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">
+                  Filtros
+                </h3>
                 {places.length > 0 && (
                   <MultiSelect
                     label="Por lugar"
-                    options={places.map((p) => ({ value: p.id, label: p.name }))}
+                    options={places
+                      .filter((p) => p.id !== undefined)
+                      .map((p) => ({ value: p.id!, label: p.name }))}
                     value={selectedPlaceIds}
                     onChange={(v) => setSelectedPlaceIds(v as number[])}
                     placeholder="Todos los lugares"
@@ -698,23 +708,41 @@ export default function Circuits() {
                 <div className="flex flex-wrap gap-4 justify-center items-end">
                   {standings[1] && (
                     <div className="flex flex-col items-center order-2 md:order-1">
-                      <span className="text-2xl" aria-hidden>🥈</span>
-                      <div className="font-bold text-gray-700 dark:text-gray-300">{standings[1].player_name}</div>
-                      <div className="text-sm text-gray-500">{standings[1].total_points.toFixed(2)} pts</div>
+                      <span className="text-2xl" aria-hidden>
+                        🥈
+                      </span>
+                      <div className="font-bold text-gray-700 dark:text-gray-300">
+                        {standings[1].player_name}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {standings[1].total_points.toFixed(2)} pts
+                      </div>
                     </div>
                   )}
                   {standings[0] && (
                     <div className="flex flex-col items-center order-1 md:order-2">
-                      <span className="text-3xl" aria-hidden>🥇</span>
-                      <div className="font-bold text-gray-900 dark:text-white">{standings[0].player_name}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">{standings[0].total_points.toFixed(2)} pts</div>
+                      <span className="text-3xl" aria-hidden>
+                        🥇
+                      </span>
+                      <div className="font-bold text-gray-900 dark:text-white">
+                        {standings[0].player_name}
+                      </div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {standings[0].total_points.toFixed(2)} pts
+                      </div>
                     </div>
                   )}
                   {standings[2] && (
                     <div className="flex flex-col items-center order-3">
-                      <span className="text-2xl" aria-hidden>🥉</span>
-                      <div className="font-bold text-gray-700 dark:text-gray-300">{standings[2].player_name}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">{standings[2].total_points.toFixed(2)} pts</div>
+                      <span className="text-2xl" aria-hidden>
+                        🥉
+                      </span>
+                      <div className="font-bold text-gray-700 dark:text-gray-300">
+                        {standings[2].player_name}
+                      </div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {standings[2].total_points.toFixed(2)} pts
+                      </div>
                     </div>
                   )}
                 </div>

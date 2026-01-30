@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DatabaseService } from '../services/database';
 import { City } from '../types/city';
 import Table from '../components/common/Table';
@@ -17,11 +17,7 @@ export default function Cities() {
   const [formData, setFormData] = useState({ name: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    loadCities();
-  }, []);
-
-  const loadCities = async () => {
+  const loadCities = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await DatabaseService.getAllCities();
@@ -32,7 +28,11 @@ export default function Cities() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [addNotification]);
+
+  useEffect(() => {
+    loadCities();
+  }, [loadCities]);
 
   const handleOpenModal = (city?: City) => {
     if (city) {

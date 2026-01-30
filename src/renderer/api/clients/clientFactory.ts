@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { IApiClient } from './IApiClient';
 import { SqliteClient } from './SqliteClient';
 import { SupabaseClient } from './SupabaseClient';
-import { DB_CONFIG } from '@constants';
+import { DB_CONFIG } from '../../constants';
 import { isSupabaseConfigured } from './supabaseConfig';
 import { incrementQueryCount } from './queryCounter';
 
@@ -15,7 +16,10 @@ function wrapWithQueryCounter(client: IApiClient): IApiClient & { _client?: IApi
       incrementQueryCount();
       return client.query<T>(sql, params);
     },
-    async execute(sql: string, params?: any[]): Promise<{ lastInsertRowid: number; changes: number }> {
+    async execute(
+      sql: string,
+      params?: any[]
+    ): Promise<{ lastInsertRowid: number; changes: number }> {
       incrementQueryCount();
       return client.execute(sql, params);
     },

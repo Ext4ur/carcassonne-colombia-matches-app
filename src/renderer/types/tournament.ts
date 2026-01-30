@@ -93,4 +93,3 @@ export interface PlayerStanding {
   wins: number;
   tiebreak_values: { [criterionId: string]: number };
 }
-

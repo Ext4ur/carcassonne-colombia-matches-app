@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DatabaseService } from '../services/database';
 import { Place } from '../types/place';
 import { City } from '../types/city';
@@ -21,18 +21,7 @@ export default function Places() {
   const [formData, setFormData] = useState({ name: '', city_id: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    loadPlaces();
-    DatabaseService.getAllCities().then(setCities).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!editingPlace && isModalOpen && cities.length > 0 && !formData.city_id) {
-      setFormData((prev) => ({ ...prev, city_id: cities[0].id!.toString() }));
-    }
-  }, [isModalOpen, editingPlace, cities]);
-
-  const loadPlaces = async () => {
+  const loadPlaces = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await DatabaseService.getAllPlaces();
@@ -43,7 +32,20 @@ export default function Places() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [addNotification]);
+
+  useEffect(() => {
+    loadPlaces();
+    DatabaseService.getAllCities()
+      .then(setCities)
+      .catch(() => {});
+  }, [loadPlaces]);
+
+  useEffect(() => {
+    if (!editingPlace && isModalOpen && cities.length > 0 && !formData.city_id) {
+      setFormData((prev) => ({ ...prev, city_id: cities[0].id!.toString() }));
+    }
+  }, [isModalOpen, editingPlace, cities, formData.city_id]);
 
   const handleOpenModal = (place?: Place) => {
     if (place) {
@@ -82,7 +84,10 @@ export default function Places() {
       setIsLoading(true);
       const cityId = formData.city_id ? Number(formData.city_id) : undefined;
       if (editingPlace?.id) {
-        await DatabaseService.updatePlace(editingPlace.id, { name: formData.name.trim(), city_id: cityId });
+        await DatabaseService.updatePlace(editingPlace.id, {
+          name: formData.name.trim(),
+          city_id: cityId,
+        });
         addNotification({ message: 'Lugar actualizado', type: 'success' });
       } else {
         if (cityId == null) {
@@ -108,7 +113,10 @@ export default function Places() {
   const handleDelete = async (place: Place) => {
     if (!place.id) return;
     if (place.name === DEFAULT_PLACE_NAME) {
-      addNotification({ message: `No se puede eliminar el lugar por defecto "${DEFAULT_PLACE_NAME}".`, type: 'error' });
+      addNotification({
+        message: `No se puede eliminar el lugar por defecto "${DEFAULT_PLACE_NAME}".`,
+        type: 'error',
+      });
       return;
     }
     if (!confirm(`¿Eliminar el lugar "${place.name}"?`)) return;
@@ -148,7 +156,11 @@ export default function Places() {
             size="sm"
             onClick={() => handleDelete(place)}
             disabled={place.name === DEFAULT_PLACE_NAME}
-            title={place.name === DEFAULT_PLACE_NAME ? 'No se puede eliminar el lugar por defecto' : undefined}
+            title={
+              place.name === DEFAULT_PLACE_NAME
+                ? 'No se puede eliminar el lugar por defecto'
+                : undefined
+            }
           >
             Eliminar
           </Button>

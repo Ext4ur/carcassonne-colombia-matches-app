@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DatabaseService } from '../../services/database';
-import { Match, Player } from '../../types/tournament';
+import { Match } from '../../types/tournament';
+import { Player } from '../../types/player';
 import { calculatePositions } from '../../utils/scoring';
 import Input from '../common/Input';
-import Select from '../common/Select';
+
 import Button from '../common/Button';
 
 interface MatchResultFormProps {
@@ -26,31 +27,17 @@ export default function MatchResultForm({
   const [players, setPlayers] = useState<Player[]>([]);
   const [results, setResults] = useState<Array<{ player_id: number; points: number }>>([]);
   const [firstPlayerId, setFirstPlayerId] = useState<number | undefined>(undefined);
-  const [calculatedPositions, setCalculatedPositions] = useState<Array<{ player_id: number; position: number; points: number }>>([]);
+  const [calculatedPositions, setCalculatedPositions] = useState<
+    Array<{ player_id: number; position: number; points: number }>
+  >([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  useEffect(() => {
-    if (match?.id) {
-      // Initialize with empty results structure immediately
-      // This allows inputs to render right away with valid values
-      const initialResults = Array(playersPerMatch).fill(null).map((_, i) => ({
-        player_id: 0,
-        points: 0,
-      }));
-      setResults(initialResults);
-      setIsLoadingData(true);
-      
-      // Then load actual data
-      loadData();
-    }
-  }, [match?.id, tournamentId, playersPerMatch]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoadingData(true);
     try {
       const [matchPlayers, existingResults, matchData] = await Promise.all([
-        DatabaseService.getMatchPlayers(match.id!),
+        DatabaseService.getMatchPlayers(match.id!) as Promise<Player[]>,
         DatabaseService.getMatchResults(match.id!),
         DatabaseService.query('SELECT first_player_id FROM matches WHERE id = ?', [match.id!]),
       ]);
@@ -93,9 +80,30 @@ export default function MatchResultForm({
     } finally {
       setIsLoadingData(false);
     }
-  };
+  }, [match.id, tournamentId, playersPerMatch]);
 
-  const updatePositions = (resultsData: Array<{ player_id: number; points: number }>, firstPlayer?: number) => {
+  useEffect(() => {
+    if (match?.id) {
+      // Initialize with empty results structure immediately
+      // This allows inputs to render right away with valid values
+      const initialResults = Array(playersPerMatch)
+        .fill(null)
+        .map(() => ({
+          player_id: 0,
+          points: 0,
+        }));
+      setResults(initialResults);
+      setIsLoadingData(true);
+
+      // Then load actual data
+      loadData();
+    }
+  }, [match?.id, tournamentId, playersPerMatch, loadData]);
+
+  const updatePositions = (
+    resultsData: Array<{ player_id: number; points: number }>,
+    firstPlayer?: number
+  ) => {
     const positions = calculatePositions(resultsData, firstPlayer);
     setCalculatedPositions(positions);
   };
@@ -145,7 +153,7 @@ export default function MatchResultForm({
       await DatabaseService.updateMatch(match.id!, {
         status: 'completed',
         completed_at: new Date().toISOString(),
-        first_player_id: firstPlayerId || null,
+        first_player_id: firstPlayerId,
       });
 
       onSave();
@@ -182,8 +190,8 @@ export default function MatchResultForm({
     <div className="space-y-4">
       <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <strong>Nota:</strong> Las posiciones se calculan automáticamente según los puntos. 
-          En caso de empate, el jugador que empezó la partida pierde.
+          <strong>Nota:</strong> Las posiciones se calculan automáticamente según los puntos. En
+          caso de empate, el jugador que empezó la partida pierde.
         </p>
       </div>
 
@@ -191,14 +199,17 @@ export default function MatchResultForm({
         const position = getPlayerPosition(result.player_id);
         const player = players.find((p) => p.id === result.player_id);
         return (
-          <div key={result.player_id || `result-${index}`} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg mb-3 bg-gray-50 dark:bg-gray-700/50">
+          <div
+            key={result.player_id || `result-${index}`}
+            className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg mb-3 bg-gray-50 dark:bg-gray-700/50"
+          >
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
                   Jugador
                 </label>
                 <div className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-                  {isLoadingData ? 'Cargando...' : (player?.name || 'Sin asignar')}
+                  {isLoadingData ? 'Cargando...' : player?.name || 'Sin asignar'}
                 </div>
               </div>
               <div>
@@ -207,9 +218,13 @@ export default function MatchResultForm({
                 </label>
                 <Input
                   type="number"
-                  value={result && result.points !== undefined && result.points !== null 
-                    ? (result.points === 0 ? '' : String(result.points))
-                    : ''}
+                  value={
+                    result && result.points !== undefined && result.points !== null
+                      ? result.points === 0
+                        ? ''
+                        : String(result.points)
+                      : ''
+                  }
                   disabled={isLoadingData}
                   onChange={(e) => {
                     const value = e.target.value;
@@ -266,7 +281,8 @@ export default function MatchResultForm({
       {tournamentStatus === 'completed' && (
         <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
           <p className="text-sm text-yellow-800 dark:text-yellow-200">
-            <strong>Nota:</strong> Este torneo está finalizado. Solo puedes ver los resultados, no puedes editarlos.
+            <strong>Nota:</strong> Este torneo está finalizado. Solo puedes ver los resultados, no
+            puedes editarlos.
           </p>
         </div>
       )}
@@ -288,4 +304,3 @@ export default function MatchResultForm({
     </div>
   );
 }
-

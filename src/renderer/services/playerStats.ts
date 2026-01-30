@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
 import { Player } from '../types/player';
 import { Tournament } from '../types/tournament';
@@ -61,13 +62,16 @@ export function computeStatsFromResults(
   let results = raw.allTournamentResults;
 
   if (filters?.tournamentIds?.length) {
-    results = results.filter((r) => r.tournament.id != null && filters!.tournamentIds!.includes(r.tournament.id));
+    results = results.filter(
+      (r) => r.tournament.id != null && filters!.tournamentIds!.includes(r.tournament.id)
+    );
   }
   if (filters?.circuitIds?.length) {
     const circuitIds = filters.circuitIds!;
     results = results.filter((r) => {
       if (r.tournament.type === 'qualifier' && circuitIds.includes('qualifier')) return true;
-      if (r.tournament.circuit_id != null && circuitIds.includes(r.tournament.circuit_id)) return true;
+      if (r.tournament.circuit_id != null && circuitIds.includes(r.tournament.circuit_id))
+        return true;
       return false;
     });
   }
@@ -101,14 +105,18 @@ export function computeStatsFromResults(
     qualifierStats: {
       tournaments: qualifierResults.length,
       wins: qualifierResults.filter((r) => r.position === 1).length,
-      averagePosition: qualifierResults.length > 0 ? qualifierPosition / qualifierResults.length : 0,
+      averagePosition:
+        qualifierResults.length > 0 ? qualifierPosition / qualifierResults.length : 0,
     },
     circuitStats: {
       tournaments: circuitResults.length,
       wins: circuitResults.filter((r) => r.position === 1).length,
       averagePosition: circuitResults.length > 0 ? circuitPosition / circuitResults.length : 0,
     },
-    recentTournaments: [...results].reverse().slice(0, 10).map((r) => ({ tournament: r.tournament, position: r.position, points: r.points })),
+    recentTournaments: [...results]
+      .reverse()
+      .slice(0, 10)
+      .map((r) => ({ tournament: r.tournament, position: r.position, points: r.points })),
     filterOptions: raw.filterOptions,
   };
 }
@@ -129,10 +137,17 @@ export class PlayerStatsService {
     }
 
     const allTournaments = await DatabaseService.getAllTournaments();
-    const playerTournaments = allTournaments.filter((t) => t.id != null && tournamentIds.includes(t.id));
-    const completed = playerTournaments.filter((t) => t.status === 'completed');
+    const playerTournaments = allTournaments.filter(
+      (t: any) => t.id != null && tournamentIds.includes(t.id)
+    );
+    const completed = playerTournaments.filter((t: any) => t.status === 'completed');
 
-    const allTournamentResults: Array<{ tournament: Tournament; position: number; points: number; matchesPlayed: number }> = [];
+    const allTournamentResults: Array<{
+      tournament: Tournament;
+      position: number;
+      points: number;
+      matchesPlayed: number;
+    }> = [];
     const { SwissPairingService } = await import('./swiss');
 
     for (const tournament of completed) {
@@ -163,11 +178,13 @@ export class PlayerStatsService {
       allTournamentResults.push({ tournament, position, points, matchesPlayed });
     }
 
-    const circuitIds = [...new Set(completed.filter((t) => t.circuit_id != null).map((t) => t.circuit_id!))];
+    const circuitIds = [
+      ...new Set(completed.filter((t: any) => t.circuit_id != null).map((t: any) => t.circuit_id!)),
+    ];
     const circuits = await DatabaseService.getAllCircuits();
     const circuitNames = circuitIds
       .map((cid) => {
-        const c = circuits.find((x) => x.id === cid);
+        const c = circuits.find((x: any) => x.id === cid);
         return c ? { id: c.id!, name: c.name } : null;
       })
       .filter(Boolean) as Array<{ id: number; name: string }>;
@@ -183,7 +200,10 @@ export class PlayerStatsService {
   }
 
   /** Single load then compute; for backward compatibility. Prefer getPlayerStatisticsRaw + computeStatsFromResults in component. */
-  static async getPlayerStatistics(playerId: number, filters?: PlayerStatsFilters): Promise<PlayerStatistics | null> {
+  static async getPlayerStatistics(
+    playerId: number,
+    filters?: PlayerStatsFilters
+  ): Promise<PlayerStatistics | null> {
     const raw = await this.getPlayerStatisticsRaw(playerId);
     if (!raw) return null;
     return computeStatsFromResults(raw.player, raw, filters);

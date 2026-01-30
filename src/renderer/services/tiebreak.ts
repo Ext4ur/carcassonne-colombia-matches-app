@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { DatabaseService } from './database';
-import { Round, MatchResult } from '../types/tournament';
+import { Round } from '../types/tournament';
 
 /** Datos pre-cargados para calcular tiebreaks sin más queries */
 export interface TiebreakData {
@@ -101,7 +103,7 @@ export class TiebreakService {
       for (const match of matches) {
         const results = await DatabaseService.getMatchResults(match.id!);
         const playerResult = results.find((r) => r.player_id === playerId);
-        
+
         if (playerResult) {
           // Get all opponents in this match
           const opponents = results.filter((r) => r.player_id !== playerId);
@@ -117,12 +119,12 @@ export class TiebreakService {
     if (opponentPoints.length === 0) return 0;
 
     let points = [...opponentPoints];
-    
+
     if (dropWorst && points.length > 1) {
       points = points.sort((a, b) => b - a);
       points.pop(); // Remove worst
     }
-    
+
     if (dropBest && points.length > 1) {
       points = points.sort((a, b) => b - a);
       points.shift(); // Remove best
@@ -176,7 +178,7 @@ export class TiebreakService {
           const opponentPoints = results
             .filter((r) => r.player_id !== playerId)
             .reduce((sum, r) => sum + r.points, 0);
-          
+
           totalDifference += playerPoints - opponentPoints;
         }
       }
@@ -185,7 +187,10 @@ export class TiebreakService {
     return totalDifference;
   }
 
-  private static async getPlayerTotalPoints(tournamentId: number, playerId: number): Promise<number> {
+  private static async getPlayerTotalPoints(
+    tournamentId: number,
+    playerId: number
+  ): Promise<number> {
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);
     let total = 0;
 
@@ -203,6 +208,3 @@ export class TiebreakService {
     return total;
   }
 }
-
-
-

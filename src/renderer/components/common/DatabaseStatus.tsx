@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react';
 import { testSupabaseConnection, getCurrentApiClientInfo } from '@utils/testSupabaseConnection';
 import { getQueryCount, getCacheHitCount, resetQueryCount } from '@api/clients/queryCounter';
@@ -46,24 +47,24 @@ export default function DatabaseStatus() {
       <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">
         Estado de Base de Datos
       </h3>
-      
+
       <div className="space-y-3">
         <div>
           <p className="text-sm text-gray-600 dark:text-gray-400">Cliente actual:</p>
-          <p className={`font-medium ${
-            clientInfo.type === 'supabase' 
-              ? 'text-green-600 dark:text-green-400' 
-              : clientInfo.type === 'dual'
-              ? 'text-blue-600 dark:text-blue-400'
-              : 'text-gray-600 dark:text-gray-400'
-          }`}>
+          <p
+            className={`font-medium ${
+              clientInfo.type === 'supabase'
+                ? 'text-green-600 dark:text-green-400'
+                : clientInfo.type === 'dual'
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-400'
+            }`}
+          >
             {clientInfo.type === 'sqlite' && 'SQLite (Local)'}
             {clientInfo.type === 'supabase' && 'Supabase (Remoto)'}
             {clientInfo.type === 'dual' && 'Dual (SQLite + Supabase)'}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {clientInfo.message}
-          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{clientInfo.message}</p>
         </div>
 
         <div className="space-y-2">
@@ -98,7 +99,8 @@ export default function DatabaseStatus() {
             </Button>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Las queries a BD son las que llegan al cliente; desde caché son lecturas resueltas sin tocar la BD.
+            Las queries a BD son las que llegan al cliente; desde caché son lecturas resueltas sin
+            tocar la BD.
           </p>
         </div>
 
@@ -117,16 +119,20 @@ export default function DatabaseStatus() {
         ) : null}
 
         {testResult && (
-          <div className={`p-3 rounded-lg ${
-            testResult.success
-              ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-              : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
-          }`}>
-            <p className={`font-medium ${
+          <div
+            className={`p-3 rounded-lg ${
               testResult.success
-                ? 'text-green-800 dark:text-green-200'
-                : 'text-red-800 dark:text-red-200'
-            }`}>
+                ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+            }`}
+          >
+            <p
+              className={`font-medium ${
+                testResult.success
+                  ? 'text-green-800 dark:text-green-200'
+                  : 'text-red-800 dark:text-red-200'
+              }`}
+            >
               {testResult.success ? '✅' : '❌'} {testResult.message}
             </p>
             {testResult.details && (

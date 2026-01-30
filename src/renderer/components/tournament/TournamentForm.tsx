@@ -4,7 +4,6 @@ import { Tournament, TournamentType } from '../../types/tournament';
 import { Circuit } from '../../types/circuit';
 import { Place } from '../../types/place';
 import { DEFAULT_PLACE_NAME } from '../../constants';
-import { calculateNumberOfRounds } from '../../utils/tournament';
 import { getLocalDateString } from '../../utils/dateUtils';
 import Input from '../common/Input';
 import Select from '../common/Select';
@@ -24,7 +23,13 @@ interface TournamentFormProps {
 }
 
 const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(function TournamentForm(
-  { tournament, onSave, onCancel, mode = 'quick', hideActions = false },
+  {
+    tournament,
+    onSave, // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onCancel: _onCancel,
+    mode = 'quick',
+    hideActions = false,
+  },
   ref
 ) {
   const [circuits, setCircuits] = useState<Circuit[]>([]);
@@ -39,7 +44,6 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     place_id: tournament?.place_id?.toString() || '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [estimatedRounds, setEstimatedRounds] = useState<number>(0);
 
   useEffect(() => {
     loadCircuits();
@@ -49,9 +53,10 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
   useEffect(() => {
     if (places.length > 0 && !formData.place_id) {
       const defaultPlace = places.find((p) => p.name === DEFAULT_PLACE_NAME);
-      if (defaultPlace?.id) setFormData((prev) => ({ ...prev, place_id: defaultPlace.id!.toString() }));
+      if (defaultPlace?.id)
+        setFormData((prev) => ({ ...prev, place_id: defaultPlace.id!.toString() }));
     }
-  }, [places]);
+  }, [places, formData.place_id]);
 
   const loadCircuits = async () => {
     try {
@@ -104,7 +109,10 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     onSave({
       name: formData.name.trim(),
       type: formData.type,
-      circuit_id: formData.type === 'circuit' && formData.circuit_id ? Number(formData.circuit_id) : undefined,
+      circuit_id:
+        formData.type === 'circuit' && formData.circuit_id
+          ? Number(formData.circuit_id)
+          : undefined,
       date: formData.date,
       players_per_match: formData.players_per_match,
       number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
@@ -129,7 +137,9 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       <Select
         label="Tipo de Torneo *"
         value={formData.type}
-        onChange={(e) => setFormData({ ...formData, type: e.target.value as TournamentType, circuit_id: '' })}
+        onChange={(e) =>
+          setFormData({ ...formData, type: e.target.value as TournamentType, circuit_id: '' })
+        }
         options={[
           { value: 'qualifier', label: 'Clasificatorio' },
           { value: 'circuit', label: 'Circuito' },
@@ -176,7 +186,9 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
           <Select
             label="Jugadores por Partida *"
             value={formData.players_per_match.toString()}
-            onChange={(e) => setFormData({ ...formData, players_per_match: Number(e.target.value) })}
+            onChange={(e) =>
+              setFormData({ ...formData, players_per_match: Number(e.target.value) })
+            }
             options={[
               { value: '2', label: '2 jugadores' },
               { value: '3', label: '3 jugadores' },
@@ -206,9 +218,7 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
 
       {!hideActions && (
         <div className="flex justify-end space-x-2 pt-4">
-          <Button onClick={handleSubmit}>
-            {tournament ? 'Actualizar' : 'Continuar'}
-          </Button>
+          <Button onClick={handleSubmit}>{tournament ? 'Actualizar' : 'Continuar'}</Button>
         </div>
       )}
     </div>
@@ -216,4 +226,3 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
 });
 
 export default TournamentForm;
-

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { ReactNode } from 'react';
 
 export interface Column<T> {
@@ -22,19 +24,16 @@ interface TableProps<T> {
 function getColWidthStyle<T>(columns: Column<T>[], column: Column<T>): string {
   if (column.width) return column.width;
   const withWidth = columns.filter((c) => c.width);
-  const fixedTotal = withWidth.reduce((s, c) => s + parseFloat(String(c.width).replace('%', '')), 0);
+  const fixedTotal = withWidth.reduce(
+    (s, c) => s + parseFloat(String(c.width).replace('%', '')),
+    0
+  );
   const autoCount = columns.length - withWidth.length;
   const autoPercent = autoCount > 0 ? (100 - fixedTotal) / autoCount : 0;
   return `${autoPercent}%`;
 }
 
-function TableHeader<T extends Record<string, any>>({
-  columns,
-  className = '',
-}: {
-  columns: Column<T>[];
-  className?: string;
-}) {
+function TableHeader<T extends Record<string, any>>({ columns }: { columns: Column<T>[] }) {
   return (
     <table className="min-w-full table-fixed border-collapse">
       <colgroup>
@@ -161,10 +160,5 @@ export default function Table<T extends Record<string, any>>({
     );
   }
 
-  return (
-    <div className={`overflow-x-auto ${className}`}>
-      {tableContent}
-    </div>
-  );
+  return <div className={`overflow-x-auto ${className}`}>{tableContent}</div>;
 }
-

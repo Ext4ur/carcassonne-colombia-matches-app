@@ -15,7 +15,7 @@ export default function Textarea({
   ...props
 }: TextareaProps) {
   const textareaId = id || `textarea-${Math.random().toString(36).substr(2, 9)}`;
-  
+
   return (
     <div className="w-full">
       {label && (
@@ -31,15 +31,10 @@ export default function Textarea({
         className={`input ${error ? 'border-red-500 focus:ring-red-500' : ''} ${className}`}
         {...props}
       />
-      {error && (
-        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
-      )}
+      {error && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>}
       {helperText && !error && (
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{helperText}</p>
       )}
     </div>
   );
 }
-
-
-

@@ -20,7 +20,10 @@ export interface HeadToHeadRecord {
 }
 
 export class HeadToHeadService {
-  static async getHeadToHead(player1Id: number, player2Id: number): Promise<HeadToHeadRecord | null> {
+  static async getHeadToHead(
+    player1Id: number,
+    player2Id: number
+  ): Promise<HeadToHeadRecord | null> {
     const player1 = await DatabaseService.getPlayerById(player1Id);
     const player2 = await DatabaseService.getPlayerById(player2Id);
 
@@ -32,10 +35,10 @@ export class HeadToHeadService {
 
     for (const tournament of tournaments) {
       const rounds = await DatabaseService.getTournamentRounds(tournament.id!);
-      
+
       for (const round of rounds) {
         const roundMatches = await DatabaseService.getRoundMatches(round.id!);
-        
+
         for (const match of roundMatches) {
           const results = await DatabaseService.getMatchResults(match.id!);
           const player1Result = results.find((r) => r.player_id === player1Id);
@@ -86,26 +89,31 @@ export class HeadToHeadService {
     };
   }
 
-  static async getPlayerOpponents(playerId: number): Promise<Array<{ player: Player; matches: number; wins: number; losses: number }>> {
+  static async getPlayerOpponents(
+    playerId: number
+  ): Promise<Array<{ player: Player; matches: number; wins: number; losses: number }>> {
     const tournaments = await DatabaseService.getAllTournaments();
-    const opponentMap = new Map<number, { player: Player; matches: number; wins: number; losses: number }>();
+    const opponentMap = new Map<
+      number,
+      { player: Player; matches: number; wins: number; losses: number }
+    >();
 
     for (const tournament of tournaments) {
       const rounds = await DatabaseService.getTournamentRounds(tournament.id!);
-      
+
       for (const round of rounds) {
         const roundMatches = await DatabaseService.getRoundMatches(round.id!);
-        
+
         for (const match of roundMatches) {
           const results = await DatabaseService.getMatchResults(match.id!);
           const playerResult = results.find((r) => r.player_id === playerId);
-          
+
           if (playerResult) {
             const opponents = results.filter((r) => r.player_id !== playerId);
-            
+
             for (const opponentResult of opponents) {
               const opponentId = opponentResult.player_id;
-              
+
               if (!opponentMap.has(opponentId)) {
                 const opponent = await DatabaseService.getPlayerById(opponentId);
                 if (opponent) {
@@ -136,5 +144,3 @@ export class HeadToHeadService {
     return Array.from(opponentMap.values()).sort((a, b) => b.matches - a.matches);
   }
 }
-
-

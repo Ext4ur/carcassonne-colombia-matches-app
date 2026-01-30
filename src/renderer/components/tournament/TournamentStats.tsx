@@ -1,38 +1,39 @@
-import { useEffect, useRef } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Tournament, PlayerStanding } from '../../types/tournament';
-import { Bar, Doughnut } from 'react-chartjs-2';
+import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
-  ArcElement,
   Title,
   Tooltip,
   Legend,
 } from 'chart.js';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 interface TournamentStatsProps {
   tournament: Tournament;
+  /** Full standings for podium (not filtered). */
+  standingsForPodium: PlayerStanding[];
+  /** Filtered standings for charts (victories, tiebreak criteria). */
   standings: PlayerStanding[];
   tiebreakCriteria: any[];
 }
 
-export default function TournamentStats({ tournament, standings, tiebreakCriteria }: TournamentStatsProps) {
-  const top4 = standings.slice(0, 4);
+export default function TournamentStats({
+  standingsForPodium,
+  standings,
+  tiebreakCriteria,
+}: TournamentStatsProps) {
+  const top4 = standingsForPodium.slice(0, 4);
 
   // Get enabled criteria (excluding wins which is already shown)
   const enabledCriteria = tiebreakCriteria.filter((c) => c.enabled && c.id !== 'wins');
+
+  // Paleta sólida para gráficos (sin transparencia)
+  const CHART_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7'];
 
   // Chart data for each criterion
   const getCriterionData = (criterionId: string) => {
@@ -41,24 +42,18 @@ export default function TournamentStats({ tournament, standings, tiebreakCriteri
       const value = s.tiebreak_values[criterionId];
       return value !== undefined && value !== null ? value : 0;
     });
-
-    const colors = [
-      'rgba(59, 130, 246, 0.5)',
-      'rgba(34, 197, 94, 0.5)',
-      'rgba(251, 191, 36, 0.5)',
-      'rgba(239, 68, 68, 0.5)',
-      'rgba(168, 85, 247, 0.5)',
-    ];
-
+    const color =
+      CHART_COLORS[enabledCriteria.findIndex((c) => c.id === criterionId) % CHART_COLORS.length];
     return {
       labels,
       datasets: [
         {
           label: getCriterionLabel(criterionId),
           data,
-          backgroundColor: colors[enabledCriteria.findIndex((c) => c.id === criterionId) % colors.length],
-          borderColor: colors[enabledCriteria.findIndex((c) => c.id === criterionId) % colors.length].replace('0.5', '1'),
-          borderWidth: 1,
+          backgroundColor: color,
+          borderColor: color,
+          borderWidth: 2,
+          borderRadius: 6,
         },
       ],
     };
@@ -67,13 +62,13 @@ export default function TournamentStats({ tournament, standings, tiebreakCriteri
   const getCriterionLabel = (criterionId: string): string => {
     const criterion = tiebreakCriteria.find((c) => c.id === criterionId);
     if (!criterion) return criterionId;
-    
+
     const labels: { [key: string]: string } = {
-      'wins': 'Victorias',
-      'opponent_points_drop_worst': 'Puntos Oponentes (-peor)',
-      'opponent_points_drop_best_worst': 'Puntos Oponentes (-mejor/peor)',
-      'head_to_head': 'Enfrentamiento Directo',
-      'point_difference': 'Diferencia de Puntos',
+      wins: 'Victorias',
+      opponent_points_drop_worst: 'Puntos Oponentes (-peor)',
+      opponent_points_drop_best_worst: 'Puntos Oponentes (-mejor/peor)',
+      head_to_head: 'Enfrentamiento Directo',
+      point_difference: 'Diferencia de Puntos',
     };
     return labels[criterionId] || criterion.name;
   };
@@ -84,9 +79,10 @@ export default function TournamentStats({ tournament, standings, tiebreakCriteri
       {
         label: 'Victorias',
         data: standings.map((s) => s.wins),
-        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-        borderColor: 'rgba(59, 130, 246, 1)',
-        borderWidth: 1,
+        backgroundColor: '#3b82f6',
+        borderColor: '#2563eb',
+        borderWidth: 2,
+        borderRadius: 6,
       },
     ],
   };
@@ -103,9 +99,7 @@ export default function TournamentStats({ tournament, standings, tiebreakCriteri
                 <span className="text-2xl font-bold">🥈 2</span>
               </div>
               <p className="font-medium">{top4[1].player_name}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {top4[1].wins} 🏆
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{top4[1].wins} 🏆</p>
             </div>
           )}
           {top4[0] && (
@@ -114,9 +108,7 @@ export default function TournamentStats({ tournament, standings, tiebreakCriteri
                 <span className="text-2xl font-bold">🥇 1</span>
               </div>
               <p className="font-medium">{top4[0].player_name}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {top4[0].wins} 🏆
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{top4[0].wins} 🏆</p>
             </div>
           )}
           {top4[2] && (
@@ -125,9 +117,7 @@ export default function TournamentStats({ tournament, standings, tiebreakCriteri
                 <span className="text-2xl font-bold">🥉 3</span>
               </div>
               <p className="font-medium">{top4[2].player_name}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {top4[2].wins} 🏆
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{top4[2].wins} 🏆</p>
             </div>
           )}
           {top4[3] && (
@@ -136,9 +126,7 @@ export default function TournamentStats({ tournament, standings, tiebreakCriteri
                 <span className="text-xl font-bold">4</span>
               </div>
               <p className="font-medium text-sm">{top4[3].player_name}</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                {top4[3].wins} 🏆
-              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">{top4[3].wins} 🏆</p>
             </div>
           )}
         </div>
@@ -149,24 +137,41 @@ export default function TournamentStats({ tournament, standings, tiebreakCriteri
         {/* Wins chart */}
         <div className="card">
           <h3 className="text-lg font-bold mb-4">🏆 Distribución de Victorias</h3>
-          <Bar data={winsData} options={{ responsive: true, maintainAspectRatio: true }} />
+          <Bar
+            data={winsData}
+            options={{
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: {
+                legend: { display: true, position: 'top' },
+                tooltip: { padding: 12, titleFont: { size: 14 } },
+              },
+              scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } },
+                x: { grid: { display: false } },
+              },
+            }}
+          />
         </div>
 
         {/* Charts for each enabled tiebreak criterion */}
         {enabledCriteria.map((criterion) => (
           <div key={criterion.id} className="card">
             <h3 className="text-lg font-bold mb-4">{getCriterionLabel(criterion.id)}</h3>
-            <Bar 
-              data={getCriterionData(criterion.id)} 
-              options={{ 
-                responsive: true, 
+            <Bar
+              data={getCriterionData(criterion.id)}
+              options={{
+                responsive: true,
                 maintainAspectRatio: true,
-                scales: {
-                  y: {
-                    beginAtZero: true,
-                  },
+                plugins: {
+                  legend: { display: true, position: 'top' },
+                  tooltip: { padding: 12, titleFont: { size: 14 } },
                 },
-              }} 
+                scales: {
+                  y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } },
+                  x: { grid: { display: false } },
+                },
+              }}
             />
           </div>
         ))}

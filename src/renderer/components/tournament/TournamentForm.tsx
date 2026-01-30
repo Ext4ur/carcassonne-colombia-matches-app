@@ -1,41 +1,62 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { DatabaseService } from '../../services/database';
 import { Tournament, TournamentType } from '../../types/tournament';
 import { Circuit } from '../../types/circuit';
-import { calculateNumberOfRounds } from '../../utils/tournament';
+import { Place } from '../../types/place';
+import { DEFAULT_PLACE_NAME } from '../../constants';
+import { getLocalDateString } from '../../utils/dateUtils';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
+
+export interface TournamentFormRef {
+  submit: () => void;
+}
 
 interface TournamentFormProps {
   tournament?: Tournament;
   onSave: (tournament: Partial<Tournament>) => void;
   onCancel: () => void;
   mode?: 'quick' | 'advanced';
+  /** When true, buttons are not rendered (e.g. when parent puts them in modal footer). */
+  hideActions?: boolean;
 }
 
-export default function TournamentForm({ tournament, onSave, onCancel, mode = 'quick' }: TournamentFormProps) {
+const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(function TournamentForm(
+  {
+    tournament,
+    onSave, // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onCancel: _onCancel,
+    mode = 'quick',
+    hideActions = false,
+  },
+  ref
+) {
   const [circuits, setCircuits] = useState<Circuit[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
   const [formData, setFormData] = useState({
     name: tournament?.name || '',
     type: (tournament?.type || 'qualifier') as TournamentType,
     circuit_id: tournament?.circuit_id?.toString() || '',
-    date: tournament?.date || new Date().toISOString().split('T')[0],
+    date: tournament?.date || getLocalDateString(),
     players_per_match: tournament?.players_per_match || 2,
     number_of_rounds: tournament?.number_of_rounds?.toString() || '',
+    place_id: tournament?.place_id?.toString() || '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [estimatedRounds, setEstimatedRounds] = useState<number>(0);
 
   useEffect(() => {
     loadCircuits();
+    loadPlaces();
   }, []);
 
-  // Calculate estimated rounds when players_per_match changes
   useEffect(() => {
-    // This will be calculated when we know the number of players
-    // For now, we'll calculate it when the form is submitted
-  }, [formData.players_per_match]);
+    if (places.length > 0 && !formData.place_id) {
+      const defaultPlace = places.find((p) => p.name === DEFAULT_PLACE_NAME);
+      if (defaultPlace?.id)
+        setFormData((prev) => ({ ...prev, place_id: defaultPlace.id!.toString() }));
+    }
+  }, [places, formData.place_id]);
 
   const loadCircuits = async () => {
     try {
@@ -43,6 +64,15 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
       setCircuits(data);
     } catch (error) {
       console.error('Error loading circuits:', error);
+    }
+  };
+
+  const loadPlaces = async () => {
+    try {
+      const data = await DatabaseService.getAllPlaces();
+      setPlaces(data);
+    } catch (error) {
+      console.error('Error loading places:', error);
     }
   };
 
@@ -61,6 +91,10 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
       newErrors.date = 'La fecha es requerida';
     }
 
+    if (!formData.place_id) {
+      newErrors.place_id = 'Debes seleccionar un lugar';
+    }
+
     if (formData.players_per_match < 2 || formData.players_per_match > 4) {
       newErrors.players_per_match = 'Debe ser entre 2 y 4 jugadores';
     }
@@ -75,12 +109,20 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
     onSave({
       name: formData.name.trim(),
       type: formData.type,
-      circuit_id: formData.type === 'circuit' && formData.circuit_id ? Number(formData.circuit_id) : undefined,
+      circuit_id:
+        formData.type === 'circuit' && formData.circuit_id
+          ? Number(formData.circuit_id)
+          : undefined,
       date: formData.date,
       players_per_match: formData.players_per_match,
       number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
+      place_id: formData.place_id ? Number(formData.place_id) : undefined,
     });
   };
+
+  useImperativeHandle(ref, () => ({
+    submit: handleSubmit,
+  }));
 
   return (
     <div className="space-y-4">
@@ -95,7 +137,9 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
       <Select
         label="Tipo de Torneo *"
         value={formData.type}
-        onChange={(e) => setFormData({ ...formData, type: e.target.value as TournamentType, circuit_id: '' })}
+        onChange={(e) =>
+          setFormData({ ...formData, type: e.target.value as TournamentType, circuit_id: '' })
+        }
         options={[
           { value: 'qualifier', label: 'Clasificatorio' },
           { value: 'circuit', label: 'Circuito' },
@@ -109,11 +153,24 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
           onChange={(e) => setFormData({ ...formData, circuit_id: e.target.value })}
           options={[
             { value: '', label: 'Seleccionar circuito...' },
-            ...circuits.map((c) => ({ value: c.id!.toString(), label: c.name })),
+            ...circuits
+              .filter((c) => c.status !== 'finalized')
+              .map((c) => ({ value: c.id!.toString(), label: c.name })),
           ]}
           error={errors.circuit_id}
         />
       )}
+
+      <Select
+        label="Lugar *"
+        value={formData.place_id}
+        onChange={(e) => setFormData({ ...formData, place_id: e.target.value })}
+        options={[
+          { value: '', label: 'Seleccionar lugar...' },
+          ...places.map((p) => ({ value: p.id!.toString(), label: p.name })),
+        ]}
+        error={errors.place_id}
+      />
 
       <Input
         label="Fecha *"
@@ -129,7 +186,9 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
           <Select
             label="Jugadores por Partida *"
             value={formData.players_per_match.toString()}
-            onChange={(e) => setFormData({ ...formData, players_per_match: Number(e.target.value) })}
+            onChange={(e) =>
+              setFormData({ ...formData, players_per_match: Number(e.target.value) })
+            }
             options={[
               { value: '2', label: '2 jugadores' },
               { value: '3', label: '3 jugadores' },
@@ -157,15 +216,13 @@ export default function TournamentForm({ tournament, onSave, onCancel, mode = 'q
         </>
       )}
 
-      <div className="flex justify-end space-x-2 pt-4">
-        <Button variant="secondary" onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button onClick={handleSubmit}>
-          {tournament ? 'Actualizar' : 'Continuar'}
-        </Button>
-      </div>
+      {!hideActions && (
+        <div className="flex justify-end space-x-2 pt-4">
+          <Button onClick={handleSubmit}>{tournament ? 'Actualizar' : 'Continuar'}</Button>
+        </div>
+      )}
     </div>
   );
-}
+});
 
+export default TournamentForm;

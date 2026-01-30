@@ -1,10 +1,16 @@
 import { createClient, SupabaseClient as SupabaseJSClient } from '@supabase/supabase-js';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { IApiClient } from './IApiClient';
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, isSupabaseConfigured, getConfigError } from './supabaseConfig';
+import {
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  isSupabaseConfigured,
+  getConfigError,
+} from './supabaseConfig';
 
 /**
  * Cliente de Supabase que implementa IApiClient
- * 
+ *
  * Convierte las operaciones SQL genéricas a las operaciones específicas de Supabase
  */
 export class SupabaseClient implements IApiClient {
@@ -25,13 +31,13 @@ export class SupabaseClient implements IApiClient {
 
   /**
    * Ejecutar una query SELECT
-   * 
+   *
    * Convierte SQL genérico a operaciones de Supabase.
    * Por ahora, soporta queries simples como:
    * - SELECT * FROM table WHERE condition
    * - SELECT columns FROM table
    * - SELECT COUNT(*) FROM table
-   * 
+   *
    * TODO: En el futuro, podríamos usar RPC para queries más complejas
    */
   async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
@@ -45,16 +51,14 @@ export class SupabaseClient implements IApiClient {
 
       // Si es una query COUNT(*), usar el método count() de Supabase
       if (parsed.isCount) {
-        let countQuery = this._client
+        const countQuery = this._client
           .from(parsed.table)
           .select('*', { count: 'exact', head: true });
 
         // Aplicar filtros WHERE si existen
         if (parsed.where && Object.keys(parsed.where).length > 0) {
           // Para COUNT con WHERE, necesitamos hacer un select normal y contar los resultados
-          let dataQuery = this._client
-            .from(parsed.table)
-            .select('*', { count: 'exact' });
+          let dataQuery = this._client.from(parsed.table).select('*', { count: 'exact' });
 
           // Aplicar filtros
           Object.entries(parsed.where).forEach(([key, value]) => {
@@ -62,7 +66,7 @@ export class SupabaseClient implements IApiClient {
           });
 
           const { count, error } = await dataQuery;
-          
+
           if (error) {
             throw new Error(`Supabase query error: ${error.message}`);
           }
@@ -70,7 +74,7 @@ export class SupabaseClient implements IApiClient {
           return [{ count: count || 0 }] as T[];
         } else {
           const { count, error } = await countQuery;
-          
+
           if (error) {
             throw new Error(`Supabase query error: ${error.message}`);
           }
@@ -78,27 +82,27 @@ export class SupabaseClient implements IApiClient {
           return [{ count: count || 0 }] as T[];
         }
       }
-      
+
       // Query normal SELECT
       // Si tiene JOIN, necesitamos usar una estrategia diferente
       if (parsed.hasJoin && parsed.joinTable) {
         // Para JOINs, usamos el método select con relaciones de Supabase
         // Parsear columnas con alias (ej: t.*, c.name as circuit_name)
         const originalColumns = parsed.columns || '*';
-        
+
         // Detectar si hay alias de columna (ej: c.name as circuit_name)
         // Buscar en todas las columnas separadas por coma
-        const columnParts = originalColumns.split(',').map(c => c.trim());
+        const columnParts = originalColumns.split(',').map((c) => c.trim());
         let joinColumnName: string | null = null;
         let joinColumnAlias: string | null = null;
-        
+
         for (const col of columnParts) {
           const aliasMatch = col.match(/(\w+)\.(\w+)\s+as\s+(\w+)/i);
           if (aliasMatch) {
             const tableAlias = aliasMatch[1].toLowerCase();
             const columnName = aliasMatch[2];
             const columnAlias = aliasMatch[3];
-            
+
             // Si el alias de tabla es 'c' (circuits), es de la tabla JOIN
             if (tableAlias === 'c' || tableAlias === parsed.joinTable[0]?.toLowerCase()) {
               joinColumnName = columnName;
@@ -107,13 +111,13 @@ export class SupabaseClient implements IApiClient {
             }
           }
         }
-        
+
         // Construir el select de Supabase con relación
         // Supabase usa la sintaxis: select('*, related_table(column)')
         // Nota: El nombre de la relación en Supabase es el nombre de la tabla relacionada
         // Para tournaments -> circuits (via circuit_id), la relación se llama 'circuits'
         let selectStr = '*'; // Siempre seleccionar todas las columnas de la tabla principal
-        
+
         // Agregar relación. En Supabase, cuando hay una foreign key, la relación se llama por el nombre de la tabla
         if (joinColumnName) {
           // Si hay una columna específica con alias, seleccionarla
@@ -122,10 +126,8 @@ export class SupabaseClient implements IApiClient {
           // Si no, seleccionar todas las columnas de la relación
           selectStr += `,${parsed.joinTable}(*)`;
         }
-        
-        let query = this._client
-          .from(parsed.table)
-          .select(selectStr);
+
+        let query = this._client.from(parsed.table).select(selectStr);
 
         // Aplicar filtros WHERE
         if (parsed.where && Object.keys(parsed.where).length > 0) {
@@ -137,8 +139,8 @@ export class SupabaseClient implements IApiClient {
         // Aplicar ordenamiento (solo el primero por ahora)
         if (parsed.orderBy) {
           // Remover prefijo de tabla si existe (ej: t.date -> date)
-          const orderColumn = parsed.orderBy.column.includes('.') 
-            ? parsed.orderBy.column.split('.')[1] 
+          const orderColumn = parsed.orderBy.column.includes('.')
+            ? parsed.orderBy.column.split('.')[1]
             : parsed.orderBy.column;
           query = query.order(orderColumn, { ascending: parsed.orderBy.ascending });
         }
@@ -158,13 +160,13 @@ export class SupabaseClient implements IApiClient {
         // Supabase retorna relaciones como objetos anidados
         const transformedData = (data || []).map((item: any) => {
           const result: any = { ...item };
-          
+
           // Si hay una relación, aplanarla
           if (item[parsed.joinTable!]) {
-            const joinData = Array.isArray(item[parsed.joinTable!]) 
-              ? item[parsed.joinTable!][0] 
+            const joinData = Array.isArray(item[parsed.joinTable!])
+              ? item[parsed.joinTable!][0]
               : item[parsed.joinTable!];
-            
+
             if (joinData) {
               // Si hay un alias específico (ej: circuit_name)
               if (joinColumnAlias && joinColumnName) {
@@ -173,21 +175,20 @@ export class SupabaseClient implements IApiClient {
                 result[joinColumnName] = joinData[joinColumnName];
               }
             }
-            
+
             // Eliminar el objeto anidado
             delete result[parsed.joinTable!];
           }
-          
+
           return result;
         });
 
-        return transformedData as T[];
+        const result = parsed.hadDistinct ? this.deduplicateRows(transformedData) : transformedData;
+        return result as T[];
       }
-      
+
       // Query sin JOIN
-      let query = this._client
-        .from(parsed.table)
-        .select(parsed.columns || '*');
+      let query = this._client.from(parsed.table).select(parsed.columns || '*');
 
       // Aplicar filtros WHERE
       if (parsed.where && Object.keys(parsed.where).length > 0) {
@@ -212,7 +213,9 @@ export class SupabaseClient implements IApiClient {
         throw new Error(`Supabase query error: ${error.message}`);
       }
 
-      return (data || []) as T[];
+      const rows = (data || []) as T[];
+      const result = parsed.hadDistinct ? this.deduplicateRows(rows) : rows;
+      return result;
     } catch (error: any) {
       console.error('Error en Supabase query:', error);
       throw error;
@@ -222,7 +225,10 @@ export class SupabaseClient implements IApiClient {
   /**
    * Ejecutar INSERT, UPDATE o DELETE
    */
-  async execute(sql: string, params?: any[]): Promise<{ lastInsertRowid: number; changes: number }> {
+  async execute(
+    sql: string,
+    params?: any[]
+  ): Promise<{ lastInsertRowid: number; changes: number }> {
     if (!this._client) {
       throw new Error('Supabase no está configurado. ' + getConfigError());
     }
@@ -257,8 +263,12 @@ export class SupabaseClient implements IApiClient {
 
         // Supabase update puede retornar un array o null
         const updateData = data as any;
-        const changes = Array.isArray(updateData) ? updateData.length : (updateData !== null && updateData !== undefined ? 1 : 0);
-        
+        const changes = Array.isArray(updateData)
+          ? updateData.length
+          : updateData !== null && updateData !== undefined
+            ? 1
+            : 0;
+
         return {
           lastInsertRowid: 0,
           changes,
@@ -288,7 +298,7 @@ export class SupabaseClient implements IApiClient {
 
   /**
    * Ejecutar múltiples queries en una transacción
-   * 
+   *
    * Supabase no soporta transacciones multi-query directamente desde el cliente.
    * Usaremos RPC (Remote Procedure Call) o ejecutaremos secuencialmente.
    * Por ahora, ejecutamos secuencialmente y revertimos en caso de error.
@@ -355,7 +365,10 @@ export class SupabaseClient implements IApiClient {
    * Soporta: SELECT COUNT(*) FROM table
    * Soporta: SELECT con LEFT JOIN básico (solo para columnas específicas)
    */
-  private parseSelectQuery(sql: string, params?: any[]): {
+  private parseSelectQuery(
+    sql: string,
+    params?: any[]
+  ): {
     table: string;
     columns?: string;
     where?: Record<string, any>;
@@ -365,24 +378,32 @@ export class SupabaseClient implements IApiClient {
     hasJoin?: boolean;
     joinTable?: string;
     joinCondition?: string;
+    /** True when SELECT had DISTINCT and we stripped it (deduplicate in JS). */
+    hadDistinct?: boolean;
   } {
     const normalized = sql.trim().replace(/\s+/g, ' ');
-    
+
     // Detectar JOINs
     const hasJoin = /\b(LEFT|RIGHT|INNER|FULL)\s+JOIN\b/i.test(normalized);
-    
+
     const selectMatch = normalized.match(/SELECT\s+(.+?)\s+FROM\s+(\w+)/i);
-    
+
     if (!selectMatch) {
       throw new Error(`Query SELECT no válida: ${sql}`);
     }
 
-    const columns = selectMatch[1].trim();
+    let columns = selectMatch[1].trim();
+    let hadDistinct = false;
+    // Supabase .select() no acepta la palabra DISTINCT; quitar y deduplicar en JS después
+    if (/^DISTINCT\s+/i.test(columns)) {
+      columns = columns.replace(/^DISTINCT\s+/i, '').trim();
+      hadDistinct = true;
+    }
     const table = selectMatch[2].trim();
-    
+
     // Detectar si es COUNT(*)
     const isCount = /COUNT\s*\(\s*\*\s*\)/i.test(columns);
-    
+
     // Parsear JOIN si existe
     let joinTable: string | undefined;
     let joinCondition: string | undefined;
@@ -392,7 +413,9 @@ export class SupabaseClient implements IApiClient {
       // O: LEFT JOIN circuits ON tournaments.circuit_id = circuits.id
       // El regex captura: (tipo JOIN) (nombre tabla) (alias opcional) ON (condición)
       // Grupos: 1=tipo, 2=tabla, 3=alias (opcional), 4=condición
-      const joinMatch = normalized.match(/\b(LEFT|RIGHT|INNER|FULL)\s+JOIN\s+(\w+)(?:\s+(\w+))?\s+ON\s+(.+?)(?:\s+WHERE|\s+ORDER|\s+LIMIT|$)/i);
+      const joinMatch = normalized.match(
+        /\b(LEFT|RIGHT|INNER|FULL)\s+JOIN\s+(\w+)(?:\s+(\w+))?\s+ON\s+(.+?)(?:\s+WHERE|\s+ORDER|\s+LIMIT|$)/i
+      );
       if (joinMatch) {
         joinTable = joinMatch[2]; // Nombre de la tabla (ej: circuits) - índice 2
         joinCondition = joinMatch[4]?.trim(); // Condición del JOIN - índice 4 (porque grupo 3 es el alias opcional)
@@ -433,23 +456,50 @@ export class SupabaseClient implements IApiClient {
       limit = parseInt(limitMatch[1], 10);
     }
 
-    return { 
-      table, 
-      columns: columns === '*' ? undefined : (isCount ? undefined : columns), 
-      where, 
-      orderBy, 
+    return {
+      table,
+      columns: columns === '*' ? undefined : isCount ? undefined : columns,
+      where,
+      orderBy,
       limit,
       isCount,
       hasJoin,
       joinTable,
-      joinCondition
+      joinCondition,
+      hadDistinct,
     };
+  }
+
+  /**
+   * Deduplicate rows when SELECT had DISTINCT (Supabase doesn't support it).
+   * Uses a stable key (sorted object keys) so row identity is consistent.
+   */
+  private deduplicateRows<T = any>(rows: T[]): T[] {
+    if (rows.length <= 1) return rows;
+    const seen = new Set<string>();
+    return rows.filter((row) => {
+      const key = this.rowToStableKey(row);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private rowToStableKey(row: any): string {
+    if (row === null || typeof row !== 'object') return JSON.stringify(row);
+    const keys = Object.keys(row).sort();
+    const obj: Record<string, unknown> = {};
+    for (const k of keys) obj[k] = row[k];
+    return JSON.stringify(obj);
   }
 
   /**
    * Parsear query INSERT, UPDATE o DELETE
    */
-  private parseMutationQuery(sql: string, params?: any[]): {
+  private parseMutationQuery(
+    sql: string,
+    params?: any[]
+  ): {
     type: 'insert' | 'update' | 'delete';
     table: string;
     data?: Record<string, any>;
@@ -461,9 +511,9 @@ export class SupabaseClient implements IApiClient {
     const insertMatch = normalized.match(/INSERT\s+INTO\s+(\w+)\s*\((.+?)\)\s*VALUES\s*\((.+?)\)/i);
     if (insertMatch) {
       const table = insertMatch[1];
-      const columns = insertMatch[2].split(',').map(c => c.trim());
-      const values = insertMatch[3].split(',').map(v => v.trim());
-      
+      const columns = insertMatch[2].split(',').map((c) => c.trim());
+      const values = insertMatch[3].split(',').map((v) => v.trim());
+
       const data: Record<string, any> = {};
       columns.forEach((col, idx) => {
         let value = values[idx];
@@ -489,10 +539,10 @@ export class SupabaseClient implements IApiClient {
       const whereClause = normalized.match(/WHERE\s+(.+?)$/i)?.[1];
 
       const data: Record<string, any> = {};
-      const setPairs = setClause.split(',').map(p => p.trim());
+      const setPairs = setClause.split(',').map((p) => p.trim());
       let setParamIndex = 0;
-      setPairs.forEach(pair => {
-        const [key, value] = pair.split('=').map(s => s.trim());
+      setPairs.forEach((pair) => {
+        const [key, value] = pair.split('=').map((s) => s.trim());
         let parsedValue: any = value;
         if (value === '?' && params && params[setParamIndex] !== undefined) {
           parsedValue = params[setParamIndex++];
@@ -506,7 +556,8 @@ export class SupabaseClient implements IApiClient {
         data[key] = parsedValue;
       });
 
-      const whereParams = params && setParamIndex < params.length ? params.slice(setParamIndex) : undefined;
+      const whereParams =
+        params && setParamIndex < params.length ? params.slice(setParamIndex) : undefined;
       const where = whereClause ? this.parseWhereClause(whereClause, whereParams) : undefined;
 
       return { type: 'update', table, data, where };
@@ -534,9 +585,9 @@ export class SupabaseClient implements IApiClient {
     let paramIndex = 0;
 
     // Dividir por AND
-    const conditions = whereClause.split(/\s+AND\s+/i).map(c => c.trim());
+    const conditions = whereClause.split(/\s+AND\s+/i).map((c) => c.trim());
 
-    conditions.forEach(condition => {
+    conditions.forEach((condition) => {
       // column = value o column = ?
       const eqMatch = condition.match(/(\w+)\s*=\s*(.+)/i);
       if (eqMatch) {

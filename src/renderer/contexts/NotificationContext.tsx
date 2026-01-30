@@ -21,7 +21,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const addNotification = (notification: Omit<Notification, 'id'>) => {
     const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
     const newNotification = { ...notification, id };
-    
+
     setNotifications((prev) => [...prev, newNotification]);
 
     // Auto remove after duration (default 5 seconds)
@@ -43,11 +43,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function NotificationContainer({ 
-  notifications, 
-  onRemove 
-}: { 
-  notifications: Notification[]; 
+function NotificationContainer({
+  notifications,
+  onRemove,
+}: {
+  notifications: Notification[];
   onRemove: (id: string) => void;
 }) {
   if (notifications.length === 0) return null;
@@ -61,10 +61,10 @@ function NotificationContainer({
             notification.type === 'success'
               ? 'bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-700 text-green-800 dark:text-green-200'
               : notification.type === 'error'
-              ? 'bg-red-50 dark:bg-red-900 border-red-200 dark:border-red-700 text-red-800 dark:text-red-200'
-              : notification.type === 'warning'
-              ? 'bg-yellow-50 dark:bg-yellow-900 border-yellow-200 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200'
-              : 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200'
+                ? 'bg-red-50 dark:bg-red-900 border-red-200 dark:border-red-700 text-red-800 dark:text-red-200'
+                : notification.type === 'warning'
+                  ? 'bg-yellow-50 dark:bg-yellow-900 border-yellow-200 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200'
+                  : 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200'
           }`}
         >
           <div className="flex justify-between items-start">
@@ -89,5 +89,3 @@ export function useNotifications() {
   }
   return context;
 }
-
-

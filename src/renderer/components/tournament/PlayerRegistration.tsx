@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect, useCallback } from 'react';
 import { DatabaseService } from '../../services/database';
 import { Player } from '../../types/player';
 import Table from '../common/Table';
@@ -11,13 +12,25 @@ import { calculateNumberOfRounds } from '../../utils/tournament';
 import RoundsConfirmationModal from './RoundsConfirmationModal';
 
 interface PlayerRegistrationProps {
-  tournamentId: number;
+  /** When null, draft mode: players come from draftPlayers/onDraftPlayersChange (no DB writes until parent creates tournament). */
+  tournamentId: number | null;
   onComplete: (numberOfRounds: number) => void;
+  onCancel?: () => void;
   mode?: 'quick' | 'advanced';
+  /** Required when tournamentId is null (draft mode). */
+  draftPlayers?: Player[];
+  onDraftPlayersChange?: (players: Player[]) => void;
 }
 
-export default function PlayerRegistration({ tournamentId, onComplete, mode = 'quick' }: PlayerRegistrationProps) {
-  const [players, setPlayers] = useState<Player[]>([]);
+export default function PlayerRegistration({
+  tournamentId,
+  onComplete,
+  onCancel,
+  mode = 'quick',
+  draftPlayers = [],
+  onDraftPlayersChange,
+}: PlayerRegistrationProps) {
+  const [dbPlayers, setDbPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isNewPlayerModalOpen, setIsNewPlayerModalOpen] = useState(false);
   const [isRoundsModalOpen, setIsRoundsModalOpen] = useState(false);
@@ -30,12 +43,30 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
     age: '',
   });
 
-  useEffect(() => {
-    loadPlayers();
+  const isDraftMode = tournamentId === null;
+  const players = isDraftMode ? draftPlayers : dbPlayers;
+
+  const loadPlayers = useCallback(async () => {
+    if (!tournamentId) return;
+    try {
+      setIsLoading(true);
+      const data = await DatabaseService.getTournamentPlayers(tournamentId);
+      setDbPlayers(data);
+    } catch (error) {
+      console.error('Error loading tournament players:', error);
+      alert('Error al cargar los jugadores');
+    } finally {
+      setIsLoading(false);
+    }
   }, [tournamentId]);
 
   useEffect(() => {
-    // Calculate rounds dynamically when players change
+    if (!isDraftMode && tournamentId) {
+      loadPlayers();
+    }
+  }, [tournamentId, isDraftMode, loadPlayers]);
+
+  useEffect(() => {
     if (players.length >= 2) {
       const rounds = calculateNumberOfRounds(players.length);
       setCalculatedRounds(rounds);
@@ -44,22 +75,17 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
     }
   }, [players.length]);
 
-  const loadPlayers = async () => {
-    try {
-      setIsLoading(true);
-      const data = await DatabaseService.getTournamentPlayers(tournamentId);
-      setPlayers(data);
-    } catch (error) {
-      console.error('Error loading tournament players:', error);
-      alert('Error al cargar los jugadores');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSelectPlayer = async (player: Player) => {
+    if (!player.id) return;
+    if (isDraftMode) {
+      if (draftPlayers.some((p) => p.id === player.id)) {
+        alert('Este jugador ya está en la lista');
+        return;
+      }
+      onDraftPlayersChange?.([...draftPlayers, player]);
+      return;
+    }
     try {
-      if (!player.id) return;
       await DatabaseService.registerPlayerToTournament(tournamentId, player.id);
       loadPlayers();
     } catch (error: any) {
@@ -74,8 +100,13 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
 
   const handleRemovePlayer = async (player: Player) => {
     if (!player.id) return;
+    if (isDraftMode) {
+      if (confirm(`¿Quitar a ${player.name} de la lista?`)) {
+        onDraftPlayersChange?.(draftPlayers.filter((p) => p.id !== player.id));
+      }
+      return;
+    }
     if (!confirm(`¿Estás seguro de eliminar a ${player.name} del torneo?`)) return;
-
     try {
       await DatabaseService.unregisterPlayerFromTournament(tournamentId, player.id);
       loadPlayers();
@@ -90,7 +121,6 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
       alert('El nombre es requerido');
       return;
     }
-
     try {
       const playerId = await DatabaseService.createPlayer({
         name: newPlayerData.name.trim(),
@@ -99,16 +129,22 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
         email: newPlayerData.email.trim() || undefined,
         age: newPlayerData.age ? Number(newPlayerData.age) : undefined,
       });
-      await DatabaseService.registerPlayerToTournament(tournamentId, playerId);
+      const newPlayer: Player = {
+        id: playerId,
+        name: newPlayerData.name.trim(),
+        bga_username: newPlayerData.bga_username.trim() || undefined,
+        phone: newPlayerData.phone.trim() || undefined,
+        email: newPlayerData.email.trim() || undefined,
+        age: newPlayerData.age ? Number(newPlayerData.age) : undefined,
+      };
+      if (isDraftMode) {
+        onDraftPlayersChange?.([...draftPlayers, newPlayer]);
+      } else {
+        await DatabaseService.registerPlayerToTournament(tournamentId, playerId);
+        loadPlayers();
+      }
       setIsNewPlayerModalOpen(false);
-      setNewPlayerData({
-        name: '',
-        bga_username: '',
-        phone: '',
-        email: '',
-        age: '',
-      });
-      loadPlayers();
+      setNewPlayerData({ name: '', bga_username: '', phone: '', email: '', age: '' });
     } catch (error) {
       console.error('Error creating player:', error);
       alert('Error al crear el jugador');
@@ -129,11 +165,7 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
       key: 'actions',
       header: 'Acciones',
       render: (player) => (
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => handleRemovePlayer(player)}
-        >
+        <Button variant="danger" size="sm" onClick={() => handleRemovePlayer(player)}>
           Eliminar
         </Button>
       ),
@@ -143,28 +175,26 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
   const registeredIds = players.map((p) => p.id!).filter((id): id is number => id !== undefined);
 
   return (
-    <div className="space-y-4">
-      <div>
+    <div className="flex flex-col overflow-hidden gap-4">
+      {/* Search section: always on top so dropdown appears above table headers (AC-008) */}
+      <div className="flex-none relative z-[100] overflow-visible">
         <h3 className="text-lg font-medium mb-4">Inscribir Jugadores</h3>
-        <div className="flex space-x-2 mb-4">
-          <div className="flex-1">
+        <div className="flex space-x-2">
+          <div className="flex-1 min-w-0 pl-2">
             <PlayerSearch
               onSelect={handleSelectPlayer}
               excludeIds={registeredIds}
               placeholder="Buscar jugador existente..."
             />
           </div>
-          <Button onClick={() => setIsNewPlayerModalOpen(true)}>
-            Nuevo Jugador
-          </Button>
+          <Button onClick={() => setIsNewPlayerModalOpen(true)}>Nuevo Jugador</Button>
         </div>
       </div>
 
-      <div>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium">
-            Jugadores Inscritos ({players.length})
-          </h3>
+      {/* Table section: fixed max height so only this area scrolls, modal stays same size */}
+      <div className="flex-none flex flex-col overflow-hidden relative z-0 min-h-0">
+        <div className="flex justify-between items-center mb-2 flex-none">
+          <h3 className="text-lg font-medium">Jugadores Inscritos ({players.length})</h3>
           {players.length >= 2 && (
             <div className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
               <span className="text-sm font-medium text-primary-800 dark:text-primary-200">
@@ -173,25 +203,36 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
             </div>
           )}
         </div>
-        {isLoading ? (
-          <p className="text-center py-8 text-gray-500">Cargando...</p>
-        ) : (
-          <Table
-            columns={columns}
-            data={players}
-            keyExtractor={(player) => player.id || Math.random()}
-            emptyMessage="No hay jugadores inscritos. Busca o crea un jugador para inscribirlo."
-          />
-        )}
+        <div className="max-h-[40vh] min-h-[120px] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg">
+          {isLoading ? (
+            <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
+          ) : (
+            <Table
+              columns={columns}
+              data={players}
+              keyExtractor={(player) => player.id || Math.random()}
+              emptyMessage="No hay jugadores inscritos. Busca o crea un jugador para inscribirlo."
+              scrollableBody
+            />
+          )}
+        </div>
       </div>
 
-      {players.length >= 2 && (
-        <div className="flex justify-end pt-4">
-          <Button onClick={() => setIsRoundsModalOpen(true)} variant="primary" size="lg">
-            Continuar ({players.length} jugadores)
+      {/* Buttons: Cancel and Continuar in same row, Continuar disabled when < 2 players */}
+      <div className="flex-none flex justify-end items-center gap-2 pt-2">
+        {onCancel && (
+          <Button variant="secondary" onClick={onCancel}>
+            Cancelar
           </Button>
-        </div>
-      )}
+        )}
+        <Button
+          onClick={() => setIsRoundsModalOpen(true)}
+          variant="primary"
+          disabled={players.length < 2}
+        >
+          Continuar ({players.length} jugadores)
+        </Button>
+      </div>
 
       <RoundsConfirmationModal
         isOpen={isRoundsModalOpen}
@@ -214,9 +255,7 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
             <Button variant="secondary" onClick={() => setIsNewPlayerModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleCreateAndAdd}>
-              Crear e Inscribir
-            </Button>
+            <Button onClick={handleCreateAndAdd}>Crear e Inscribir</Button>
           </>
         }
       >
@@ -265,6 +304,3 @@ export default function PlayerRegistration({ tournamentId, onComplete, mode = 'q
     </div>
   );
 }
-
-
-

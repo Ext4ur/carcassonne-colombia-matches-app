@@ -1,12 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
-import { Tournament, PlayerStanding, Round, Match } from '../types/tournament';
+import { Tournament, PlayerStanding } from '../types/tournament';
 
 export class ReportService {
   static async generateTournamentExcel(tournamentId: number): Promise<any> {
-    const tournament = await DatabaseService.getTournamentById(tournamentId) as Tournament;
+    // const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const standings = await this.getStandings(tournamentId);
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-    const config = await DatabaseService.getTournamentConfig(tournamentId);
+    // const config = await DatabaseService.getTournamentConfig(tournamentId);
 
     // Sheet 1: Leaderboard
     const leaderboardHeaders = ['Posición', 'Jugador', 'Puntos Totales', 'Victorias'];
@@ -25,18 +26,13 @@ export class ReportService {
         round: `Ronda ${round.round_number}`,
         matches: await Promise.all(
           matches.map(async (match) => {
-            const results = await DatabaseService.getMatchResults(match.id!);
-            const resultsWithPlayers = await Promise.all(
-              results.map(async (r) => {
-                const player = await DatabaseService.getPlayerById(r.player_id);
-                return {
-                  player: player?.name || 'Unknown',
-                  position: r.position,
-                  points: r.points,
-                  tournament_points: r.tournament_points,
-                };
-              })
-            );
+            const results = await DatabaseService.getMatchResults(match.id!, tournamentId);
+            const resultsWithPlayers = results.map((r) => ({
+              player: r.player_name ?? 'Unknown',
+              position: r.position,
+              points: r.points,
+              tournament_points: r.tournament_points,
+            }));
             return {
               match: match.match_number,
               results: resultsWithPlayers,
@@ -46,7 +42,14 @@ export class ReportService {
       });
     }
 
-    const roundHeaders = ['Ronda', 'Partida', 'Jugador', 'Posición', 'Puntos Partida', 'Puntos Torneo'];
+    const roundHeaders = [
+      'Ronda',
+      'Partida',
+      'Jugador',
+      'Posición',
+      'Puntos Partida',
+      'Puntos Torneo',
+    ];
     const roundRows: any[] = [];
     for (const roundData of roundResults) {
       for (const match of roundData.matches) {
@@ -69,7 +72,10 @@ export class ReportService {
       ['Total Jugadores', standings.length],
       ['Total Rondas', rounds.length],
       ['Total Partidas', rounds.reduce((sum, r) => sum + (r as any).match_count || 0, 0)],
-      ['Puntos Promedio', (standings.reduce((sum, s) => sum + s.total_points, 0) / standings.length).toFixed(2)],
+      [
+        'Puntos Promedio',
+        (standings.reduce((sum, s) => sum + s.total_points, 0) / standings.length).toFixed(2),
+      ],
     ];
 
     return {
@@ -95,7 +101,7 @@ export class ReportService {
 
   static async generateTournamentCSV(tournamentId: number): Promise<any> {
     const standings = await this.getStandings(tournamentId);
-    
+
     const headers = ['Posición', 'Jugador', 'Puntos Totales', 'Victorias'];
     const rows = standings.map((s, index) => ({
       Posición: index + 1,
@@ -108,7 +114,7 @@ export class ReportService {
   }
 
   static async generateTournamentPDF(tournamentId: number): Promise<string> {
-    const tournament = await DatabaseService.getTournamentById(tournamentId) as Tournament;
+    const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const standings = await this.getStandings(tournamentId);
     const top3 = standings.slice(0, 3);
 
@@ -136,21 +142,33 @@ export class ReportService {
           <p>Fecha: ${new Date(tournament.date).toLocaleDateString()}</p>
           
           <div class="podium">
-            ${top3[1] ? `<div class="podium-item">
+            ${
+              top3[1]
+                ? `<div class="podium-item">
               <div class="podium-box second">2</div>
               <p><strong>${top3[1].player_name}</strong></p>
               <p>${top3[1].total_points.toFixed(2)} pts</p>
-            </div>` : ''}
-            ${top3[0] ? `<div class="podium-item">
+            </div>`
+                : ''
+            }
+            ${
+              top3[0]
+                ? `<div class="podium-item">
               <div class="podium-box first">1</div>
               <p><strong>${top3[0].player_name}</strong></p>
               <p>${top3[0].total_points.toFixed(2)} pts</p>
-            </div>` : ''}
-            ${top3[2] ? `<div class="podium-item">
+            </div>`
+                : ''
+            }
+            ${
+              top3[2]
+                ? `<div class="podium-item">
               <div class="podium-box third">3</div>
               <p><strong>${top3[2].player_name}</strong></p>
               <p>${top3[2].total_points.toFixed(2)} pts</p>
-            </div>` : ''}
+            </div>`
+                : ''
+            }
           </div>
 
           <h2>Leaderboard Completo</h2>
@@ -164,14 +182,18 @@ export class ReportService {
               </tr>
             </thead>
             <tbody>
-              ${standings.map((s, i) => `
+              ${standings
+                .map(
+                  (s, i) => `
                 <tr>
                   <td>${i + 1}</td>
                   <td>${s.player_name}</td>
                   <td>${s.total_points.toFixed(2)}</td>
                   <td>${s.wins}</td>
                 </tr>
-              `).join('')}
+              `
+                )
+                .join('')}
             </tbody>
           </table>
         </body>
@@ -182,7 +204,7 @@ export class ReportService {
   }
 
   static async generateTournamentImage(tournamentId: number): Promise<string> {
-    const tournament = await DatabaseService.getTournamentById(tournamentId) as Tournament;
+    const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const standings = await this.getStandings(tournamentId);
     const config = await DatabaseService.getTournamentConfig(tournamentId);
     const tiebreakCriteria = config?.tiebreak_criteria || [];
@@ -192,7 +214,7 @@ export class ReportService {
     const getTiebreakDisplay = (standing: PlayerStanding, criterionId: string): string => {
       const value = standing.tiebreak_values[criterionId];
       if (value === undefined || value === null) return '';
-      
+
       if (criterionId === 'wins') {
         return `${value} 🏆`;
       } else if (criterionId === 'opponent_points_drop_worst') {
@@ -216,12 +238,12 @@ export class ReportService {
     // Find where differences start for each position
     const getRelevantTiebreaks = (standing: PlayerStanding, position: number): string[] => {
       const relevant: string[] = [];
-      
+
       // Always show wins first
       if (standing.wins !== undefined) {
         relevant.push(getTiebreakDisplay(standing, 'wins'));
       }
-      
+
       // For first place, show all enabled criteria
       if (position === 0) {
         for (const criterion of tiebreakCriteria) {
@@ -233,18 +255,17 @@ export class ReportService {
         }
         return relevant;
       }
-      
+
       // For other positions, show all criteria that have values
       // Show all criteria until we find where they differ from previous position
-      const prevStanding = standings[position - 1];
-      
+      // const prevStanding = standings[position - 1];
+
       // Check each criterion in order (excluding wins which is already shown)
       for (const criterion of tiebreakCriteria) {
         if (!criterion.enabled || criterion.id === 'wins') continue;
-        
+
         const currentValue = standing.tiebreak_values[criterion.id];
-        const prevValue = prevStanding.tiebreak_values[criterion.id];
-        
+
         // Show criterion if it has a value
         if (currentValue !== undefined && currentValue !== null) {
           const display = getTiebreakDisplay(standing, criterion.id);
@@ -253,7 +274,7 @@ export class ReportService {
           }
         }
       }
-      
+
       return relevant;
     };
 
@@ -358,50 +379,78 @@ export class ReportService {
             <div class="date">${new Date(tournament.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
             
             <div class="podium">
-              ${top4[1] ? `
+              ${
+                top4[1]
+                  ? `
                 <div class="podium-item">
                   <div class="podium-box second">
                     <div class="position-number">🥈 2</div>
                   </div>
                   <div class="player-name">${top4[1].player_name}</div>
                   <div class="tiebreak-info">
-                    ${getRelevantTiebreaks(top4[1], 1).length > 0 ? getRelevantTiebreaks(top4[1], 1).map(t => `<div class="tiebreak-item">${t}</div>`).join('') : '<div class="tiebreak-item">-</div>'}
+                    ${
+                      getRelevantTiebreaks(top4[1], 1).length > 0
+                        ? getRelevantTiebreaks(top4[1], 1)
+                            .map((t) => `<div class="tiebreak-item">${t}</div>`)
+                            .join('')
+                        : '<div class="tiebreak-item">-</div>'
+                    }
                   </div>
                 </div>
-              ` : ''}
-              ${top4[0] ? `
+              `
+                  : ''
+              }
+              ${
+                top4[0]
+                  ? `
                 <div class="podium-item">
                   <div class="podium-box first">
                     <div class="position-number">🥇 1</div>
                   </div>
                   <div class="player-name">${top4[0].player_name}</div>
                   <div class="tiebreak-info">
-                    ${getRelevantTiebreaks(top4[0], 0).map(t => `<div class="tiebreak-item">${t}</div>`).join('')}
+                    ${getRelevantTiebreaks(top4[0], 0)
+                      .map((t) => `<div class="tiebreak-item">${t}</div>`)
+                      .join('')}
                   </div>
                 </div>
-              ` : ''}
-              ${top4[2] ? `
+              `
+                  : ''
+              }
+              ${
+                top4[2]
+                  ? `
                 <div class="podium-item">
                   <div class="podium-box third">
                     <div class="position-number">🥉 3</div>
                   </div>
                   <div class="player-name">${top4[2].player_name}</div>
                   <div class="tiebreak-info">
-                    ${getRelevantTiebreaks(top4[2], 2).map(t => `<div class="tiebreak-item">${t}</div>`).join('')}
+                    ${getRelevantTiebreaks(top4[2], 2)
+                      .map((t) => `<div class="tiebreak-item">${t}</div>`)
+                      .join('')}
                   </div>
                 </div>
-              ` : ''}
-              ${top4[3] ? `
+              `
+                  : ''
+              }
+              ${
+                top4[3]
+                  ? `
                 <div class="podium-item">
                   <div class="podium-box fourth">
                     <div class="position-number">4</div>
                   </div>
                   <div class="player-name">${top4[3].player_name}</div>
                   <div class="tiebreak-info">
-                    ${getRelevantTiebreaks(top4[3], 3).map(t => `<div class="tiebreak-item">${t}</div>`).join('')}
+                    ${getRelevantTiebreaks(top4[3], 3)
+                      .map((t) => `<div class="tiebreak-item">${t}</div>`)
+                      .join('')}
                   </div>
                 </div>
-              ` : ''}
+              `
+                  : ''
+              }
             </div>
           </div>
         </body>
@@ -416,8 +465,9 @@ export class ReportService {
     const config = await DatabaseService.getTournamentConfig(tournamentId);
     return await SwissPairingService.calculateStandings(
       tournamentId,
-      config?.tiebreak_criteria || []
+      config?.tiebreak_criteria || [],
+      undefined,
+      config?.player_display_mode
     );
   }
 }
-

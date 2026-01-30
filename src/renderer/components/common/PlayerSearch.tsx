@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { DatabaseService } from '../../services/database';
 import { Player } from '../../types/player';
 import Input from './Input';
@@ -9,7 +9,11 @@ interface PlayerSearchProps {
   placeholder?: string;
 }
 
-export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 'Buscar jugador...' }: PlayerSearchProps) {
+export default function PlayerSearch({
+  onSelect,
+  excludeIds = [],
+  placeholder = 'Buscar jugador...',
+}: PlayerSearchProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<Player[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -27,6 +31,21 @@ export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const searchPlayers = useCallback(
+    async (term: string) => {
+      try {
+        const players = await DatabaseService.searchPlayers(term);
+        const filtered = players.filter((p) => !excludeIds.includes(p.id!));
+        setResults(filtered);
+        setShowResults(true);
+        setSelectedIndex(-1);
+      } catch (error) {
+        console.error('Error searching players:', error);
+      }
+    },
+    [excludeIds]
+  );
+
   useEffect(() => {
     if (searchTerm.length >= 2) {
       searchPlayers(searchTerm);
@@ -34,19 +53,7 @@ export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 
       setResults([]);
       setShowResults(false);
     }
-  }, [searchTerm]);
-
-  const searchPlayers = async (term: string) => {
-    try {
-      const players = await DatabaseService.searchPlayers(term);
-      const filtered = players.filter((p) => !excludeIds.includes(p.id!));
-      setResults(filtered);
-      setShowResults(true);
-      setSelectedIndex(-1);
-    } catch (error) {
-      console.error('Error searching players:', error);
-    }
-  };
+  }, [searchTerm, searchPlayers]);
 
   const handleSelect = (player: Player) => {
     onSelect(player);
@@ -81,7 +88,7 @@ export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 
         onKeyDown={handleKeyDown}
       />
       {showResults && results.length > 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
           {results.map((player, index) => (
             <div
               key={player.id}
@@ -101,13 +108,10 @@ export default function PlayerSearch({ onSelect, excludeIds = [], placeholder = 
         </div>
       )}
       {showResults && searchTerm.length >= 2 && results.length === 0 && (
-        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4">
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4">
           <p className="text-gray-500 dark:text-gray-400">No se encontraron jugadores</p>
         </div>
       )}
     </div>
   );
 }
-
-
-

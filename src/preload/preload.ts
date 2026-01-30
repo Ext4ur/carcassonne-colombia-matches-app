@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { contextBridge, ipcRenderer } from 'electron';
 
 console.log('Preload script loaded');
@@ -21,7 +22,7 @@ try {
         return ipcRenderer.invoke('db:transaction', queries);
       },
     },
-    
+
     // File operations
     saveFile: (data: any, filename: string, type: 'excel' | 'csv' | 'pdf' | 'image' | 'json') => {
       console.log('Preload: saveFile called', filename, type);
@@ -31,7 +32,7 @@ try {
       console.log('Preload: openFile called');
       return ipcRenderer.invoke('file:open', filters);
     },
-    
+
     // App info
     getVersion: () => {
       console.log('Preload: getVersion called');
@@ -42,5 +43,3 @@ try {
 } catch (error) {
   console.error('Error exposing electronAPI:', error);
 }
-
-

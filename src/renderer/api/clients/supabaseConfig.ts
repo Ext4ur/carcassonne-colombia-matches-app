@@ -1,6 +1,6 @@
 /**
  * Configuración de Supabase
- * 
+ *
  * Para usar Supabase, necesitas:
  * 1. Crear un proyecto en https://supabase.com
  * 2. Obtener la URL y la publishable key desde Settings > API
@@ -23,10 +23,9 @@ export const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABL
 
 /**
  * Secret key de Supabase (privada, solo para servidor/Edge Functions)
- * Reemplaza a la antigua "service_role key"
- * NUNCA exponer en el cliente
+ * NUNCA usar en el cliente - no se expone aquí por seguridad.
+ * Solo se usa en Edge Functions o scripts de migración.
  */
-export const SUPABASE_SECRET_KEY = import.meta.env.VITE_SUPABASE_SECRET_KEY || '';
 
 /**
  * Verificar si Supabase está configurado

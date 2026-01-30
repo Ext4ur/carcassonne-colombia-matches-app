@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { IApiClient } from './IApiClient';
 
 /**
@@ -24,7 +25,10 @@ export class SqliteClient implements IApiClient {
    * @param params - Parámetros opcionales para la query
    * @returns Información sobre la operación (lastInsertRowid, changes)
    */
-  async execute(sql: string, params?: any[]): Promise<{ lastInsertRowid: number; changes: number }> {
+  async execute(
+    sql: string,
+    params?: any[]
+  ): Promise<{ lastInsertRowid: number; changes: number }> {
     if (!window.electronAPI) {
       throw new Error('Electron API not available');
     }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DatabaseService } from '../services/database';
 import { Player } from '../types/player';
 import Table from '../components/common/Table';
@@ -22,34 +22,23 @@ export default function Players() {
   const [formData, setFormData] = useState({
     name: '',
     bga_username: '',
+    display_preference: 'name' as 'name' | 'username',
     phone: '',
     email: '',
     age: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedPlayerForStats, setSelectedPlayerForStats] = useState<Player | null>(null);
-  const [selectedPlayersForH2H, setSelectedPlayersForH2H] = useState<{ player1: Player; player2: Player } | null>(null);
-  const [opponents, setOpponents] = useState<Array<{ player: Player; matches: number; wins: number; losses: number }>>([]);
+  const [selectedPlayersForH2H, setSelectedPlayersForH2H] = useState<{
+    player1: Player;
+    player2: Player;
+  } | null>(null);
+  const [opponents, setOpponents] = useState<
+    Array<{ player: Player; matches: number; wins: number; losses: number }>
+  >([]);
   const [selectedPlayerForOpponents, setSelectedPlayerForOpponents] = useState<Player | null>(null);
 
-  useEffect(() => {
-    loadPlayers();
-  }, []);
-
-  useEffect(() => {
-    if (searchTerm) {
-      const filtered = players.filter(
-        (p) =>
-          p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (p.bga_username && p.bga_username.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-      setFilteredPlayers(filtered);
-    } else {
-      setFilteredPlayers(players);
-    }
-  }, [searchTerm, players]);
-
-  const loadPlayers = async () => {
+  const loadPlayers = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await DatabaseService.getAllPlayers();
@@ -64,7 +53,24 @@ export default function Players() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [addNotification]);
+
+  useEffect(() => {
+    loadPlayers();
+  }, [loadPlayers]);
+
+  useEffect(() => {
+    if (searchTerm) {
+      const filtered = players.filter(
+        (p) =>
+          p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (p.bga_username && p.bga_username.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      setFilteredPlayers(filtered);
+    } else {
+      setFilteredPlayers(players);
+    }
+  }, [searchTerm, players]);
 
   const handleOpenModal = (player?: Player) => {
     if (player) {
@@ -72,6 +78,7 @@ export default function Players() {
       setFormData({
         name: player.name || '',
         bga_username: player.bga_username || '',
+        display_preference: player.display_preference ?? 'name',
         phone: player.phone || '',
         email: player.email || '',
         age: player.age?.toString() || '',
@@ -81,6 +88,7 @@ export default function Players() {
       setFormData({
         name: '',
         bga_username: '',
+        display_preference: 'name',
         phone: '',
         email: '',
         age: '',
@@ -96,6 +104,7 @@ export default function Players() {
     setFormData({
       name: '',
       bga_username: '',
+      display_preference: 'name',
       phone: '',
       email: '',
       age: '',
@@ -114,7 +123,10 @@ export default function Players() {
       newErrors.email = 'El correo electrónico no es válido';
     }
 
-    if (formData.age && (isNaN(Number(formData.age)) || Number(formData.age) < 0 || Number(formData.age) > 150)) {
+    if (
+      formData.age &&
+      (isNaN(Number(formData.age)) || Number(formData.age) < 0 || Number(formData.age) > 150)
+    ) {
       newErrors.age = 'La edad debe ser un número válido';
     }
 
@@ -131,6 +143,7 @@ export default function Players() {
         await DatabaseService.updatePlayer(editingPlayer.id, {
           name: formData.name.trim(),
           bga_username: formData.bga_username.trim() || undefined,
+          display_preference: formData.display_preference,
           phone: formData.phone.trim() || undefined,
           email: formData.email.trim() || undefined,
           age: formData.age ? Number(formData.age) : undefined,
@@ -139,6 +152,7 @@ export default function Players() {
         await DatabaseService.createPlayer({
           name: formData.name.trim(),
           bga_username: formData.bga_username.trim() || undefined,
+          display_preference: formData.display_preference,
           phone: formData.phone.trim() || undefined,
           email: formData.email.trim() || undefined,
           age: formData.age ? Number(formData.age) : undefined,
@@ -248,18 +262,10 @@ export default function Players() {
           >
             👥
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => handleOpenModal(player)}
-          >
+          <Button variant="secondary" size="sm" onClick={() => handleOpenModal(player)}>
             Editar
           </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => handleDelete(player)}
-          >
+          <Button variant="danger" size="sm" onClick={() => handleDelete(player)}>
             Eliminar
           </Button>
         </div>
@@ -285,7 +291,7 @@ export default function Players() {
         </div>
 
         {isLoading && players.length === 0 ? (
-          <p className="text-center py-8 text-gray-500">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
         ) : (
           <Table
             columns={columns}
@@ -324,6 +330,36 @@ export default function Players() {
             value={formData.bga_username}
             onChange={(e) => setFormData({ ...formData, bga_username: e.target.value })}
           />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Mostrar por defecto
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              Cuando tengas nombre y username, cuál mostrar en torneos (si el torneo lo permite).
+            </p>
+            <div className="flex gap-4">
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  name="display_preference"
+                  checked={formData.display_preference === 'name'}
+                  onChange={() => setFormData({ ...formData, display_preference: 'name' })}
+                  className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-200">Nombre</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  name="display_preference"
+                  checked={formData.display_preference === 'username'}
+                  onChange={() => setFormData({ ...formData, display_preference: 'username' })}
+                  className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-200">Username BGA</span>
+              </label>
+            </div>
+          </div>
           <Input
             label="Teléfono"
             type="tel"
@@ -386,17 +422,29 @@ export default function Players() {
         >
           <div className="space-y-4">
             {opponents.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">No hay oponentes registrados</p>
+              <p className="text-center text-gray-500 dark:text-gray-400 py-8">
+                No hay oponentes registrados
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-800">
                     <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Jugador</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Partidas</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Victorias</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Derrotas</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Jugador
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Partidas
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Victorias
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Derrotas
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Acciones
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">

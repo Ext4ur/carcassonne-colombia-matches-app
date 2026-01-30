@@ -95,7 +95,8 @@ export default function Settings() {
             <div>
               <p className="font-medium mb-2">Exportar Datos</p>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Exporta todos los datos (torneos, jugadores, circuitos) a un archivo JSON para respaldo.
+                Exporta todos los datos (torneos, jugadores, circuitos) a un archivo JSON para
+                respaldo.
               </p>
               <Button onClick={handleExport} isLoading={isExporting} variant="primary">
                 Exportar Datos
@@ -116,10 +117,8 @@ export default function Settings() {
         {/* About */}
         <div className="card">
           <h2 className="text-xl font-bold mb-4">Acerca de</h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            Carcassonne Tournament Manager v1.0
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
+          <p className="text-gray-600 dark:text-gray-400">Carcassonne Tournament Manager v1.0</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
             Aplicación para gestionar torneos presenciales de Carcassonne Colombia
           </p>
         </div>

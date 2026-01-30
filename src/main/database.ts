@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -9,20 +10,20 @@ export function getDatabase(): Database.Database {
   if (!db) {
     const userDataPath = app.getPath('userData');
     const dbPath = path.join(userDataPath, 'tournament.db');
-    
+
     // Ensure directory exists
     const dbDir = path.dirname(dbPath);
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
     }
-    
+
     db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
-    
+
     // Initialize schema
     initializeSchema(db);
   }
-  
+
   return db;
 }
 
@@ -53,6 +54,33 @@ function initializeSchema(database: Database.Database) {
       description TEXT,
       start_date DATE,
       end_date DATE,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'finalized')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  // Migration: add status column to existing circuits tables (no-op if already present)
+  try {
+    database.exec(`ALTER TABLE circuits ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
+  } catch {
+    // Column already exists
+  }
+
+  // Cities table
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS cities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Places table (city_id added in migration 7)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS places (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -185,7 +213,7 @@ function initializeSchema(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_player_byes_tournament ON player_byes(tournament_id);
     CREATE INDEX IF NOT EXISTS idx_player_byes_player ON player_byes(player_id);
   `);
-  
+
   // Run migrations to add new columns to existing tables
   runMigrations(database);
 }
@@ -221,6 +249,78 @@ function runMigrations(database: Database.Database) {
     const errorMsg = error.message || '';
     if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
       console.warn('Migration 3 warning:', errorMsg);
+    }
+  }
+
+  // Migration 4: Add display_preference to players
+  try {
+    database.exec(
+      `ALTER TABLE players ADD COLUMN display_preference TEXT DEFAULT 'name' CHECK(display_preference IN ('name', 'username'))`
+    );
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 4 warning:', errorMsg);
+    }
+  }
+
+  // Migration 5: Add player_display_mode to tournament_configs
+  try {
+    database.exec(
+      `ALTER TABLE tournament_configs ADD COLUMN player_display_mode TEXT DEFAULT 'per_player' CHECK(player_display_mode IN ('per_player', 'names_only', 'usernames_only'))`
+    );
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 5 warning:', errorMsg);
+    }
+  }
+
+  // Migration 6: Places and tournament place_id
+  try {
+    database.exec(
+      `INSERT INTO places (name) SELECT 'Online' WHERE NOT EXISTS (SELECT 1 FROM places LIMIT 1)`
+    );
+    database.exec(`ALTER TABLE tournaments ADD COLUMN place_id INTEGER REFERENCES places(id)`);
+    database.exec(
+      `UPDATE tournaments SET place_id = (SELECT id FROM places WHERE name = 'Online' LIMIT 1) WHERE place_id IS NULL`
+    );
+    // SQLite does not support ALTER COLUMN to add NOT NULL; app will enforce place_id on create/update
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 6 warning:', errorMsg);
+    }
+  }
+
+  // Migration 7: Cities and place city_id
+  try {
+    database.exec(
+      `INSERT INTO cities (name) SELECT 'Bogotá' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Bogotá')`
+    );
+    database.exec(
+      `INSERT INTO cities (name) SELECT 'Chía' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Chía')`
+    );
+    database.exec(
+      `INSERT INTO cities (name) SELECT 'Medellín' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Medellín')`
+    );
+    database.exec(
+      `INSERT INTO cities (name) SELECT 'Cali' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Cali')`
+    );
+    database.exec(
+      `INSERT INTO cities (name) SELECT 'Ibagué' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Ibagué')`
+    );
+    database.exec(
+      `INSERT INTO cities (name) SELECT 'Neiva' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Neiva')`
+    );
+    database.exec(`ALTER TABLE places ADD COLUMN city_id INTEGER REFERENCES cities(id)`);
+    database.exec(
+      `UPDATE places SET city_id = (SELECT id FROM cities WHERE name = 'Bogotá' LIMIT 1) WHERE city_id IS NULL`
+    );
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 7 warning:', errorMsg);
     }
   }
 }

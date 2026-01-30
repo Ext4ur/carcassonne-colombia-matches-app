@@ -44,19 +44,14 @@ export default function RoundsConfirmationModal({
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Confirmar Número de Rondas"
-      size="md"
-    >
-      <div className="space-y-4">
-        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Confirmar Número de Rondas" size="sm">
+      <div className="space-y-3">
+        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <p className="text-sm text-gray-700 dark:text-gray-300">
             <strong>Jugadores inscritos:</strong> {numPlayers}
           </p>
-          <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
-            <strong>Rondas calculadas automáticamente:</strong> {calculatedRounds}
+          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+            <strong>Rondas calculadas:</strong> {calculatedRounds}
           </p>
         </div>
 
@@ -82,13 +77,13 @@ export default function RoundsConfirmationModal({
             error={error}
             helperText={
               mode === 'quick'
-                ? 'En modo rápido, el número de rondas se calcula automáticamente'
-                : 'Puedes ajustar el número de rondas según tus necesidades'
+                ? 'En modo rápido se calcula automáticamente'
+                : 'Ajusta el número de rondas si lo necesitas'
             }
           />
         </div>
 
-        <div className="flex justify-end space-x-2 pt-4">
+        <div className="flex justify-end space-x-2 pt-2">
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>

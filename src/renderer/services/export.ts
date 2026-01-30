@@ -1,4 +1,7 @@
 import { DatabaseService } from './database';
+import { getLocalDateString } from '../utils/dateUtils';
+import { Tournament } from '../types/tournament';
+import { Circuit } from '../types/circuit';
 
 export class ExportService {
   static async exportAll(): Promise<void> {
@@ -9,17 +12,17 @@ export class ExportService {
 
     // Get tournament configs and players
     const tournamentsWithData = await Promise.all(
-      tournaments.map(async (tournament) => {
+      tournaments.map(async (tournament: Tournament) => {
         const config = await DatabaseService.getTournamentConfig(tournament.id!);
         const tournamentPlayers = await DatabaseService.getTournamentPlayers(tournament.id!);
         const rounds = await DatabaseService.getTournamentRounds(tournament.id!);
-        
+
         const roundsWithData = await Promise.all(
           rounds.map(async (round) => {
             const matches = await DatabaseService.getRoundMatches(round.id!);
             const matchesWithData = await Promise.all(
               matches.map(async (match) => {
-                const results = await DatabaseService.getMatchResults(match.id!);
+                const results = await DatabaseService.getMatchResults(match.id!, tournament.id!);
                 const matchPlayers = await DatabaseService.getMatchPlayers(match.id!);
                 return {
                   ...match,
@@ -46,11 +49,13 @@ export class ExportService {
 
     // Get circuit tournaments
     const circuitsWithData = await Promise.all(
-      circuits.map(async (circuit) => {
-        const circuitTournaments = tournaments.filter((t) => t.circuit_id === circuit.id);
+      circuits.map(async (circuit: Circuit) => {
+        const circuitTournaments = tournaments.filter(
+          (t: Tournament) => t.circuit_id === circuit.id
+        );
         return {
           ...circuit,
-          tournaments: circuitTournaments.map((t) => t.id),
+          tournaments: circuitTournaments.map((t: Tournament) => t.id),
         };
       })
     );
@@ -67,10 +72,8 @@ export class ExportService {
 
     // Save to file
     const data = JSON.stringify(exportData, null, 2);
-    const filename = `carcassonne_backup_${new Date().toISOString().split('T')[0]}.json`;
-    
+    const filename = `carcassonne_backup_${getLocalDateString()}.json`;
+
     await window.electronAPI.saveFile(data, filename, 'json');
   }
 }
-
-

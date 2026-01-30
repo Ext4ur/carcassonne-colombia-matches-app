@@ -1,7 +1,7 @@
 import { IRepository } from './base/IRepository';
 import { LocalPlayerRepository } from './local/LocalPlayerRepository';
-import { Player } from '@types/player';
-import { DB_CONFIG } from '@constants';
+import { Player } from '../types/player';
+import { DB_CONFIG } from '../constants';
 
 /**
  * Factory para crear repositorios según la configuración
@@ -27,7 +27,8 @@ export function createPlayerRepository(): IRepository<Player> {
  */
 export function createRepository<T>(
   type: 'player' | 'tournament' | 'match' | 'round',
-  mode: 'local' | 'remote' | 'dual' = DB_CONFIG.mode
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _mode: 'local' | 'remote' | 'dual' = DB_CONFIG.mode
 ): IRepository<T> {
   switch (type) {
     case 'player':

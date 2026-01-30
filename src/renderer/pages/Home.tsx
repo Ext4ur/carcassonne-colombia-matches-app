@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 export default function Home() {
   return (
     <div className="px-4 py-6">
@@ -7,29 +9,35 @@ export default function Home() {
           Gestiona tus torneos presenciales de Carcassonne Colombia de manera profesional.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-            <h2 className="text-xl font-semibold mb-2">🏆 Crear Torneo</h2>
+          <Link
+            to="/tournaments"
+            className="block p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
+          >
+            <h2 className="text-xl font-semibold mb-2">🏆 Torneos</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Crea un nuevo torneo clasificatorio o de circuito
+              Crea y gestiona torneos clasificatorios o de circuito
             </p>
-          </div>
-          <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-            <h2 className="text-xl font-semibold mb-2">👥 Gestionar Jugadores</h2>
+          </Link>
+          <Link
+            to="/players"
+            className="block p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
+          >
+            <h2 className="text-xl font-semibold mb-2">👥 Jugadores</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Administra la base de datos de jugadores
             </p>
-          </div>
-          <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-            <h2 className="text-xl font-semibold mb-2">📊 Ver Estadísticas</h2>
+          </Link>
+          <Link
+            to="/circuits"
+            className="block p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
+          >
+            <h2 className="text-xl font-semibold mb-2">🔄 Circuitos</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Revisa el historial y estadísticas de torneos
+              Gestiona circuitos y sus torneos
             </p>
-          </div>
+          </Link>
         </div>
       </div>
     </div>
   );
 }
-
-
-

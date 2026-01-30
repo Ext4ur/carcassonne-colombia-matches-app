@@ -1,6 +1,15 @@
-import { useEffect, useState } from 'react';
-import { PlayerStatistics, PlayerStatsService } from '../../services/playerStats';
+import { useEffect, useState, useMemo } from 'react';
+import {
+  PlayerStatistics,
+  PlayerStatsService,
+  PlayerStatsFilters,
+  PlayerStatsRaw,
+  computeStatsFromResults,
+} from '../../services/playerStats';
 import { Player } from '../../types/player';
+import { Place } from '../../types/place';
+import { DatabaseService } from '../../services/database';
+import MultiSelect from '../common/MultiSelect';
 import { Bar, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -30,26 +39,52 @@ interface PlayerStatsProps {
   onClose: () => void;
 }
 
-export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
-  const [stats, setStats] = useState<PlayerStatistics | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+const QUALIFIER_OPTION = { value: 'qualifier' as const, label: 'Clasificatorio' };
 
+export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
+  const [raw, setRaw] = useState<PlayerStatsRaw | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [selectedTournamentIds, setSelectedTournamentIds] = useState<number[]>([]);
+  const [selectedCircuitIds, setSelectedCircuitIds] = useState<(string | number)[]>([]);
+  const [selectedPlaceIds, setSelectedPlaceIds] = useState<number[]>([]);
+
+  // Load once (no filters); cache used by getAllTournaments, getTournamentConfig, etc.
   useEffect(() => {
-    loadStats();
+    if (!player.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsLoading(true);
+        const data = await PlayerStatsService.getPlayerStatisticsRaw(player.id!);
+        if (!cancelled) setRaw(data ?? null);
+      } catch (error) {
+        if (!cancelled) console.error('Error loading player stats:', error);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [player.id]);
 
-  const loadStats = async () => {
-    if (!player.id) return;
-    try {
-      setIsLoading(true);
-      const playerStats = await PlayerStatsService.getPlayerStatistics(player.id);
-      setStats(playerStats);
-    } catch (error) {
-      console.error('Error loading player stats:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  useEffect(() => {
+    DatabaseService.getAllPlaces()
+      .then(setPlaces)
+      .catch(() => {});
+  }, []);
+
+  // Filter client-side: no extra queries when user changes filters
+  const stats = useMemo<PlayerStatistics | null>(() => {
+    if (!raw) return null;
+    const filters: PlayerStatsFilters = {
+      tournamentIds: selectedTournamentIds.length ? selectedTournamentIds : undefined,
+      circuitIds: selectedCircuitIds.length ? selectedCircuitIds : undefined,
+      placeIds: selectedPlaceIds.length ? selectedPlaceIds : undefined,
+    };
+    return computeStatsFromResults(raw.player, raw, filters);
+  }, [raw, selectedTournamentIds, selectedCircuitIds, selectedPlaceIds]);
 
   if (isLoading) {
     return (
@@ -62,7 +97,9 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
   if (!stats) {
     return (
       <div className="p-6">
-        <div className="text-center text-gray-500">No hay estadísticas disponibles</div>
+        <div className="text-center text-gray-500 dark:text-gray-400">
+          No hay estadísticas disponibles
+        </div>
       </div>
     );
   }
@@ -73,9 +110,15 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
       {
         label: 'Posición',
         data: stats.recentTournaments.map((t) => t.position),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-        tension: 0.1,
+        borderColor: '#3b82f6',
+        backgroundColor: '#3b82f6',
+        borderWidth: 3,
+        tension: 0.3,
+        fill: false,
+        pointBackgroundColor: '#3b82f6',
+        pointBorderColor: '#1e40af',
+        pointBorderWidth: 2,
+        pointRadius: 5,
       },
     ],
   };
@@ -86,12 +129,23 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
       {
         label: 'Torneos',
         data: [stats.qualifierStats.tournaments, stats.circuitStats.tournaments],
-        backgroundColor: ['rgba(34, 197, 94, 0.5)', 'rgba(251, 191, 36, 0.5)'],
-        borderColor: ['rgba(34, 197, 94, 1)', 'rgba(251, 191, 36, 1)'],
-        borderWidth: 1,
+        backgroundColor: ['#22c55e', '#f59e0b'],
+        borderColor: ['#16a34a', '#d97706'],
+        borderWidth: 2,
+        borderRadius: 6,
       },
     ],
   };
+
+  const tournamentOptions = (raw?.filterOptions?.tournaments ?? []).map((t) => ({
+    value: t.id!,
+    label: t.name,
+  }));
+  const circuitOptions = [
+    QUALIFIER_OPTION,
+    ...(raw?.filterOptions?.circuits ?? []).map((c) => ({ value: c.id, label: c.name })),
+  ];
+  const placeOptions = places.map((p) => ({ value: p.id!, label: p.name }));
 
   return (
     <div className="p-6 space-y-6">
@@ -104,6 +158,40 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
           ✕
         </button>
       </div>
+
+      {/* Filters */}
+      {(tournamentOptions.length > 0 || circuitOptions.length > 1 || placeOptions.length > 0) && (
+        <div className="card grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">
+            Filtros
+          </h3>
+          {tournamentOptions.length > 0 && (
+            <MultiSelect
+              label="Por torneo"
+              options={tournamentOptions}
+              value={selectedTournamentIds}
+              onChange={(v) => setSelectedTournamentIds(v as number[])}
+              placeholder="Todos los torneos"
+            />
+          )}
+          <MultiSelect
+            label="Por circuito"
+            options={circuitOptions}
+            value={selectedCircuitIds}
+            onChange={setSelectedCircuitIds}
+            placeholder="Todos (clasificatorios y circuitos)"
+          />
+          {placeOptions.length > 0 && (
+            <MultiSelect
+              label="Por lugar"
+              options={placeOptions}
+              value={selectedPlaceIds}
+              onChange={(v) => setSelectedPlaceIds(v as number[])}
+              placeholder="Todos los lugares"
+            />
+          )}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -158,28 +246,50 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
             <p>Posición Promedio: {stats.circuitStats.averagePosition.toFixed(1)}</p>
           </div>
         </div>
-        <Bar data={tournamentTypeData} options={{ responsive: true }} />
+        <Bar
+          data={tournamentTypeData}
+          options={{
+            responsive: true,
+            plugins: {
+              legend: { display: true, position: 'top' },
+              tooltip: { padding: 12 },
+            },
+            scales: {
+              y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } },
+              x: { grid: { display: false } },
+            },
+          }}
+        />
       </div>
 
       {/* Recent Tournaments */}
       {stats.recentTournaments.length > 0 && (
         <div className="card">
           <h3 className="text-lg font-bold mb-4">Últimos Torneos</h3>
-          <Line 
-            data={positionData} 
-            options={{ 
+          <Line
+            data={positionData}
+            options={{
               responsive: true,
+              plugins: {
+                legend: { display: true, position: 'top' },
+                tooltip: { padding: 12 },
+              },
               scales: {
                 y: {
                   reverse: true,
                   beginAtZero: false,
+                  grid: { color: 'rgba(0,0,0,0.06)' },
                 },
+                x: { grid: { display: false } },
               },
-            }} 
+            }}
           />
           <div className="mt-4 space-y-2">
             {stats.recentTournaments.map((t, index) => (
-              <div key={index} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded">
+              <div
+                key={index}
+                className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded"
+              >
                 <span className="font-medium">{t.tournament.name}</span>
                 <span className="text-sm text-gray-600 dark:text-gray-400">
                   Posición #{t.position} • {t.points.toFixed(2)} pts
@@ -192,5 +302,3 @@ export default function PlayerStats({ player, onClose }: PlayerStatsProps) {
     </div>
   );
 }
-
-

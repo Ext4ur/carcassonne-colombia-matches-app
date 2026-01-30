@@ -2,6 +2,7 @@
  * Interface para clientes de API de base de datos
  * Permite abstraer el acceso a SQLite (local) o Supabase (remoto)
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export interface IApiClient {
   /**
    * Ejecutar una query SELECT y retornar resultados

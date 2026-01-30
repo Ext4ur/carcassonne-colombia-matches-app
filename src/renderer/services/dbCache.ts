@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Caché en memoria para lecturas de torneo (getTournamentById, getTournamentRounds, getTournamentConfig)
  * y listados (getAllPlayers, getAllCircuits, getAllTournaments).
@@ -41,4 +42,6 @@ export const LIST_KEYS = {
   players: 'list:players',
   circuits: 'list:circuits',
   tournaments: 'list:tournaments',
+  places: 'list:places',
+  cities: 'list:cities',
 } as const;

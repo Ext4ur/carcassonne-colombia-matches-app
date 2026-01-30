@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { SupabaseClient } from '@api/clients/SupabaseClient';
 import { isSupabaseConfigured, getConfigError } from '@api/clients/supabaseConfig';
 import { DB_CONFIG } from '@constants';
@@ -21,11 +22,11 @@ export async function testSupabaseConnection(): Promise<{
 
   try {
     const client = new SupabaseClient();
-    
+
     // Intentar una query simple para verificar la conexión
     // Probamos con la tabla 'players' que debería existir después de las migraciones
     const result = await client.query('SELECT COUNT(*) as count FROM players');
-    
+
     return {
       success: true,
       message: 'Conexión con Supabase exitosa',
@@ -55,20 +56,21 @@ export function getCurrentApiClientInfo(): {
   message: string;
 } {
   const supabaseConfigured = isSupabaseConfigured();
-  
+
   if (DB_CONFIG.mode === 'remote') {
     return {
       type: 'supabase',
       configured: supabaseConfigured,
-      message: supabaseConfigured 
-        ? 'Usando Supabase (modo remoto)' 
+      message: supabaseConfigured
+        ? 'Usando Supabase (modo remoto)'
         : 'Configurado para Supabase pero no está configurado, usando SQLite como fallback',
     };
   } else if (DB_CONFIG.mode === 'dual') {
     return {
       type: 'dual',
       configured: supabaseConfigured,
-      message: 'Modo dual configurado (usando SQLite por ahora, DualRepository pendiente en Sprint 3)',
+      message:
+        'Modo dual configurado (usando SQLite por ahora, DualRepository pendiente en Sprint 3)',
     };
   } else {
     return {

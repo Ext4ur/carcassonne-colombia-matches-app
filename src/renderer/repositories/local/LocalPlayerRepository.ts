@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { BaseRepository } from '../base/BaseRepository';
 import { SqliteClient } from '@api/clients/SqliteClient';
-import { Player } from '@types/player';
+import { Player } from '../../types/player';
 
 /**
  * Repositorio local para operaciones con jugadores usando SQLite
@@ -8,7 +9,7 @@ import { Player } from '@types/player';
 export class LocalPlayerRepository extends BaseRepository<Player> {
   protected tableName = 'players';
   protected apiClient = new SqliteClient();
-  
+
   /**
    * Buscar jugadores por nombre o username
    * @param searchTerm - Término de búsqueda
@@ -21,7 +22,7 @@ export class LocalPlayerRepository extends BaseRepository<Player> {
       [term, term]
     );
   }
-  
+
   /**
    * Obtener todos los jugadores de un torneo específico
    * @param tournamentId - ID del torneo
@@ -36,23 +37,23 @@ export class LocalPlayerRepository extends BaseRepository<Player> {
       [tournamentId]
     );
   }
-  
+
   /**
    * Sobrescribir findAll para ordenar por nombre por defecto
    */
   async findAll(filters?: any): Promise<Player[]> {
     let sql = `SELECT * FROM ${this.tableName}`;
     const params: any[] = [];
-    
+
     if (filters) {
       const conditions = this.buildWhereClause(filters, params);
       if (conditions.length > 0) {
         sql += ` WHERE ${conditions.join(' AND ')}`;
       }
     }
-    
+
     sql += ` ORDER BY name`;
-    
+
     return this.apiClient.query<Player>(sql, params);
   }
 }

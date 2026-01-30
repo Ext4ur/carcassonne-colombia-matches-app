@@ -1,7 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
 import { Player } from '../types/player';
-import { Tournament, TournamentConfig } from '../types/tournament';
-import { Circuit } from '../types/circuit';
 
 interface ImportData {
   version: string;
@@ -29,12 +28,17 @@ export class ImportService {
       let importData: ImportData;
       try {
         importData = JSON.parse(result.data);
-      } catch (error) {
+      } catch {
         return { success: false, error: 'El archivo no es un JSON válido' };
       }
 
       // Validate structure
-      if (!importData.data || !importData.data.players || !importData.data.tournaments || !importData.data.circuits) {
+      if (
+        !importData.data ||
+        !importData.data.players ||
+        !importData.data.tournaments ||
+        !importData.data.circuits
+      ) {
         return { success: false, error: 'El archivo no tiene la estructura correcta' };
       }
 
@@ -91,7 +95,10 @@ export class ImportService {
       for (const tournament of importData.data.tournaments) {
         try {
           // Check if tournament exists by name and date
-          const existing = await DatabaseService.getTournamentByNameAndDate(tournament.name, tournament.date);
+          const existing = await DatabaseService.getTournamentByNameAndDate(
+            tournament.name,
+            tournament.date
+          );
           if (!existing || existing.length === 0) {
             const tournamentId = await DatabaseService.createTournament({
               name: tournament.name,
@@ -100,7 +107,6 @@ export class ImportService {
               date: tournament.date,
               players_per_match: tournament.players_per_match,
               number_of_rounds: tournament.number_of_rounds,
-              status: tournament.status || 'draft',
             });
 
             // Import config if exists
@@ -135,5 +141,3 @@ export class ImportService {
     }
   }
 }
-
-

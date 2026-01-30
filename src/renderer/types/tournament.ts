@@ -12,9 +12,16 @@ export interface Tournament {
   status: TournamentStatus;
   players_per_match: number;
   number_of_rounds?: number;
+  /** Required; default place is "Online". */
+  place_id: number;
+  /** From JOIN with places; for list/detail display. */
+  place_name?: string;
   created_at?: string;
   updated_at?: string;
 }
+
+/** How to display player names in this tournament (configurable tournaments only). */
+export type PlayerDisplayMode = 'per_player' | 'names_only' | 'usernames_only';
 
 export interface TournamentConfig {
   id?: number;
@@ -23,6 +30,8 @@ export interface TournamentConfig {
   tiebreak_criteria: TiebreakCriterion[];
   scoring_system: ScoringSystem;
   bye_selection?: 'worst' | 'random' | 'round_robin';
+  /** Default: 'per_player'. per_player = use each player's preference; names_only = first two words; usernames_only = BGA username. */
+  player_display_mode?: PlayerDisplayMode;
   created_at?: string;
   updated_at?: string;
 }
@@ -84,4 +93,3 @@ export interface PlayerStanding {
   wins: number;
   tiebreak_values: { [criterionId: string]: number };
 }
-

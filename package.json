@@ -1,9 +1,11 @@
 {
   "name": "carcassonne-tournament-manager",
+  "type": "module",
   "version": "1.0.0",
   "description": "Aplicación de gestión de torneos presenciales de Carcassonne Colombia",
   "main": "dist/main/main.js",
   "scripts": {
+    "prepare": "husky",
     "dev": "npm run build:electron && concurrently -k \"npm run dev:react\" \"npm run dev:electron\"",
     "dev:react": "vite",
     "dev:electron": "node -e \"setTimeout(() => {}, 3000)\" && electron . --enable-logging",
@@ -15,8 +17,23 @@
     "dist:mac": "npm run build && npm run rebuild-sqlite && electron-builder --mac",
     "dist:linux": "npm run build && npm run rebuild-sqlite && electron-builder --linux",
     "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "eslint src/",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.main.json",
     "postinstall": "electron-builder install-app-deps",
     "rebuild-sqlite": "electron-rebuild -f -w better-sqlite3"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "src/**/*.{json,css,md}": [
+      "prettier --write"
+    ]
   },
   "keywords": [
     "carcassonne",
@@ -27,6 +44,7 @@
   "license": "MIT",
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
+    "@eslint/js": "^9.15.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.43",
@@ -37,10 +55,19 @@
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1",
     "electron-rebuild": "^3.2.9",
+    "eslint": "^9.15.0",
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "postcss": "^8.4.32",
+    "prettier": "^3.8.1",
     "tailwindcss": "^3.3.6",
     "typescript": "^5.3.3",
+    "typescript-eslint": "^8.15.0",
     "vite": "^5.0.8",
+    "vitest": "^2.1.6",
     "wait-on": "^7.2.0"
   },
   "dependencies": {

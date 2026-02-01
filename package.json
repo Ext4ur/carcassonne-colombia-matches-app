@@ -11,7 +11,7 @@
     "dev:electron": "node -e \"setTimeout(() => {}, 3000)\" && electron . --enable-logging",
     "build": "npm run build:react && npm run build:electron",
     "build:react": "vite build",
-    "build:electron": "tsc -p tsconfig.main.json",
+    "build:electron": "tsc -p tsconfig.main.json && node scripts/fix-electron-build.js",
     "dist": "npm run build && npm run rebuild-sqlite && electron-builder",
     "dist:win": "npm run build && npm run rebuild-sqlite && electron-builder --win",
     "dist:mac": "npm run build && npm run rebuild-sqlite && electron-builder --mac",

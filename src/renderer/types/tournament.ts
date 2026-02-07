@@ -92,4 +92,5 @@ export interface PlayerStanding {
   total_points: number;
   wins: number;
   tiebreak_values: { [criterionId: string]: number };
+  starts_count?: number;
 }

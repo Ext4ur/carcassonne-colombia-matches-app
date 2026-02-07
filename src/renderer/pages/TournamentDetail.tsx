@@ -10,6 +10,7 @@ import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import MatchResultForm from '../components/tournament/MatchResultForm';
 import TournamentStats from '../components/tournament/TournamentStats';
+import RoundPreviewDialog from '../components/tournament/RoundPreviewDialog';
 import MultiSelect from '../components/common/MultiSelect';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
@@ -33,6 +34,19 @@ export default function TournamentDetail() {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [showStats, setShowStats] = useState(false);
   const [isLoadingStandings, setIsLoadingStandings] = useState(false);
+
+  // Preview State
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<{
+    matches: Array<{
+      player1: any;
+      player2?: any;
+      startPlayerId?: number;
+      reason?: string;
+    }>;
+    warnings: string[];
+  } | null>(null);
+
   const [isRoundResultsModalOpen, setIsRoundResultsModalOpen] = useState(false);
   const [selectedRoundResults, setSelectedRoundResults] = useState<{
     round: Round;
@@ -265,7 +279,7 @@ export default function TournamentDetail() {
     }
   };
 
-  const handleGenerateNextRound = async () => {
+  const handleGenerateNextRoundClick = async () => {
     if (!tournament?.id) return;
 
     // Check if we've reached the maximum number of rounds before proceeding
@@ -282,7 +296,24 @@ export default function TournamentDetail() {
       return;
     }
 
-    if (!confirm('¿Generar la siguiente ronda?')) return;
+    try {
+      setIsLoading(true);
+      const data = await SwissPairingService.previewNextRound(tournament.id);
+      setPreviewData(data);
+      setIsPreviewOpen(true);
+    } catch (error: any) {
+      console.error('Error generating preview:', error);
+      addNotification({
+        message: error.message || 'Error al generar la previsualización',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConfirmNextRound = async () => {
+    if (!tournament?.id) return;
 
     try {
       setIsLoading(true);
@@ -294,6 +325,12 @@ export default function TournamentDetail() {
         setCurrentRound(newRound);
         await loadMatches(newRound.id);
       }
+      setIsPreviewOpen(false);
+      setPreviewData(null);
+      addNotification({
+        message: 'Ronda generada exitosamente',
+        type: 'success',
+      });
     } catch (error: any) {
       console.error('Error generating round:', error);
       addNotification({
@@ -388,7 +425,7 @@ export default function TournamentDetail() {
           'Todas las partidas de esta ronda están completadas. ¿Deseas generar la siguiente ronda?'
         )
       ) {
-        await handleGenerateNextRound();
+        await handleGenerateNextRoundClick();
       }
     } else {
       if (confirm('Has completado la última ronda. ¿Deseas finalizar el torneo?')) {
@@ -549,6 +586,11 @@ export default function TournamentDetail() {
         header: getTiebreakLabel(criterion.id),
         render: (standing: PlayerStanding) => getTiebreakValue(standing, criterion.id),
       })),
+    {
+      key: 'starts_count',
+      header: '🎲 Inicios',
+      render: (standing) => standing.starts_count ?? 0,
+    },
   ];
 
   const filteredStandings =
@@ -982,7 +1024,7 @@ export default function TournamentDetail() {
                 }
                 if (currentRound?.status === 'completed') {
                   return (
-                    <Button onClick={handleGenerateNextRound} isLoading={isLoading}>
+                    <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
                       Generar Siguiente Ronda
                     </Button>
                   );
@@ -1243,6 +1285,15 @@ export default function TournamentDetail() {
           </div>
         )}
       </Modal>
+
+      {/* Round Preview Dialog */}
+      <RoundPreviewDialog
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        onConfirm={handleConfirmNextRound}
+        isLoading={isLoading}
+        previewData={previewData}
+      />
     </div>
   );
 }

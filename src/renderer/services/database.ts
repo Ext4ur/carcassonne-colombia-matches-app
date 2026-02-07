@@ -813,11 +813,12 @@ export class DatabaseService {
     round_id: number;
     match_number: number;
     status?: 'pending' | 'completed';
+    first_player_id?: number;
   }) {
     const result = await this.execute(
-      `INSERT INTO matches (round_id, match_number, status) 
-       VALUES (?, ?, ?)`,
-      [match.round_id, match.match_number, match.status || 'pending']
+      `INSERT INTO matches (round_id, match_number, status, first_player_id) 
+       VALUES (?, ?, ?, ?)`,
+      [match.round_id, match.match_number, match.status || 'pending', match.first_player_id || null]
     );
     return result.lastInsertRowid;
   }
@@ -850,6 +851,78 @@ export class DatabaseService {
 
     params.push(id);
     await this.execute(`UPDATE matches SET ${updates.join(', ')} WHERE id = ?`, params);
+  }
+
+  static async getPlayerStartStatistics(tournamentId: number): Promise<{
+    [playerId: number]: { totalStarts: number; lastStartRound: number };
+  }> {
+    // SupabaseClient parser has limitations with joins and aliased where clauses.
+    // We'll split this into two simple queries.
+
+    // 1. Get all rounds for the tournament
+    const rounds = await this.query<{ id: number; round_number: number }>(
+      'SELECT id, round_number FROM rounds WHERE tournament_id = ?',
+      [tournamentId]
+    );
+
+    if (rounds.length === 0) return {};
+
+    const roundMap = new Map<number, number>();
+    rounds.forEach((r) => roundMap.set(r.id!, r.round_number));
+    const roundIds = rounds.map((r) => r.id!);
+
+    // 2. Get matches for these rounds
+    // Note: 'IN' clause support in SupabaseClient.parseWhereClause is not visible in the snippet
+    // but typically it might be limited. Let's iterate if necessary or check constraints.
+    // Since parseWhereClause only supports '=', let's fetch all matches and filter in JS if the array is small,
+    // or loop through rounds if there are few.
+    // Actually, checking SupabaseClient.ts again, it mentions "column IN (...)" in comment but implementation only has eqMatch.
+    // So 'IN' is likely NOT supported by the custom parser either!
+
+    // Safer approach: Fetch all matches for each round loop, or likely fetching all matches for tournament via a simplified join that is supported...
+    // but avoiding join is better.
+    // Given the constraints, let's just fetch all matches for the rounds.
+    // If we assume the number of rounds is small (< 10-20), we can validly loop or do simple queries.
+
+    // Optimization: query matches by round_id
+    // But sending 10 queries is slow.
+    // Does SupabaseClient support "SELECT * FROM matches" without where? Yes.
+    // But that fetches ALL matches in DB. Bad.
+
+    // If we can't use IN, and can't use JOIN with WHERE on alias...
+    // Maybe we can use JOIN but filter in memory?
+    // "SELECT m.first_player_id, m.round_id FROM matches m JOIN rounds r ON m.round_id = r.id"
+    // And NO where clause on 'r.tournament_id'? That would fetch entire DB matches.
+
+    // Let's use Promise.all to fetch matches for each round. It's robust enough for a tournament app.
+    const matchesPromises = roundIds.map((roundId) =>
+      this.query<{ first_player_id: number }>(
+        'SELECT first_player_id FROM matches WHERE round_id = ?',
+        [roundId]
+      )
+    );
+
+    const roundsMatches = await Promise.all(matchesPromises);
+
+    const stats: { [playerId: number]: { totalStarts: number; lastStartRound: number } } = {};
+
+    roundsMatches.forEach((matches, index) => {
+      const roundNumber = roundMap.get(roundIds[index]) || 0;
+      matches.forEach((m) => {
+        if (m.first_player_id) {
+          if (!stats[m.first_player_id]) {
+            stats[m.first_player_id] = { totalStarts: 0, lastStartRound: 0 };
+          }
+          stats[m.first_player_id].totalStarts += 1;
+          // Keep the highest round number
+          if (roundNumber > stats[m.first_player_id].lastStartRound) {
+            stats[m.first_player_id].lastStartRound = roundNumber;
+          }
+        }
+      });
+    });
+
+    return stats;
   }
 
   // Match result operations. When tournamentId is provided, player_name is resolved using tournament player_display_mode.

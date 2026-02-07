@@ -323,6 +323,7 @@ export default function TournamentDetail() {
         // Sort results by position (player_name already resolved by getMatchResults with tournament config)
         const sortedResults = matchResults
           .map((result) => ({
+            player_id: result.player_id,
             player_name: result.player_name ?? 'Desconocido',
             position: result.position,
             points: result.points,
@@ -331,6 +332,7 @@ export default function TournamentDetail() {
 
         matchesData.push({
           match_number: match.match_number,
+          first_player_id: match.first_player_id,
           results: sortedResults,
         });
       }
@@ -681,9 +683,20 @@ export default function TournamentDetail() {
               {playersWithResults.map((p: any, idx: number) => (
                 <span
                   key={p.id || idx}
-                  className={getPositionColor(p.position, tournament?.players_per_match ?? 2)}
+                  className={`flex items-center gap-1 ${getPositionColor(
+                    p.position,
+                    tournament?.players_per_match ?? 2
+                  )}`}
                 >
                   {p.name}
+                  {match.first_player_id === p.id && (
+                    <span
+                      className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
+                      title="Jugador Inicial"
+                    >
+                      🎲
+                    </span>
+                  )}
                 </span>
               ))}
             </div>
@@ -691,7 +704,23 @@ export default function TournamentDetail() {
         }
 
         // Pending match - show players normally
-        return players.map((p: any) => p.name).join(', ');
+        return (
+          <div className="flex flex-wrap gap-2">
+            {players.map((p: any) => (
+              <span key={p.id} className="flex items-center gap-1">
+                {p.name}
+                {match.first_player_id === p.id && (
+                  <span
+                    className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
+                    title="Jugador Inicial"
+                  >
+                    🎲
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        );
       },
     },
     {
@@ -1174,7 +1203,17 @@ export default function TournamentDetail() {
                           >
                             {result ? (
                               <div className="space-y-1">
-                                <div className="font-medium">{result.player_name}</div>
+                                <div className="font-medium flex items-center gap-1">
+                                  {result.player_name}
+                                  {matchData.first_player_id === result.player_id && (
+                                    <span
+                                      className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
+                                      title="Jugador Inicial"
+                                    >
+                                      🎲
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
                                   {result.points} pts
                                 </div>

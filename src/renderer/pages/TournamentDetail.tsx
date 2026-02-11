@@ -11,6 +11,7 @@ import Modal from '../components/common/Modal';
 import MatchResultForm from '../components/tournament/MatchResultForm';
 import TournamentStats from '../components/tournament/TournamentStats';
 import RoundPreviewDialog from '../components/tournament/RoundPreviewDialog';
+import AddPlayerDialog from '../components/tournament/AddPlayerDialog';
 import MultiSelect from '../components/common/MultiSelect';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
@@ -65,6 +66,7 @@ export default function TournamentDetail() {
   const [editFormData, setEditFormData] = useState({ name: '', date: '', place_id: '' });
   const [places, setPlaces] = useState<Place[]>([]);
   const [tiebreakCriteria, setTiebreakCriteria] = useState<any[]>([]);
+  const [isAddPlayerOpen, setIsAddPlayerOpen] = useState(false);
 
   const loadTournament = useCallback(async () => {
     if (!id) return;
@@ -568,6 +570,74 @@ export default function TournamentDetail() {
     return shortLabels[criterionId] || criterion.name;
   };
 
+  const handleDropout = async (playerStanding: PlayerStanding) => {
+    if (!tournament?.id || !currentRound) return;
+    if (
+      !confirm(
+        `¿Estás seguro de que deseas retirar a ${playerStanding.player_name}? Ya no será emparejado en futuras rondas.`
+      )
+    )
+      return;
+
+    try {
+      setIsLoading(true);
+      await DatabaseService.updateTournamentPlayerStatus(tournament.id, playerStanding.player_id, {
+        active: false,
+        dropout_round: currentRound.round_number,
+      });
+      addNotification({
+        message: 'Jugador retirado exitosamente',
+        type: 'success',
+      });
+      await loadStandings();
+    } catch (error) {
+      console.error('Error dropping player:', error);
+      addNotification({
+        message: 'Error al retirar al jugador',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRestore = async (playerStanding: PlayerStanding) => {
+    if (!tournament?.id) return;
+    if (!confirm(`¿Deseas reincorporar a ${playerStanding.player_name} al torneo?`)) return;
+
+    try {
+      setIsLoading(true);
+      await DatabaseService.updateTournamentPlayerStatus(tournament.id, playerStanding.player_id, {
+        active: true,
+        dropout_round: null,
+      });
+      addNotification({
+        message: 'Jugador reincorporado exitosamente',
+        type: 'success',
+      });
+      await loadStandings();
+    } catch (error) {
+      console.error('Error restoring player:', error);
+      addNotification({
+        message: 'Error al reincorporar al jugador',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePlayerAdded = async () => {
+    if (!tournament?.id) return;
+    await loadStandings();
+    // Also reload rounds if needed? Usually adding player doesn't change rounds unless we regenerate.
+    // But we might want to update preview if open?
+    addNotification({
+      message: 'Jugador agregado exitosamente',
+      type: 'success',
+    });
+  };
+
   const standingsColumns: Column<PlayerStanding>[] = [
     {
       key: 'position',
@@ -594,6 +664,72 @@ export default function TournamentDetail() {
       key: 'starts_count',
       header: '🎲 Inicios',
       render: (standing) => standing.starts_count ?? 0,
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      render: (standing) => {
+        if (standing.active) {
+          return (
+            <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
+              Activo
+            </span>
+          );
+        }
+        return (
+          <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">
+            Retirado (Ronda {standing.dropout_round})
+          </span>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: '1%',
+      className: 'whitespace-nowrap w-1 text-right',
+      render: (standing) => {
+        if (standing.active) {
+          return (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDropout(standing);
+              }}
+              title="Retirar jugador"
+              disabled={tournament?.status === 'completed'}
+            >
+              x
+            </Button>
+          );
+        }
+        // Restore only allowed if dropped in current round and round not completed (per user rule)
+        // OR if admin allows it? User said "dropouts can only be undone if the current round has not yet finished".
+        const canRestore =
+          tournament?.status !== 'completed' &&
+          currentRound &&
+          currentRound.status !== 'completed' &&
+          standing.dropout_round === currentRound.round_number;
+
+        if (canRestore) {
+          return (
+            <Button
+              variant="success"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRestore(standing);
+              }}
+              title="Reincorporar jugador"
+            >
+              Reinc.
+            </Button>
+          );
+        }
+        return null;
+      },
     },
   ];
 
@@ -864,6 +1000,19 @@ export default function TournamentDetail() {
             </p>
           </div>
           <div className="flex space-x-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsAddPlayerOpen(true)}
+              disabled={tournament?.status === 'completed' || rounds.length > 1}
+              title={
+                rounds.length > 1
+                  ? 'Solo se pueden agregar jugadores durante la primera ronda'
+                  : 'Agregar jugador al torneo'
+              }
+            >
+              + Jugador
+            </Button>
             <Button variant="secondary" size="sm" onClick={handleOpenEditModal}>
               Editar datos
             </Button>
@@ -1304,6 +1453,16 @@ export default function TournamentDetail() {
         isLoading={isLoading}
         previewData={previewData}
       />
+
+      {tournament?.id && (
+        <AddPlayerDialog
+          isOpen={isAddPlayerOpen}
+          onClose={() => setIsAddPlayerOpen(false)}
+          onPlayerAdded={handlePlayerAdded}
+          tournamentId={tournament.id}
+          existingPlayerIds={standings.map((s) => s.player_id)}
+        />
+      )}
     </div>
   );
 }

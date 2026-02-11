@@ -93,4 +93,7 @@ export interface PlayerStanding {
   wins: number;
   tiebreak_values: { [criterionId: string]: number };
   starts_count?: number;
+  matches_played: number;
+  active: boolean;
+  dropout_round: number | null;
 }

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
-import { TiebreakService, TiebreakData } from './tiebreak';
+import { TiebreakService } from './tiebreak';
 import { Tournament, Round, Match, PlayerStanding } from '../types/tournament';
 import { calculateNumberOfRounds } from '../utils/tournament';
 import { getPlayerDisplayName, type PlayerDisplayMode } from '../utils/playerDisplayName';
@@ -105,7 +105,7 @@ export class SwissPairingService {
     const startStats: Record<number, { totalStarts: number; lastStartRound: number }> = {};
 
     // Initialize stats
-    players.forEach((p) => {
+    players.forEach((p: any) => {
       startStats[p.id!] = { totalStarts: 0, lastStartRound: 0 };
     });
 
@@ -279,20 +279,8 @@ export class SwissPairingService {
     const paired = new Set<number>();
     let matchNumber = 1;
 
-    // Group players by similar points
-    const pointGroups: { [points: number]: PlayerStanding[] } = {};
-    standings.forEach((standing) => {
-      const points = Math.floor(standing.total_points);
-      if (!pointGroups[points]) {
-        pointGroups[points] = [];
-      }
-      pointGroups[points].push(standing);
-    });
-
-    // Pair within groups
-    const sortedPoints = Object.keys(pointGroups)
-      .map(Number)
-      .sort((a, b) => b - a);
+    // Group players using shared logic
+    const { pointGroups, sortedPoints } = this.groupPlayersByPoints(standings);
 
     // Get bye selection method from config
     const byeSelection = (config as any)?.bye_selection || 'worst';
@@ -476,19 +464,8 @@ export class SwissPairingService {
     }> = [];
     const warnings: string[] = [];
 
-    // Group players by similar points
-    const pointGroups: { [points: number]: PlayerStanding[] } = {};
-    standings.forEach((standing) => {
-      const points = Math.floor(standing.total_points);
-      if (!pointGroups[points]) {
-        pointGroups[points] = [];
-      }
-      pointGroups[points].push(standing);
-    });
-
-    const sortedPoints = Object.keys(pointGroups)
-      .map(Number)
-      .sort((a, b) => b - a);
+    // Group players using shared logic
+    const { pointGroups, sortedPoints } = this.groupPlayersByPoints(standings);
 
     const byeSelection = (config as any)?.bye_selection || 'worst';
     const byeHistory = await DatabaseService.getPlayerByes(tournamentId);
@@ -584,6 +561,50 @@ export class SwissPairingService {
     return { matches: proposedMatches, warnings, startStats };
   }
 
+  private static groupPlayersByPoints(standings: PlayerStanding[]): {
+    pointGroups: { [points: number]: PlayerStanding[] };
+    sortedPoints: number[];
+  } {
+    // Group players by similar points
+    // For late entries (0 points), ensure they are included but not strictly forced into a bye if other options exist with 0 points
+    const activeStandings = standings.filter((s) => s.active);
+
+    const pointGroups: { [points: number]: PlayerStanding[] } = {};
+    activeStandings.forEach((standing) => {
+      const points = Math.floor(standing.total_points);
+      if (!pointGroups[points]) {
+        pointGroups[points] = [];
+      }
+      pointGroups[points].push(standing);
+    });
+
+    // Pair within groups
+    // Optimization: If the last group (likely 0 points) has an odd number of players,
+    // and the total number of remaining players is even (meaning a bye is NOT strictly necessary for the tournament),
+    // we should try to merge the last two groups to avoid forcing a bye on the 0-point player.
+    // This happens when late entries (0 points) are odd (e.g. 1 new player) but total players are even (odd previously + 1 new = even).
+
+    const sortedPoints = Object.keys(pointGroups)
+      .map(Number)
+      .sort((a, b) => b - a);
+
+    // Check if we need to merge the last group to avoid unnecessary bye
+    const totalActivePlayers = activeStandings.length;
+    if (totalActivePlayers % 2 === 0 && sortedPoints.length >= 2) {
+      const lastPoints = sortedPoints[sortedPoints.length - 1];
+      const lastGroup = pointGroups[lastPoints];
+      if (lastGroup.length % 2 !== 0) {
+        // Merge last group into the second to last group
+        const secondLastPoints = sortedPoints[sortedPoints.length - 2];
+        pointGroups[secondLastPoints] = [...pointGroups[secondLastPoints], ...lastGroup];
+        delete pointGroups[lastPoints];
+        sortedPoints.pop(); // Remove last points key
+      }
+    }
+
+    return { pointGroups, sortedPoints };
+  }
+
   private static async determineStartPlayer(
     players: { player_id: number; player_name?: string }[],
     stats: { [playerId: number]: { totalStarts: number; lastStartRound: number } }
@@ -636,177 +657,138 @@ export class SwissPairingService {
   static async calculateStandings(
     tournamentId: number,
     tiebreakCriteria: any[],
-    preFetched?: {
+    preFetchedData?: {
       players?: any[];
       rounds?: Round[];
       roundMatches?: Match[][];
       resultsByMatch?: Record<number, any[]>;
     },
-    playerDisplayMode?: PlayerDisplayMode
+    playerDisplayMode: PlayerDisplayMode = 'per_player'
   ): Promise<PlayerStanding[]> {
-    // Use config order for tiebreak criteria (same order as in tournament config)
+    // Use config order for tiebreak criteria
     const criteria = [...(tiebreakCriteria || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-    let players: any[];
-    let rounds: Round[];
-    let roundMatches: Match[][];
-    let resultsByMatch: Record<number, any[]>;
+    const players =
+      preFetchedData?.players || (await DatabaseService.getTournamentPlayers(tournamentId));
+    const rounds =
+      preFetchedData?.rounds || (await DatabaseService.getTournamentRounds(tournamentId));
 
-    const hasFullPreFetched =
-      preFetched &&
-      preFetched.players != null &&
-      preFetched.rounds != null &&
-      preFetched.roundMatches != null &&
-      preFetched.resultsByMatch != null;
+    let roundMatches: Match[] = [];
+    let resultsByMatch: Record<number, any[]> = {};
 
-    if (hasFullPreFetched) {
-      ({ players, rounds, roundMatches, resultsByMatch } = preFetched as Required<
-        typeof preFetched
-      >);
+    if (preFetchedData && preFetchedData.roundMatches && preFetchedData.resultsByMatch) {
+      // Flatten matches if they are grouped by round
+      roundMatches = preFetchedData.roundMatches.flat();
+      resultsByMatch = preFetchedData.resultsByMatch;
     } else {
-      rounds =
-        preFetched?.rounds !== undefined
-          ? preFetched.rounds
-          : await DatabaseService.getTournamentRounds(tournamentId);
-      if (rounds.length === 0) return [];
-      players = await DatabaseService.getTournamentPlayers(tournamentId);
-      roundMatches = await Promise.all(rounds.map((r) => DatabaseService.getRoundMatches(r.id!)));
-      const allMatches = roundMatches.flat();
+      const allRoundMatches = await Promise.all(
+        rounds.map((r) => DatabaseService.getRoundMatches(r.id!))
+      );
+      roundMatches = allRoundMatches.flat();
       const allResults = await Promise.all(
-        allMatches.map((m) => DatabaseService.getMatchResults(m.id!))
+        roundMatches.map((m) => DatabaseService.getMatchResults(m.id!))
       );
       resultsByMatch = {};
-      allMatches.forEach((m, i) => {
+      roundMatches.forEach((m, i) => {
         resultsByMatch[m.id!] = allResults[i] || [];
       });
     }
 
-    const playerTotalPoints: Record<number, number> = {};
-    const playerWins: Record<number, number> = {};
-
-    for (const player of players) {
-      if (!player.id) continue;
-      let totalPoints = 0;
-      let wins = 0;
-      for (let r = 0; r < rounds.length; r++) {
-        const matches = roundMatches[r] || [];
-        for (const match of matches) {
-          const results = resultsByMatch[match.id!] || [];
-          const playerResult = results.find((r: any) => r.player_id === player.id);
-          if (playerResult) {
-            totalPoints += playerResult.tournament_points;
-            if (playerResult.position === 1) wins++;
-          }
-        }
-      }
-      playerTotalPoints[player.id] = totalPoints;
-      playerWins[player.id] = wins;
-    }
-
-    const tiebreakData: TiebreakData = {
-      rounds,
-      roundMatches,
-      resultsByMatch,
-      playerTotalPoints,
-    };
-
-    // Fetch start stats for everyone
-    const startStats = await DatabaseService.getPlayerStartStatistics(tournamentId);
-
-    const standings: PlayerStanding[] = [];
-    for (const player of players) {
-      if (!player.id) continue;
-      const totalPoints = playerTotalPoints[player.id] ?? 0;
-      const wins = playerWins[player.id] ?? 0;
-      const tiebreakValues: { [key: string]: number } = {};
-
-      for (const criterion of criteria) {
-        if (!criterion.enabled) continue;
-        switch (criterion.id) {
-          case 'wins':
-            tiebreakValues[criterion.id] = wins;
-            break;
-          case 'opponent_points_drop_worst':
-            tiebreakValues[criterion.id] = TiebreakService.calculateOpponentPointsFromData(
-              tiebreakData,
-              player.id,
-              true,
-              false
-            );
-            break;
-          case 'opponent_points_drop_best_worst':
-            tiebreakValues[criterion.id] = TiebreakService.calculateOpponentPointsFromData(
-              tiebreakData,
-              player.id,
-              true,
-              true
-            );
-            break;
-          case 'point_difference':
-            tiebreakValues[criterion.id] = TiebreakService.calculatePointDifferenceFromData(
-              tiebreakData,
-              player.id
-            );
-            break;
-          case 'head_to_head':
-            // Calculated later (needs sorting)
-            tiebreakValues[criterion.id] = 0;
-            break;
-        }
-      }
-
-      standings.push({
+    // Initialize standings
+    const standings: Record<number, PlayerStanding> = {};
+    players.forEach((player: any) => {
+      standings[player.id] = {
         player_id: player.id,
         player_name: getPlayerDisplayName(player, playerDisplayMode),
-        total_points: totalPoints,
-        wins,
-        tiebreak_values: tiebreakValues,
-        starts_count: startStats[player.id]?.totalStarts || 0,
+        total_points: 0,
+        matches_played: 0,
+        wins: 0,
+        tiebreak_values: {},
+        active: player.active ?? true,
+        dropout_round: player.dropout_round ?? null,
+      };
+    });
+
+    // Process all match results
+    Object.values(resultsByMatch)
+      .flat()
+      .forEach((result: any) => {
+        const pid = result.player_id;
+        if (standings[pid]) {
+          standings[pid].matches_played++;
+          standings[pid].total_points += result.tournament_points;
+          if (result.position === 1) {
+            standings[pid].wins++;
+          }
+        }
+      });
+
+    // Calculate tiebreakers
+    for (const criterion of criteria) {
+      if (!criterion.enabled) continue;
+
+      const calculatedInfo = await TiebreakService.calculate(
+        criterion.id,
+        Object.values(standings),
+        roundMatches,
+        resultsByMatch,
+        players
+      );
+
+      Object.keys(calculatedInfo).forEach((playerId) => {
+        const pid = Number(playerId);
+        if (standings[pid]) {
+          standings[pid].tiebreak_values[criterion.id] = calculatedInfo[pid];
+        }
       });
     }
 
-    return this.sortByTiebreak(standings, criteria, tiebreakData);
-  }
+    // Sort standings
+    // Priority: Active > Points > Tiebreakers
+    return Object.values(standings).sort((a, b) => {
+      // 0. Active Status (Active first)
+      if (a.active !== b.active) {
+        return a.active ? -1 : 1;
+      }
 
-  private static sortByTiebreak(
-    standings: PlayerStanding[],
-    criteria: any[],
-    tiebreakData?: TiebreakData
-  ): PlayerStanding[] {
-    const sorted = [...standings].sort((a, b) => {
-      // First by total points (from config scoring_system, stored in match results)
+      // 1. Total Points
       if (b.total_points !== a.total_points) {
         return b.total_points - a.total_points;
       }
 
-      // Then by tiebreak criteria in config order
+      // 2. Tiebreakers
+      // 2. Tiebreakers
       for (const criterion of criteria) {
         if (!criterion.enabled) continue;
 
-        // Head-to-head: pairwise comparison (who beat whom in direct match)
-        if (criterion.id === 'head_to_head' && tiebreakData) {
-          const h2h = TiebreakService.calculateHeadToHeadFromData(
-            tiebreakData,
-            a.player_id,
-            b.player_id
-          );
-          if (h2h === 1) return -1; // a beat b -> a first
-          if (h2h === -1) return 1; // b beat a -> b first
-          continue;
-        }
+        if (criterion.id === 'head_to_head') {
+          // Check matches between a and b
+          let winsA = 0;
+          let winsB = 0;
+          Object.values(resultsByMatch).forEach((results) => {
+            const resA = results.find((r: any) => r.player_id === a.player_id);
+            const resB = results.find((r: any) => r.player_id === b.player_id);
+            if (resA && resB) {
+              if (resA.position < resB.position) winsA++;
+              else if (resB.position < resA.position) winsB++;
+            }
+          });
 
-        const aValue = a.tiebreak_values[criterion.id] || 0;
-        const bValue = b.tiebreak_values[criterion.id] || 0;
-
-        if (bValue !== aValue) {
-          return bValue - aValue;
+          if (winsA !== winsB) {
+            return winsB - winsA;
+          }
+        } else {
+          const valA = a.tiebreak_values[criterion.id] || 0;
+          const valB = b.tiebreak_values[criterion.id] || 0;
+          if (valA !== valB) {
+            return valB - valA;
+          }
         }
       }
 
-      return 0;
+      // 3. Random fallback (using ID)
+      return a.player_id - b.player_id;
     });
-
-    return sorted;
   }
 
   private static getPreviousOpponentsFromData(

@@ -45,6 +45,7 @@ export default function TournamentDetail() {
       reason?: string;
     }>;
     warnings: string[];
+    startStats?: Record<number, { totalStarts: number; lastStartRound: number }>;
   } | null>(null);
 
   const [isRoundResultsModalOpen, setIsRoundResultsModalOpen] = useState(false);
@@ -226,21 +227,18 @@ export default function TournamentDetail() {
 
   const handleGenerateFirstRound = async () => {
     if (!tournament?.id) return;
-    if (!confirm('¿Generar la primera ronda? Los emparejamientos serán aleatorios.')) return;
 
     try {
       setIsLoading(true);
-      await SwissPairingService.generateFirstRound(tournament.id);
-      const roundsData = await loadRounds();
-      if (roundsData.length > 0) {
-        await loadMatches(roundsData[0].id);
-      }
-      await loadStandings();
+      const data = await SwissPairingService.previewFirstRound(tournament.id);
+      setPreviewData(data);
+      setIsPreviewOpen(true);
     } catch (error: any) {
       console.error('Error generating round:', error);
       addNotification({
         message: error.message || 'Error al generar la ronda',
         type: 'error',
+        duration: 5000,
       });
     } finally {
       setIsLoading(false);
@@ -313,18 +311,27 @@ export default function TournamentDetail() {
   };
 
   const handleConfirmNextRound = async () => {
-    if (!tournament?.id) return;
+    if (!tournament?.id || !previewData) return;
 
     try {
       setIsLoading(true);
-      const { standings } = await SwissPairingService.generateNextRound(tournament.id);
-      setStandings(standings);
+
+      const nextRoundNumber = rounds.length + 1;
+
+      await SwissPairingService.createRoundFromPairings(
+        tournament.id,
+        nextRoundNumber,
+        previewData.matches
+      );
+
       const roundsData = await loadRounds();
       const newRound = roundsData.length > 0 ? roundsData[roundsData.length - 1] : null;
       if (newRound) {
         setCurrentRound(newRound);
         await loadMatches(newRound.id);
       }
+      await loadStandings();
+
       setIsPreviewOpen(false);
       setPreviewData(null);
       addNotification({
@@ -419,22 +426,19 @@ export default function TournamentDetail() {
     const players = await DatabaseService.getTournamentPlayers(tournament.id);
     const effectiveMaxRounds =
       tournament.number_of_rounds || calculateNumberOfRounds(players.length);
+
     if (roundsAfter.length < effectiveMaxRounds) {
-      if (
-        confirm(
-          'Todas las partidas de esta ronda están completadas. ¿Deseas generar la siguiente ronda?'
-        )
-      ) {
-        await handleGenerateNextRoundClick();
-      }
+      addNotification({
+        message: 'Ronda completada. Puedes generar la siguiente ronda cuando estés listo.',
+        type: 'info',
+        duration: 3000,
+      });
     } else {
-      if (confirm('Has completado la última ronda. ¿Deseas finalizar el torneo?')) {
-        await DatabaseService.updateTournament(tournament.id, { status: 'completed' });
-        addNotification({ message: '¡Torneo completado!', type: 'success', duration: 5000 });
-        await loadTournament();
-        await loadStandings();
-        setShowStats(true);
-      }
+      addNotification({
+        message: 'Has completado la última ronda. Puedes finalizar el torneo cuando estés listo.',
+        type: 'success',
+        duration: 5000,
+      });
     }
   };
 
@@ -540,7 +544,7 @@ export default function TournamentDetail() {
       criterionId === 'opponent_points_drop_worst' ||
       criterionId === 'opponent_points_drop_best_worst'
     ) {
-      return value.toFixed(2);
+      return Number(value.toFixed(2)).toString();
     } else if (criterionId === 'head_to_head') {
       return value > 0 ? '✅' : value < 0 ? '❌' : '-';
     } else if (criterionId === 'point_difference') {
@@ -721,7 +725,7 @@ export default function TournamentDetail() {
             .sort((a: any, b: any) => a.position - b.position);
 
           return (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-row items-center gap-3">
               {playersWithResults.map((p: any, idx: number) => (
                 <span
                   key={p.id || idx}
@@ -730,6 +734,9 @@ export default function TournamentDetail() {
                     tournament?.players_per_match ?? 2
                   )}`}
                 >
+                  {idx > 0 && (
+                    <span className="text-gray-300 dark:text-gray-600 font-normal mr-1">vs</span>
+                  )}
                   {p.name}
                   {match.first_player_id === p.id && (
                     <span
@@ -747,13 +754,14 @@ export default function TournamentDetail() {
 
         // Pending match - show players normally
         return (
-          <div className="flex flex-wrap gap-2">
-            {players.map((p: any) => (
+          <div className="flex flex-row items-center gap-3">
+            {players.map((p: any, index: number) => (
               <span key={p.id} className="flex items-center gap-1">
-                {p.name}
+                {index > 0 && <span className="text-gray-300 dark:text-gray-600">vs</span>}
+                <span className="font-medium">{p.name}</span>
                 {match.first_player_id === p.id && (
                   <span
-                    className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
+                    className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700 cursor-help"
                     title="Jugador Inicial"
                   >
                     🎲
@@ -768,6 +776,8 @@ export default function TournamentDetail() {
     {
       key: 'status',
       header: 'Estado',
+      width: '1%',
+      className: 'whitespace-nowrap w-1',
       render: (match) => {
         const isBye = isByeMatch(match);
         if (isBye) {
@@ -793,6 +803,8 @@ export default function TournamentDetail() {
     {
       key: 'actions',
       header: 'Acciones',
+      width: '1%',
+      className: 'whitespace-nowrap w-1 text-right',
       render: (match) => {
         const isBye = isByeMatch(match);
         // Don't show button for bye matches
@@ -810,8 +822,9 @@ export default function TournamentDetail() {
             size="sm"
             onClick={() => handleOpenMatchModal(match)}
             disabled={tournament?.status === 'completed'}
+            className="whitespace-nowrap"
           >
-            {match.status === 'completed' ? 'Ver Resultados' : 'Ingresar Resultados'}
+            {match.status === 'completed' ? 'Editar' : 'Jugar'}
           </Button>
         );
       },
@@ -983,8 +996,8 @@ export default function TournamentDetail() {
       </div>
 
       {/* Rounds and Matches - Side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="card">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
+        <div className="card lg:col-span-1">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Rondas</h2>
             {rounds.length === 0 ? (
@@ -1105,7 +1118,7 @@ export default function TournamentDetail() {
         </div>
 
         {/* Matches */}
-        <div className="card">
+        <div className="card lg:col-span-3">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">
               {currentRound ? `Partidas - Ronda ${currentRound.round_number}` : 'Partidas'}
@@ -1122,9 +1135,6 @@ export default function TournamentDetail() {
           {/* Legend */}
           {currentRound && tournament && (
             <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Leyenda:
-              </div>
               <div className="flex flex-wrap gap-4 text-sm">
                 {getLegendItems(tournament.players_per_match).map((item) => (
                   <div key={item.position} className="flex items-center gap-1">

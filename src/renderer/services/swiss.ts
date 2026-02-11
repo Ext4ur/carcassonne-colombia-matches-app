@@ -81,6 +81,144 @@ export class SwissPairingService {
     await DatabaseService.updateTournament(tournamentId, { status: 'in_progress' });
   }
 
+  static async previewFirstRound(tournamentId: number): Promise<{
+    matches: Array<{
+      player1: any;
+      player2?: any;
+      startPlayerId?: number;
+      reason?: string;
+    }>;
+    warnings: string[];
+    startStats: Record<number, { totalStarts: number; lastStartRound: number }>;
+  }> {
+    const players = await DatabaseService.getTournamentPlayers(tournamentId);
+
+    if (players.length < 2) {
+      throw new Error('Se necesitan al menos 2 jugadores para generar una ronda');
+    }
+
+    const shuffled = [...players].sort(() => Math.random() - 0.5);
+    const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
+    const playersPerMatch = tournament.players_per_match;
+
+    const matches: any[] = [];
+    const startStats: Record<number, { totalStarts: number; lastStartRound: number }> = {};
+
+    // Initialize stats
+    players.forEach((p) => {
+      startStats[p.id!] = { totalStarts: 0, lastStartRound: 0 };
+    });
+
+    for (let i = 0; i < shuffled.length; i += playersPerMatch) {
+      const matchPlayers = shuffled.slice(i, i + playersPerMatch);
+
+      if (matchPlayers.length === 1 && i === shuffled.length - 1) {
+        // Bye match
+        matches.push({
+          player1: {
+            ...matchPlayers[0],
+            player_name: matchPlayers[0].name,
+            player_id: matchPlayers[0].id,
+          },
+          reason: 'random',
+        });
+      } else {
+        // Match with players
+        // Random start player
+        const startPlayerIndex = Math.floor(Math.random() * matchPlayers.length);
+        const startPlayerId = matchPlayers[startPlayerIndex].id!;
+
+        matches.push({
+          player1: {
+            ...matchPlayers[0],
+            player_name: matchPlayers[0].name,
+            player_id: matchPlayers[0].id,
+          },
+          player2: {
+            ...matchPlayers[1],
+            player_name: matchPlayers[1].name,
+            player_id: matchPlayers[1].id,
+          },
+          startPlayerId,
+          reason: 'random',
+        });
+      }
+    }
+
+    return { matches, warnings: [], startStats };
+  }
+
+  static async createRoundFromPairings(
+    tournamentId: number,
+    roundNumber: number,
+    pairings: Array<{
+      player1: any;
+      player2?: any;
+      startPlayerId?: number;
+    }>
+  ): Promise<void> {
+    const roundId = await DatabaseService.createRound({
+      tournament_id: tournamentId,
+      round_number: roundNumber,
+      status: 'pending',
+    });
+
+    const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const scoringSystem = config?.scoring_system || { 1: 1, 2: 0 };
+
+    let matchNumber = 1;
+    for (const pairing of pairings) {
+      if (!pairing.player2) {
+        // Bye match
+        const matchId = await DatabaseService.createMatch({
+          round_id: roundId,
+          match_number: matchNumber,
+          status: 'completed',
+        });
+
+        await DatabaseService.createMatchResult({
+          match_id: matchId,
+          player_id: pairing.player1.player_id || pairing.player1.id,
+          position: 1,
+          points: 0,
+          tournament_points: scoringSystem[1] || 1,
+        });
+
+        await DatabaseService.updateMatch(matchId, {
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        });
+
+        // Add bye record
+        // Note: In a real scenario we might need to know the *next* round to mark the bye properly in history,
+        // but here we are just creating the current round.
+        // Logic in generateNextRound handles historical bye checking.
+        // If we really need to record the bye for history:
+        await DatabaseService.addPlayerBye(
+          tournamentId,
+          pairing.player1.player_id || pairing.player1.id,
+          roundNumber
+        );
+      } else {
+        // Regular match
+        const matchId = await DatabaseService.createMatch({
+          round_id: roundId,
+          match_number: matchNumber,
+          status: 'pending',
+          first_player_id: pairing.startPlayerId,
+        });
+
+        await DatabaseService.setMatchPlayers(matchId, [
+          pairing.player1.player_id || pairing.player1.id,
+          pairing.player2.player_id || pairing.player2.id,
+        ]);
+      }
+      matchNumber++;
+    }
+
+    await DatabaseService.updateTournament(tournamentId, { status: 'in_progress' });
+  }
+
   static async generateNextRound(tournamentId: number): Promise<{ standings: PlayerStanding[] }> {
     const [rounds, tournamentData, players, config, startStatsData] = await Promise.all([
       DatabaseService.getTournamentRounds(tournamentId),
@@ -291,6 +429,7 @@ export class SwissPairingService {
       reason?: string;
     }>;
     warnings: string[];
+    startStats: Record<number, { totalStarts: number; lastStartRound: number }>;
   }> {
     const [rounds, tournamentData, players, config, startStatsData] = await Promise.all([
       DatabaseService.getTournamentRounds(tournamentId),
@@ -442,7 +581,7 @@ export class SwissPairingService {
       matchPlayers.forEach((p) => paired.add(p.player_id));
     }
 
-    return { matches: proposedMatches, warnings };
+    return { matches: proposedMatches, warnings, startStats };
   }
 
   private static async determineStartPlayer(

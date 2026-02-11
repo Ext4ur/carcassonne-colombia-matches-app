@@ -16,6 +16,7 @@ interface RoundPreviewDialogProps {
       reason?: string;
     }>;
     warnings: string[];
+    startStats?: Record<number, { totalStarts: number; lastStartRound: number }>;
   } | null;
 }
 
@@ -46,40 +47,55 @@ export default function RoundPreviewDialog({
             </div>
           );
         }
+
+        const startPlayerId = match.startPlayerId;
+        const player1Stats = previewData.startStats?.[match.player1.player_id];
+        const player2Stats = previewData.startStats?.[match.player2.player_id];
+
+        const renderPlayer = (player: any, stats: any) => {
+          const isStarter = startPlayerId === player.player_id;
+          return (
+            <div
+              className={`flex flex-col ${isStarter ? 'bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-100 dark:border-blue-800' : 'p-2'}`}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={`font-medium ${isStarter ? 'text-blue-700 dark:text-blue-300' : 'text-gray-900 dark:text-gray-100'}`}
+                >
+                  {player.player_name}
+                </span>
+                {isStarter && <span title="Inicia la partida">🎲</span>}
+              </div>
+              {stats && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Inicios: {stats.totalStarts}
+                  {stats.lastStartRound > 0 && ` (R${stats.lastStartRound})`}
+                </div>
+              )}
+            </div>
+          );
+        };
+
         return (
-          <div className="flex items-center gap-2">
-            <span>{match.player1.player_name}</span>
-            <span className="text-gray-400 font-bold">vs</span>
-            <span>{match.player2.player_name}</span>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">{renderPlayer(match.player1, player1Stats)}</div>
+            <div className="flex flex-col items-center">
+              <span className="text-gray-400 font-bold text-sm">VS</span>
+              {match.reason && startPlayerId && (
+                <span className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">
+                  {match.reason === 'balance'
+                    ? 'Equilibrio'
+                    : match.reason === 'recency'
+                      ? 'Tiempo'
+                      : 'Azar'}
+                </span>
+              )}
+            </div>
+            <div className="flex-1">{renderPlayer(match.player2, player2Stats)}</div>
           </div>
         );
       },
-    },
-    {
-      key: 'start_player',
-      header: 'Inicia 🎲',
-      render: (match) => {
-        if (!match.player2) return '-';
-        if (!match.startPlayerId) return '?';
-        const startPlayer =
-          match.startPlayerId === match.player1.player_id ? match.player1 : match.player2;
-        return (
-          <div className="flex flex-col">
-            <span className="font-semibold text-blue-700 dark:text-blue-300">
-              {startPlayer.player_name} 🎲
-            </span>
-            {match.reason && (
-              <span className="text-xs text-gray-500 capitalize">
-                {match.reason === 'balance'
-                  ? '⚖️ Equilibrio'
-                  : match.reason === 'recency'
-                    ? '🕒 Tiempo'
-                    : '🎲 Azar'}
-              </span>
-            )}
-          </div>
-        );
-      },
+      width: '70%',
     },
   ];
 

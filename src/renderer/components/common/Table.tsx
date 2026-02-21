@@ -47,7 +47,7 @@ function TableHeader<T extends Record<string, any>>({ columns }: { columns: Colu
             <th
               key={column.key}
               scope="col"
-              className={`px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700 ${column.className || ''}`}
+              className={`px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700 ${column.className || ''}`}
             >
               {column.header}
             </th>
@@ -88,7 +88,7 @@ export default function Table<T extends Record<string, any>>({
               <th
                 key={column.key}
                 scope="col"
-                className={`px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${column.className || ''}`}
+                className={`px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${column.className || ''}`}
               >
                 {column.header}
               </th>
@@ -106,7 +106,7 @@ export default function Table<T extends Record<string, any>>({
               {columns.map((column) => (
                 <td
                   key={column.key}
-                  className={`px-6 py-4 text-sm text-gray-900 dark:text-gray-100 ${column.className || ''} ${
+                  className={`px-3 py-2 text-sm text-gray-900 dark:text-gray-100 ${column.className || ''} ${
                     column.className?.includes('whitespace-nowrap') ? '' : 'whitespace-normal'
                   }`}
                 >
@@ -144,7 +144,7 @@ export default function Table<T extends Record<string, any>>({
                   {columns.map((column) => (
                     <td
                       key={column.key}
-                      className={`px-6 py-4 text-sm text-gray-900 dark:text-gray-100 ${column.className || ''} ${
+                      className={`px-3 py-2 text-sm text-gray-900 dark:text-gray-100 ${column.className || ''} ${
                         column.className?.includes('whitespace-nowrap') ? '' : 'whitespace-normal'
                       }`}
                     >

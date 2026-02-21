@@ -10,6 +10,8 @@ import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import MatchResultForm from '../components/tournament/MatchResultForm';
 import TournamentStats from '../components/tournament/TournamentStats';
+import RoundPreviewDialog from '../components/tournament/RoundPreviewDialog';
+import AddPlayerDialog from '../components/tournament/AddPlayerDialog';
 import MultiSelect from '../components/common/MultiSelect';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
@@ -33,6 +35,20 @@ export default function TournamentDetail() {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [showStats, setShowStats] = useState(false);
   const [isLoadingStandings, setIsLoadingStandings] = useState(false);
+
+  // Preview State
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<{
+    matches: Array<{
+      player1: any;
+      player2?: any;
+      startPlayerId?: number;
+      reason?: string;
+    }>;
+    warnings: string[];
+    startStats?: Record<number, { totalStarts: number; lastStartRound: number }>;
+  } | null>(null);
+
   const [isRoundResultsModalOpen, setIsRoundResultsModalOpen] = useState(false);
   const [selectedRoundResults, setSelectedRoundResults] = useState<{
     round: Round;
@@ -50,6 +66,7 @@ export default function TournamentDetail() {
   const [editFormData, setEditFormData] = useState({ name: '', date: '', place_id: '' });
   const [places, setPlaces] = useState<Place[]>([]);
   const [tiebreakCriteria, setTiebreakCriteria] = useState<any[]>([]);
+  const [isAddPlayerOpen, setIsAddPlayerOpen] = useState(false);
 
   const loadTournament = useCallback(async () => {
     if (!id) return;
@@ -212,21 +229,18 @@ export default function TournamentDetail() {
 
   const handleGenerateFirstRound = async () => {
     if (!tournament?.id) return;
-    if (!confirm('¿Generar la primera ronda? Los emparejamientos serán aleatorios.')) return;
 
     try {
       setIsLoading(true);
-      await SwissPairingService.generateFirstRound(tournament.id);
-      const roundsData = await loadRounds();
-      if (roundsData.length > 0) {
-        await loadMatches(roundsData[0].id);
-      }
-      await loadStandings();
+      const data = await SwissPairingService.previewFirstRound(tournament.id);
+      setPreviewData(data);
+      setIsPreviewOpen(true);
     } catch (error: any) {
       console.error('Error generating round:', error);
       addNotification({
         message: error.message || 'Error al generar la ronda',
         type: 'error',
+        duration: 5000,
       });
     } finally {
       setIsLoading(false);
@@ -265,7 +279,7 @@ export default function TournamentDetail() {
     }
   };
 
-  const handleGenerateNextRound = async () => {
+  const handleGenerateNextRoundClick = async () => {
     if (!tournament?.id) return;
 
     // Check if we've reached the maximum number of rounds before proceeding
@@ -282,18 +296,50 @@ export default function TournamentDetail() {
       return;
     }
 
-    if (!confirm('¿Generar la siguiente ronda?')) return;
+    try {
+      setIsLoading(true);
+      const data = await SwissPairingService.previewNextRound(tournament.id);
+      setPreviewData(data);
+      setIsPreviewOpen(true);
+    } catch (error: any) {
+      console.error('Error generating preview:', error);
+      addNotification({
+        message: error.message || 'Error al generar la previsualización',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConfirmNextRound = async () => {
+    if (!tournament?.id || !previewData) return;
 
     try {
       setIsLoading(true);
-      const { standings } = await SwissPairingService.generateNextRound(tournament.id);
-      setStandings(standings);
+
+      const nextRoundNumber = rounds.length + 1;
+
+      await SwissPairingService.createRoundFromPairings(
+        tournament.id,
+        nextRoundNumber,
+        previewData.matches
+      );
+
       const roundsData = await loadRounds();
       const newRound = roundsData.length > 0 ? roundsData[roundsData.length - 1] : null;
       if (newRound) {
         setCurrentRound(newRound);
         await loadMatches(newRound.id);
       }
+      await loadStandings();
+
+      setIsPreviewOpen(false);
+      setPreviewData(null);
+      addNotification({
+        message: 'Ronda generada exitosamente',
+        type: 'success',
+      });
     } catch (error: any) {
       console.error('Error generating round:', error);
       addNotification({
@@ -323,6 +369,7 @@ export default function TournamentDetail() {
         // Sort results by position (player_name already resolved by getMatchResults with tournament config)
         const sortedResults = matchResults
           .map((result) => ({
+            player_id: result.player_id,
             player_name: result.player_name ?? 'Desconocido',
             position: result.position,
             points: result.points,
@@ -331,6 +378,7 @@ export default function TournamentDetail() {
 
         matchesData.push({
           match_number: match.match_number,
+          first_player_id: match.first_player_id,
           results: sortedResults,
         });
       }
@@ -380,22 +428,19 @@ export default function TournamentDetail() {
     const players = await DatabaseService.getTournamentPlayers(tournament.id);
     const effectiveMaxRounds =
       tournament.number_of_rounds || calculateNumberOfRounds(players.length);
+
     if (roundsAfter.length < effectiveMaxRounds) {
-      if (
-        confirm(
-          'Todas las partidas de esta ronda están completadas. ¿Deseas generar la siguiente ronda?'
-        )
-      ) {
-        await handleGenerateNextRound();
-      }
+      addNotification({
+        message: 'Ronda completada. Puedes generar la siguiente ronda cuando estés listo.',
+        type: 'info',
+        duration: 3000,
+      });
     } else {
-      if (confirm('Has completado la última ronda. ¿Deseas finalizar el torneo?')) {
-        await DatabaseService.updateTournament(tournament.id, { status: 'completed' });
-        addNotification({ message: '¡Torneo completado!', type: 'success', duration: 5000 });
-        await loadTournament();
-        await loadStandings();
-        setShowStats(true);
-      }
+      addNotification({
+        message: 'Has completado la última ronda. Puedes finalizar el torneo cuando estés listo.',
+        type: 'success',
+        duration: 5000,
+      });
     }
   };
 
@@ -501,7 +546,7 @@ export default function TournamentDetail() {
       criterionId === 'opponent_points_drop_worst' ||
       criterionId === 'opponent_points_drop_best_worst'
     ) {
-      return value.toFixed(2);
+      return Number(value.toFixed(2)).toString();
     } else if (criterionId === 'head_to_head') {
       return value > 0 ? '✅' : value < 0 ? '❌' : '-';
     } else if (criterionId === 'point_difference') {
@@ -523,6 +568,74 @@ export default function TournamentDetail() {
       point_difference: '📉 Diferencia',
     };
     return shortLabels[criterionId] || criterion.name;
+  };
+
+  const handleDropout = async (playerStanding: PlayerStanding) => {
+    if (!tournament?.id || !currentRound) return;
+    if (
+      !confirm(
+        `¿Estás seguro de que deseas retirar a ${playerStanding.player_name}? Ya no será emparejado en futuras rondas.`
+      )
+    )
+      return;
+
+    try {
+      setIsLoading(true);
+      await DatabaseService.updateTournamentPlayerStatus(tournament.id, playerStanding.player_id, {
+        active: false,
+        dropout_round: currentRound.round_number,
+      });
+      addNotification({
+        message: 'Jugador retirado exitosamente',
+        type: 'success',
+      });
+      await loadStandings();
+    } catch (error) {
+      console.error('Error dropping player:', error);
+      addNotification({
+        message: 'Error al retirar al jugador',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRestore = async (playerStanding: PlayerStanding) => {
+    if (!tournament?.id) return;
+    if (!confirm(`¿Deseas reincorporar a ${playerStanding.player_name} al torneo?`)) return;
+
+    try {
+      setIsLoading(true);
+      await DatabaseService.updateTournamentPlayerStatus(tournament.id, playerStanding.player_id, {
+        active: true,
+        dropout_round: null,
+      });
+      addNotification({
+        message: 'Jugador reincorporado exitosamente',
+        type: 'success',
+      });
+      await loadStandings();
+    } catch (error) {
+      console.error('Error restoring player:', error);
+      addNotification({
+        message: 'Error al reincorporar al jugador',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePlayerAdded = async () => {
+    if (!tournament?.id) return;
+    await loadStandings();
+    // Also reload rounds if needed? Usually adding player doesn't change rounds unless we regenerate.
+    // But we might want to update preview if open?
+    addNotification({
+      message: 'Jugador agregado exitosamente',
+      type: 'success',
+    });
   };
 
   const standingsColumns: Column<PlayerStanding>[] = [
@@ -547,6 +660,77 @@ export default function TournamentDetail() {
         header: getTiebreakLabel(criterion.id),
         render: (standing: PlayerStanding) => getTiebreakValue(standing, criterion.id),
       })),
+    {
+      key: 'starts_count',
+      header: '🎲 Inicios',
+      render: (standing) => standing.starts_count ?? 0,
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      render: (standing) => {
+        if (standing.active) {
+          return (
+            <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
+              Activo
+            </span>
+          );
+        }
+        return (
+          <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">
+            Retirado (Ronda {standing.dropout_round})
+          </span>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: '1%',
+      className: 'whitespace-nowrap w-1 text-right',
+      render: (standing) => {
+        if (standing.active) {
+          return (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDropout(standing);
+              }}
+              title="Retirar jugador"
+              disabled={tournament?.status === 'completed'}
+            >
+              x
+            </Button>
+          );
+        }
+        // Restore only allowed if dropped in current round and round not completed (per user rule)
+        // OR if admin allows it? User said "dropouts can only be undone if the current round has not yet finished".
+        const canRestore =
+          tournament?.status !== 'completed' &&
+          currentRound &&
+          currentRound.status !== 'completed' &&
+          standing.dropout_round === currentRound.round_number;
+
+        if (canRestore) {
+          return (
+            <Button
+              variant="success"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRestore(standing);
+              }}
+              title="Reincorporar jugador"
+            >
+              Reinc.
+            </Button>
+          );
+        }
+        return null;
+      },
+    },
   ];
 
   const filteredStandings =
@@ -677,13 +861,27 @@ export default function TournamentDetail() {
             .sort((a: any, b: any) => a.position - b.position);
 
           return (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-row items-center gap-3">
               {playersWithResults.map((p: any, idx: number) => (
                 <span
                   key={p.id || idx}
-                  className={getPositionColor(p.position, tournament?.players_per_match ?? 2)}
+                  className={`flex items-center gap-1 ${getPositionColor(
+                    p.position,
+                    tournament?.players_per_match ?? 2
+                  )}`}
                 >
+                  {idx > 0 && (
+                    <span className="text-gray-300 dark:text-gray-600 font-normal mr-1">vs</span>
+                  )}
                   {p.name}
+                  {match.first_player_id === p.id && (
+                    <span
+                      className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
+                      title="Jugador Inicial"
+                    >
+                      🎲
+                    </span>
+                  )}
                 </span>
               ))}
             </div>
@@ -691,12 +889,31 @@ export default function TournamentDetail() {
         }
 
         // Pending match - show players normally
-        return players.map((p: any) => p.name).join(', ');
+        return (
+          <div className="flex flex-row items-center gap-3">
+            {players.map((p: any, index: number) => (
+              <span key={p.id} className="flex items-center gap-1">
+                {index > 0 && <span className="text-gray-300 dark:text-gray-600">vs</span>}
+                <span className="font-medium">{p.name}</span>
+                {match.first_player_id === p.id && (
+                  <span
+                    className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700 cursor-help"
+                    title="Jugador Inicial"
+                  >
+                    🎲
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        );
       },
     },
     {
       key: 'status',
       header: 'Estado',
+      width: '1%',
+      className: 'whitespace-nowrap w-1',
       render: (match) => {
         const isBye = isByeMatch(match);
         if (isBye) {
@@ -722,6 +939,8 @@ export default function TournamentDetail() {
     {
       key: 'actions',
       header: 'Acciones',
+      width: '1%',
+      className: 'whitespace-nowrap w-1 text-right',
       render: (match) => {
         const isBye = isByeMatch(match);
         // Don't show button for bye matches
@@ -739,8 +958,9 @@ export default function TournamentDetail() {
             size="sm"
             onClick={() => handleOpenMatchModal(match)}
             disabled={tournament?.status === 'completed'}
+            className="whitespace-nowrap"
           >
-            {match.status === 'completed' ? 'Ver Resultados' : 'Ingresar Resultados'}
+            {match.status === 'completed' ? 'Editar' : 'Jugar'}
           </Button>
         );
       },
@@ -780,6 +1000,19 @@ export default function TournamentDetail() {
             </p>
           </div>
           <div className="flex space-x-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsAddPlayerOpen(true)}
+              disabled={tournament?.status === 'completed' || rounds.length > 1}
+              title={
+                rounds.length > 1
+                  ? 'Solo se pueden agregar jugadores durante la primera ronda'
+                  : 'Agregar jugador al torneo'
+              }
+            >
+              + Jugador
+            </Button>
             <Button variant="secondary" size="sm" onClick={handleOpenEditModal}>
               Editar datos
             </Button>
@@ -912,8 +1145,8 @@ export default function TournamentDetail() {
       </div>
 
       {/* Rounds and Matches - Side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="card">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
+        <div className="card lg:col-span-1">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Rondas</h2>
             {rounds.length === 0 ? (
@@ -953,7 +1186,7 @@ export default function TournamentDetail() {
                 }
                 if (currentRound?.status === 'completed') {
                   return (
-                    <Button onClick={handleGenerateNextRound} isLoading={isLoading}>
+                    <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
                       Generar Siguiente Ronda
                     </Button>
                   );
@@ -1034,7 +1267,7 @@ export default function TournamentDetail() {
         </div>
 
         {/* Matches */}
-        <div className="card">
+        <div className="card lg:col-span-3">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">
               {currentRound ? `Partidas - Ronda ${currentRound.round_number}` : 'Partidas'}
@@ -1051,9 +1284,6 @@ export default function TournamentDetail() {
           {/* Legend */}
           {currentRound && tournament && (
             <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Leyenda:
-              </div>
               <div className="flex flex-wrap gap-4 text-sm">
                 {getLegendItems(tournament.players_per_match).map((item) => (
                   <div key={item.position} className="flex items-center gap-1">
@@ -1174,7 +1404,17 @@ export default function TournamentDetail() {
                           >
                             {result ? (
                               <div className="space-y-1">
-                                <div className="font-medium">{result.player_name}</div>
+                                <div className="font-medium flex items-center gap-1">
+                                  {result.player_name}
+                                  {matchData.first_player_id === result.player_id && (
+                                    <span
+                                      className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
+                                      title="Jugador Inicial"
+                                    >
+                                      🎲
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
                                   {result.points} pts
                                 </div>
@@ -1204,6 +1444,25 @@ export default function TournamentDetail() {
           </div>
         )}
       </Modal>
+
+      {/* Round Preview Dialog */}
+      <RoundPreviewDialog
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        onConfirm={handleConfirmNextRound}
+        isLoading={isLoading}
+        previewData={previewData}
+      />
+
+      {tournament?.id && (
+        <AddPlayerDialog
+          isOpen={isAddPlayerOpen}
+          onClose={() => setIsAddPlayerOpen(false)}
+          onPlayerAdded={handlePlayerAdded}
+          tournamentId={tournament.id}
+          existingPlayerIds={standings.map((s) => s.player_id)}
+        />
+      )}
     </div>
   );
 }

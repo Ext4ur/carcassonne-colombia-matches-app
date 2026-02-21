@@ -108,7 +108,7 @@ export default function PlayerRegistration({
     }
     if (!confirm(`¿Estás seguro de eliminar a ${player.name} del torneo?`)) return;
     try {
-      await DatabaseService.unregisterPlayerFromTournament(tournamentId, player.id);
+      await DatabaseService.removePlayerFromTournament(tournamentId, player.id);
       loadPlayers();
     } catch (error) {
       console.error('Error removing player:', error);

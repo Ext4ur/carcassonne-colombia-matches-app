@@ -672,81 +672,6 @@ export class DatabaseService {
     return [...new Set(rows.map((r) => r.tournament_id))];
   }
 
-  // Tournament player registration
-  static async getTournamentPlayers(tournamentId: number) {
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    if (isSupabase) {
-      const tournamentPlayers = await this.query(
-        'SELECT * FROM tournament_players WHERE tournament_id = ? ORDER BY registered_at',
-        [tournamentId]
-      );
-      if (tournamentPlayers.length === 0) return [];
-      const playerIds = tournamentPlayers.map((tp: any) => tp.player_id);
-      const raw = this.getRawClient() as any;
-      if (playerIds.length > 0 && raw.client) {
-        const { data: players, error } = await raw.client
-          .from('players')
-          .select('*')
-          .in('id', playerIds);
-
-        if (error) throw new Error(`Error fetching players: ${error.message}`);
-
-        const playersMap = new Map((players || []).map((p: any) => [p.id, p]));
-
-        return tournamentPlayers.map((tp: any) => {
-          const player = playersMap.get(tp.player_id);
-          return player
-            ? { ...player, registered_at: tp.registered_at }
-            : {
-                id: tp.player_id,
-                name: null,
-                bga_username: null,
-                phone: null,
-                email: null,
-                age: null,
-                registered_at: tp.registered_at,
-              };
-        });
-      }
-      // Fallback: return registration data with placeholder player fields (like getMatchResults)
-      return tournamentPlayers.map((tp: any) => ({
-        id: tp.player_id,
-        name: null,
-        bga_username: null,
-        phone: null,
-        email: null,
-        age: null,
-        registered_at: tp.registered_at,
-      }));
-    } else {
-      // Para SQLite: usar la query original con JOIN
-      return this.query(
-        `
-        SELECT p.*, tp.registered_at 
-        FROM tournament_players tp 
-        JOIN players p ON tp.player_id = p.id 
-        WHERE tp.tournament_id = ? 
-        ORDER BY tp.registered_at
-      `,
-        [tournamentId]
-      );
-    }
-  }
-
-  static async registerPlayerToTournament(tournamentId: number, playerId: number) {
-    return this.execute('INSERT INTO tournament_players (tournament_id, player_id) VALUES (?, ?)', [
-      tournamentId,
-      playerId,
-    ]);
-  }
-
-  static async unregisterPlayerFromTournament(tournamentId: number, playerId: number) {
-    return this.execute(
-      'DELETE FROM tournament_players WHERE tournament_id = ? AND player_id = ?',
-      [tournamentId, playerId]
-    );
-  }
-
   // Round operations
   static async getTournamentRounds(tournamentId: number) {
     const cached = dbCache.get<any[]>(`tournament:${tournamentId}:rounds`);
@@ -813,11 +738,12 @@ export class DatabaseService {
     round_id: number;
     match_number: number;
     status?: 'pending' | 'completed';
+    first_player_id?: number;
   }) {
     const result = await this.execute(
-      `INSERT INTO matches (round_id, match_number, status) 
-       VALUES (?, ?, ?)`,
-      [match.round_id, match.match_number, match.status || 'pending']
+      `INSERT INTO matches (round_id, match_number, status, first_player_id) 
+       VALUES (?, ?, ?, ?)`,
+      [match.round_id, match.match_number, match.status || 'pending', match.first_player_id || null]
     );
     return result.lastInsertRowid;
   }
@@ -850,6 +776,78 @@ export class DatabaseService {
 
     params.push(id);
     await this.execute(`UPDATE matches SET ${updates.join(', ')} WHERE id = ?`, params);
+  }
+
+  static async getPlayerStartStatistics(tournamentId: number): Promise<{
+    [playerId: number]: { totalStarts: number; lastStartRound: number };
+  }> {
+    // SupabaseClient parser has limitations with joins and aliased where clauses.
+    // We'll split this into two simple queries.
+
+    // 1. Get all rounds for the tournament
+    const rounds = await this.query<{ id: number; round_number: number }>(
+      'SELECT id, round_number FROM rounds WHERE tournament_id = ?',
+      [tournamentId]
+    );
+
+    if (rounds.length === 0) return {};
+
+    const roundMap = new Map<number, number>();
+    rounds.forEach((r) => roundMap.set(r.id!, r.round_number));
+    const roundIds = rounds.map((r) => r.id!);
+
+    // 2. Get matches for these rounds
+    // Note: 'IN' clause support in SupabaseClient.parseWhereClause is not visible in the snippet
+    // but typically it might be limited. Let's iterate if necessary or check constraints.
+    // Since parseWhereClause only supports '=', let's fetch all matches and filter in JS if the array is small,
+    // or loop through rounds if there are few.
+    // Actually, checking SupabaseClient.ts again, it mentions "column IN (...)" in comment but implementation only has eqMatch.
+    // So 'IN' is likely NOT supported by the custom parser either!
+
+    // Safer approach: Fetch all matches for each round loop, or likely fetching all matches for tournament via a simplified join that is supported...
+    // but avoiding join is better.
+    // Given the constraints, let's just fetch all matches for the rounds.
+    // If we assume the number of rounds is small (< 10-20), we can validly loop or do simple queries.
+
+    // Optimization: query matches by round_id
+    // But sending 10 queries is slow.
+    // Does SupabaseClient support "SELECT * FROM matches" without where? Yes.
+    // But that fetches ALL matches in DB. Bad.
+
+    // If we can't use IN, and can't use JOIN with WHERE on alias...
+    // Maybe we can use JOIN but filter in memory?
+    // "SELECT m.first_player_id, m.round_id FROM matches m JOIN rounds r ON m.round_id = r.id"
+    // And NO where clause on 'r.tournament_id'? That would fetch entire DB matches.
+
+    // Let's use Promise.all to fetch matches for each round. It's robust enough for a tournament app.
+    const matchesPromises = roundIds.map((roundId) =>
+      this.query<{ first_player_id: number }>(
+        'SELECT first_player_id FROM matches WHERE round_id = ?',
+        [roundId]
+      )
+    );
+
+    const roundsMatches = await Promise.all(matchesPromises);
+
+    const stats: { [playerId: number]: { totalStarts: number; lastStartRound: number } } = {};
+
+    roundsMatches.forEach((matches, index) => {
+      const roundNumber = roundMap.get(roundIds[index]) || 0;
+      matches.forEach((m) => {
+        if (m.first_player_id) {
+          if (!stats[m.first_player_id]) {
+            stats[m.first_player_id] = { totalStarts: 0, lastStartRound: 0 };
+          }
+          stats[m.first_player_id].totalStarts += 1;
+          // Keep the highest round number
+          if (roundNumber > stats[m.first_player_id].lastStartRound) {
+            stats[m.first_player_id].lastStartRound = roundNumber;
+          }
+        }
+      });
+    });
+
+    return stats;
   }
 
   // Match result operations. When tournamentId is provided, player_name is resolved using tournament player_display_mode.
@@ -1184,6 +1182,134 @@ export class DatabaseService {
         tournaments_played: row.tournaments_played,
         wins: row.wins,
       }));
+    }
+  }
+
+  // Tournament players operations
+  static async getTournamentPlayers(tournamentId: number) {
+    const isSupabase = DB_CONFIG.mode === 'remote';
+    if (isSupabase) {
+      const results = await this.query('SELECT * FROM tournament_players WHERE tournament_id = ?', [
+        tournamentId,
+      ]);
+      if (results.length === 0) return [];
+      const playerIds = results.map((r: any) => r.player_id);
+      const raw = this.getRawClient() as any;
+      if (playerIds.length > 0 && raw.client) {
+        const { data: players, error } = await raw.client
+          .from('players')
+          .select('*')
+          .in('id', playerIds)
+          .order('name', { ascending: true });
+
+        if (error) throw new Error(`Error fetching players: ${error.message}`);
+
+        // Merge active status from tournament_players
+        const tpMap = new Map(results.map((r: any) => [r.player_id, r]));
+        return (players || []).map((p: any) => ({
+          ...p,
+          active: tpMap.get(p.id)?.active ?? true,
+          dropout_round: tpMap.get(p.id)?.dropout_round ?? null,
+        }));
+      }
+      return results.map((r: any) => ({
+        id: r.player_id,
+        name: null,
+        active: r.active ?? true,
+        dropout_round: r.dropout_round ?? null,
+      }));
+    } else {
+      // SQLite
+      return this.query(
+        `
+        SELECT p.*, tp.active, tp.dropout_round
+        FROM tournament_players tp
+        JOIN players p ON tp.player_id = p.id
+        WHERE tp.tournament_id = ?
+        ORDER BY p.name ASC
+      `,
+        [tournamentId]
+      );
+    }
+  }
+
+  static async registerPlayerToTournament(tournamentId: number, playerId: number) {
+    return this.execute(
+      'INSERT INTO tournament_players (tournament_id, player_id, active) VALUES (?, ?, ?)',
+      [
+        tournamentId,
+        playerId,
+        1, // active default (true)
+      ]
+    );
+  }
+
+  static async removePlayerFromTournament(tournamentId: number, playerId: number) {
+    const isSupabase = DB_CONFIG.mode === 'remote';
+    if (isSupabase) {
+      const raw = this.getRawClient() as any;
+      const { error } = await raw.client
+        .from('tournament_players')
+        .delete()
+        .eq('tournament_id', tournamentId)
+        .eq('player_id', playerId);
+
+      if (error) throw new Error(`Error removing player from tournament: ${error.message}`);
+      return true;
+    } else {
+      return this.execute(
+        'DELETE FROM tournament_players WHERE tournament_id = ? AND player_id = ?',
+        [tournamentId, playerId]
+      );
+    }
+  }
+
+  static async updateTournamentPlayerStatus(
+    tournamentId: number,
+    playerId: number,
+    updates: { active?: boolean; dropout_round?: number | null }
+  ) {
+    const isSupabase = DB_CONFIG.mode === 'remote';
+    if (isSupabase) {
+      const raw = this.getRawClient() as any;
+      const { error } = await raw.client
+        .from('tournament_players')
+        .update(updates)
+        .eq('tournament_id', tournamentId)
+        .eq('player_id', playerId);
+
+      if (error && error.message.includes("Could not find the 'active' column")) {
+        // Retry: Reload schema cache might not be directly possible, but let's try a direct query or
+        // just try again if it was a transient issue.
+        // Actually, this error usually means the local Supabase client instance has a stale schema definition.
+        // We can try to force a refresh by creating a new client instance or restart, but here we can't.
+        // However, often just re-trying the operation or ensuring the column exists helps.
+        // Let's at least log it better or try a raw SQL execution if possible (but we don't have rpc for this).
+        console.warn("Schema cache missing 'active' column. Ensuring migration is applied.");
+      }
+
+      if (error) throw new Error(`Error updating player status: ${error.message}`);
+      return true;
+    } else {
+      const setClause = [];
+      const params = [];
+      if (updates.active !== undefined) {
+        setClause.push('active = ?');
+        params.push(updates.active ? 1 : 0);
+      }
+      if (updates.dropout_round !== undefined) {
+        setClause.push('dropout_round = ?');
+        params.push(updates.dropout_round);
+      }
+
+      if (setClause.length === 0) return;
+
+      params.push(tournamentId, playerId);
+
+      return this.execute(
+        `UPDATE tournament_players SET ${setClause.join(', ')} WHERE tournament_id = ? AND player_id = ?`,
+        params
+      );
     }
   }
 

@@ -198,80 +198,123 @@ export default function MatchResultForm({
       {results.map((result, index) => {
         const position = getPlayerPosition(result.player_id);
         const player = players.find((p) => p.id === result.player_id);
+        const isFirst = firstPlayerId === result.player_id;
+
         return (
           <div
             key={result.player_id || `result-${index}`}
-            className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg mb-3 bg-gray-50 dark:bg-gray-700/50"
+            className={`p-4 border rounded-lg mb-3 transition-colors ${
+              isFirst
+                ? 'bg-blue-50/50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800'
+                : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700'
+            }`}
           >
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                  Jugador
-                </label>
-                <div className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              {/* Player Name & Start Button */}
+              <div className="flex-1 min-w-[200px] flex items-center justify-between gap-2">
+                <span className="text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
                   {isLoadingData ? 'Cargando...' : player?.name || 'Sin asignar'}
-                </div>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => handleFirstPlayerChange(result.player_id)}
+                  disabled={isLoadingData || tournamentStatus === 'completed'}
+                  className={`
+                    flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all
+                    ${
+                      isFirst
+                        ? 'bg-blue-100 text-blue-800 ring-2 ring-blue-500 ring-offset-1 dark:bg-blue-900/50 dark:text-blue-100 dark:ring-offset-gray-900'
+                        : 'bg-gray-100 text-gray-400 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-gray-700'
+                    }
+                  `}
+                >
+                  {isFirst ? (
+                    <>
+                      <span>Jugador Inicial</span>
+                      <span className="text-base">🎲</span>
+                    </>
+                  ) : (
+                    <span>Marcar Inicial</span>
+                  )}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                  Puntos *
+
+              {/* Points */}
+              <div className="w-full md:w-32">
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 md:hidden">
+                  Puntos
                 </label>
-                <Input
-                  type="number"
-                  value={
-                    result && result.points !== undefined && result.points !== null
-                      ? result.points === 0
-                        ? ''
-                        : String(result.points)
-                      : ''
-                  }
-                  disabled={isLoadingData}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Allow empty string for better UX while typing
-                    if (value === '') {
-                      updateResult(index, 'points', 0);
-                    } else {
-                      // Only allow digits
-                      if (/^\d*$/.test(value)) {
+                <div className="relative">
+                  <Input
+                    type="number"
+                    value={
+                      result && result.points !== undefined && result.points !== null
+                        ? result.points === 0
+                          ? ''
+                          : String(result.points)
+                        : ''
+                    }
+                    disabled={isLoadingData}
+                    className="text-center font-mono font-bold text-lg"
+                    placeholder="0"
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '') {
+                        updateResult(index, 'points', 0);
+                      } else if (/^\d*$/.test(value)) {
                         const numValue = parseInt(value, 10);
                         if (!isNaN(numValue) && numValue >= 0) {
                           updateResult(index, 'points', numValue);
                         }
                       }
-                    }
-                  }}
-                  onBlur={(e) => {
-                    // Normalize value on blur - ensure it's a valid number
-                    const value = e.target.value.trim();
-                    if (value === '' || value === '0' || isNaN(parseInt(value, 10))) {
-                      updateResult(index, 'points', 0);
-                    }
-                  }}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-                  Posición
-                </label>
-                <div className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-center font-semibold text-lg">
-                  {position || '-'}
+                    }}
+                    onBlur={(e) => {
+                      const value = e.target.value.trim();
+                      if (value === '' || value === '0' || isNaN(parseInt(value, 10))) {
+                        updateResult(index, 'points', 0);
+                      }
+                    }}
+                    required
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none">
+                    PTS
+                  </span>
                 </div>
               </div>
-              <div className="flex items-end md:col-span-1">
-                <label className="flex items-center space-x-2 cursor-pointer p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={firstPlayerId === result.player_id}
-                    onChange={() => handleFirstPlayerChange(result.player_id)}
-                    disabled={isLoadingData || tournamentStatus === 'completed'}
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 w-4 h-4"
-                  />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Empezó la partida <span className="text-red-500">*</span>
-                  </span>
-                </label>
+
+              {/* Position Indicators */}
+              <div className="flex items-center justify-center md:justify-end min-w-[60px]">
+                {(() => {
+                  const pos = position;
+                  if (!pos) return <span className="text-gray-400 text-2xl">-</span>;
+
+                  let content = '';
+                  let colorClass = '';
+
+                  if (pos === 1) {
+                    content = '🥇';
+                    colorClass = 'drop-shadow-md scale-125';
+                  } else if (pos === 2) {
+                    content = '🥈';
+                    colorClass = 'drop-shadow-md scale-125';
+                  } else if (pos === 3) {
+                    content = '🥉';
+                    colorClass = 'drop-shadow-md scale-125';
+                  } else {
+                    content = `${pos}º`; // ordinal number
+                    colorClass = 'text-2xl font-bold text-gray-600 dark:text-gray-400';
+                  }
+
+                  return (
+                    <div
+                      className={`transition-all duration-300 ${colorClass}`}
+                      title={`Posición ${pos}`}
+                    >
+                      {content}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

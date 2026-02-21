@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { SupabaseClient } from '@api/clients/SupabaseClient';
 import { isSupabaseConfigured, getConfigError } from '@api/clients/supabaseConfig';
-import { DB_CONFIG } from '@constants';
 
 /**
  * Utilidad para probar la conexión con Supabase
@@ -49,34 +48,26 @@ export async function testSupabaseConnection(): Promise<{
 
 /**
  * Verificar qué cliente de API se está usando actualmente
+ * En la arquitectura Local-First, siempre es SQLite. Supabase es opcional.
  */
 export function getCurrentApiClientInfo(): {
-  type: 'sqlite' | 'supabase' | 'dual';
+  type: 'local' | 'cloud-sync';
   configured: boolean;
   message: string;
 } {
   const supabaseConfigured = isSupabaseConfigured();
 
-  if (DB_CONFIG.mode === 'remote') {
+  if (supabaseConfigured) {
     return {
-      type: 'supabase',
-      configured: supabaseConfigured,
-      message: supabaseConfigured
-        ? 'Usando Supabase (modo remoto)'
-        : 'Configurado para Supabase pero no está configurado, usando SQLite como fallback',
-    };
-  } else if (DB_CONFIG.mode === 'dual') {
-    return {
-      type: 'dual',
-      configured: supabaseConfigured,
-      message:
-        'Modo dual configurado (usando SQLite por ahora, DualRepository pendiente en Sprint 3)',
+      type: 'cloud-sync',
+      configured: true,
+      message: 'Base de datos Local (SQLite) + Sincronización Nube (Supabase)',
     };
   } else {
     return {
-      type: 'sqlite',
-      configured: true,
-      message: 'Usando SQLite (modo local)',
+      type: 'local',
+      configured: false,
+      message: 'Base de datos Local (SQLite) - Sin sincronización',
     };
   }
 }

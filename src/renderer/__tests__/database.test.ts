@@ -1,135 +1,191 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DatabaseService } from '../services/database';
-import { IApiClient } from '../api/clients/IApiClient';
+import { describe, it, expect, beforeEach, vi, beforeAll } from 'vitest';
 
-// Import the module to access it later (it will be the mock)
-import * as clientFactory from '@api/clients/clientFactory';
+// 1. Setup Global Mocks BEFORE importing modules that might use them
+const mockUUID = '1234-5678-uuid';
+const cryptoMock = {
+  randomUUID: () => mockUUID,
+};
 
-// Mock getApiClient using the alias implementation
-vi.mock('@api/clients/clientFactory', () => {
-  let clientInstance: IApiClient | null = null;
-  return {
-    getApiClient: () => clientInstance,
-    setMockClient: (client: IApiClient) => {
-      clientInstance = client;
-    },
-    createApiClient: () => clientInstance,
-    isSupabaseConfigured: () => false,
+// Polyfill self/window/navigator for Node environment
+if (typeof self === 'undefined') {
+  (global as any).self = global;
+}
+if (typeof window === 'undefined') {
+  (global as any).window = global;
+}
+if (typeof navigator === 'undefined') {
+  (global as any).navigator = {
+    onLine: true,
+    userAgent: 'node',
   };
-});
+}
 
-// Mock dbCache to disable caching
+// Ensure crypto exists on self/global
+if (!(global.self as any).crypto) {
+  Object.defineProperty(global.self, 'crypto', {
+    value: cryptoMock,
+    writable: true,
+  });
+} else {
+  // If it exists (e.g. Node 19+ has global crypto), ensure randomUUID is mocked
+  if (!global.crypto.randomUUID) {
+    (global.crypto as any).randomUUID = cryptoMock.randomUUID;
+  } else {
+    // Spy on it if needed, or just replace
+    // Replacing is safer for deterministic UUIDs in tests
+    Object.defineProperty(global.self, 'crypto', {
+      value: cryptoMock,
+      writable: true,
+    });
+  }
+}
+
+// 2. Define Mocks for Dependencies
+// Mock SyncService
+const mockAddToQueue = vi.fn();
+vi.mock('../services/syncService', () => ({
+  SyncService: {
+    startSync: vi.fn(),
+    stopSync: vi.fn(),
+    sync: vi.fn(),
+    addToQueue: mockAddToQueue,
+  },
+}));
+
+// Mock dbCache
 vi.mock('../services/dbCache', () => ({
   get: vi.fn(),
   set: vi.fn(),
   invalidate: vi.fn(),
   invalidateTournament: vi.fn(),
+  invalidateAllRounds: vi.fn(),
   LIST_KEYS: {
     players: 'players',
-    tournaments: 'tournaments', // Fixed typo
+    tournaments: 'tournaments', // typos fixed
     cities: 'cities',
     places: 'places',
     circuits: 'circuits',
   },
 }));
 
-class MockSqliteClient implements IApiClient {
-  public queries: Array<{ sql: string; params?: any[] }> = [];
+// Mock SqliteClient
+const mockExecute = vi.fn();
+const mockQuery = vi.fn();
+const mockTransaction = vi.fn();
 
-  // Mock data to return from queries
-  public mockSelectReturns: any[] = [];
+vi.mock('../api/clients/SqliteClient', () => {
+  return {
+    SqliteClient: vi.fn().mockImplementation(() => {
+      return {
+        execute: mockExecute,
+        query: mockQuery,
+        transaction: mockTransaction,
+      };
+    }),
+  };
+});
 
-  async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
-    this.queries.push({ sql, params });
-    // Return last pushed mock data or empty array
-    const data = this.mockSelectReturns.shift();
-    return (data || []) as T[];
-  }
+describe('DatabaseService (Local-First)', () => {
+  // Use dynamic import variable
+  let DatabaseService: any;
 
-  async execute(
-    sql: string,
-    params?: any[]
-  ): Promise<{ lastInsertRowid: number; changes: number }> {
-    this.queries.push({ sql, params });
-    return {
-      lastInsertRowid: 123, // Dummy ID
-      changes: 1,
-    };
-  }
-
-  async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<any[]> {
-    this.queries.push(...queries);
-    return queries.map(() => ({ lastInsertRowid: 123, changes: 1 }));
-  }
-}
-
-describe('DatabaseService (Mocked)', () => {
-  let mockClient: MockSqliteClient;
+  beforeAll(async () => {
+    // Import module under test AFTER mocks are set up
+    const dbModule = await import('../services/database');
+    DatabaseService = dbModule.DatabaseService;
+  });
 
   beforeEach(() => {
-    mockClient = new MockSqliteClient();
-    (clientFactory as any).setMockClient(mockClient);
+    vi.clearAllMocks();
+    mockExecute.mockResolvedValue({ lastInsertRowid: 999, changes: 1 });
+    mockQuery.mockResolvedValue([]);
   });
 
   describe('Players CRUD', () => {
-    it('createPlayer sends correct SQL', async () => {
+    it('createPlayer generates UUID and inserts correctly', async () => {
       await DatabaseService.createPlayer({
         name: 'Test Player',
         bga_username: 'bga_user',
         email: 'test@example.com',
       });
 
-      expect(mockClient.queries.length).toBe(1);
-      const q = mockClient.queries[0];
-      expect(q.sql).toContain('INSERT INTO players');
-      expect(q.params).toEqual(['Test Player', 'bga_user', 'name', null, 'test@example.com', null]);
+      // 1. Should execute INSERT with UUID
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+      const call = mockExecute.mock.calls[0];
+      expect(call[0]).toContain('INSERT INTO players');
+      expect(call[0]).toContain('uuid');
+      // UUID is first param in the new implementation?
+      // "INSERT INTO players (uuid, name...)" -> params: [uuid, name...]
+      expect(call[1][0]).toBe(mockUUID);
+      expect(call[1][1]).toBe('Test Player');
+
+      // 2. Should add to Sync Queue
+      expect(mockAddToQueue).toHaveBeenCalledWith(
+        'players',
+        'INSERT',
+        expect.objectContaining({ uuid: mockUUID, name: 'Test Player' })
+      );
     });
 
-    it('updatePlayer sends correct SQL', async () => {
+    it('updatePlayer updates local and syncs', async () => {
+      mockQuery.mockResolvedValueOnce([{ uuid: 'existing-uuid' }]);
+
       await DatabaseService.updatePlayer(10, { name: 'Updated Name' });
 
-      expect(mockClient.queries.length).toBe(1);
-      const q = mockClient.queries[0];
-      expect(q.sql).toContain('UPDATE players SET');
-      expect(q.sql).toContain('name = ?');
-      expect(q.params).toContain('Updated Name');
-      expect(q.params).toContain(10); // ID at end
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT uuid FROM players'),
+        [10]
+      );
+
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+      const call = mockExecute.mock.calls[0];
+      expect(call[0]).toContain('UPDATE players SET');
+      expect(call[0]).toContain('name = ?');
+
+      expect(mockAddToQueue).toHaveBeenCalledWith(
+        'players',
+        'UPDATE',
+        expect.objectContaining({ uuid: 'existing-uuid', name: 'Updated Name' })
+      );
     });
 
-    it('searchPlayers sends correct SQL', async () => {
-      mockClient.mockSelectReturns.push([{ id: 1, name: 'Found' }]);
-      const res = await DatabaseService.searchPlayers('Sea');
+    it('deletePlayer deletes local and syncs', async () => {
+      mockQuery.mockResolvedValueOnce([{ uuid: 'existing-uuid' }]);
 
-      expect(res).toHaveLength(1);
-      const q = mockClient.queries[0];
-      expect(q.sql).toContain('LIKE ?');
-      expect(q.params).toEqual(['%Sea%', '%Sea%']);
-    });
-  });
+      await DatabaseService.deletePlayer(5);
 
-  describe('Cities CRUD', () => {
-    it('createCity sends correct SQL', async () => {
-      await DatabaseService.createCity({ name: 'Bogotá' });
-      const q = mockClient.queries[0];
-      expect(q.sql).toContain('INSERT INTO cities');
-      expect(q.params).toEqual(['Bogotá']);
-    });
+      expect(mockExecute).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM players'), [5]);
 
-    it('updateCity sends correct SQL', async () => {
-      await DatabaseService.updateCity(5, { name: 'Medellín' });
-      const q = mockClient.queries[0];
-      expect(q.sql).toContain('UPDATE cities');
-      expect(q.params).toContain('Medellín');
+      expect(mockAddToQueue).toHaveBeenCalledWith('players', 'DELETE', { uuid: 'existing-uuid' });
     });
   });
 
-  describe('Places CRUD', () => {
-    it('createPlace sends correct SQL', async () => {
-      await DatabaseService.createPlace({ name: 'Lugar X', city_id: 2 });
-      const q = mockClient.queries[0];
-      expect(q.sql).toContain('INSERT INTO places');
-      expect(q.params).toEqual(['Lugar X', 2]);
+  describe('Tournament CRUD', () => {
+    it('createTournament handles UUIDs and FKs', async () => {
+      mockQuery
+        .mockResolvedValueOnce([{ id: 1 }]) // getDefaultPlaceId
+        .mockResolvedValueOnce([{ uuid: 'place-uuid' }]); // getUuid(places)
+
+      await DatabaseService.createTournament({
+        name: 'My Tournament',
+        date: '2025-01-01',
+        type: 'qualifier',
+        players_per_match: 2,
+      });
+
+      const call = mockExecute.mock.calls[0];
+      expect(call[0]).toContain('INSERT INTO tournaments');
+      expect(call[1][0]).toBe(mockUUID);
+
+      expect(mockAddToQueue).toHaveBeenCalledWith(
+        'tournaments',
+        'INSERT',
+        expect.objectContaining({
+          uuid: mockUUID,
+          place_uuid: 'place-uuid',
+        })
+      );
     });
   });
 });

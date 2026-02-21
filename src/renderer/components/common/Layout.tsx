@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ReactNode } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import SyncStatus from './SyncStatus';
 
 interface LayoutProps {
   children: ReactNode;
@@ -55,6 +56,11 @@ export default function Layout({ children }: LayoutProps) {
                     {item.label}
                   </Link>
                 ))}
+
+              {/* Sync Status (Desktop) */}
+              <div className="hidden lg:flex items-center mx-4">
+                <SyncStatus />
+              </div>
 
               {/* Theme Toggle (Desktop) */}
               <button
@@ -141,6 +147,11 @@ export default function Layout({ children }: LayoutProps) {
                     {item.label}
                   </Link>
                 ))}
+
+              {/* Sync Status (Mobile) */}
+              <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700">
+                <SyncStatus />
+              </div>
             </div>
           </div>
         )}

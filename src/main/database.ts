@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { randomUUID } from 'crypto';
 
 let db: Database.Database | null = null;
 
@@ -322,6 +323,144 @@ function runMigrations(database: Database.Database) {
     if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
       console.warn('Migration 7 warning:', errorMsg);
     }
+  }
+
+  // Migration 8: Offline Mode - Sync Queue and UUIDs
+  try {
+    // 1. Create Sync Queue Table
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS sync_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        operation TEXT NOT NULL CHECK(operation IN ('INSERT', 'UPDATE', 'DELETE')),
+        payload TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'failed')),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        retry_count INTEGER DEFAULT 0,
+        last_error TEXT
+      )
+    `);
+
+    // 2. Add UUID columns to synchronize tables
+    const syncTables = [
+      'players',
+      'tournaments',
+      'rounds',
+      'matches',
+      'circuits',
+      'places',
+      'cities',
+      'match_results',
+      'match_players',
+      'tournament_players',
+      'tournament_configs',
+      'player_byes',
+    ];
+
+    for (const table of syncTables) {
+      let hasUuid = false;
+      try {
+        const columns = database.pragma(`table_info(${table})`) as any[];
+        if (columns.some((col) => col.name === 'uuid')) {
+          hasUuid = true;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (!hasUuid) {
+        try {
+          database.exec(`ALTER TABLE ${table} ADD COLUMN uuid TEXT`);
+          database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_uuid ON ${table}(uuid)`);
+
+          // 3. Backfill UUIDs for existing records
+          const rows = database.prepare(`SELECT id FROM ${table} WHERE uuid IS NULL`).all() as {
+            id: number;
+          }[];
+          if (rows.length > 0) {
+            const updateStmt = database.prepare(`UPDATE ${table} SET uuid = ? WHERE id = ?`);
+            const updateTransaction = database.transaction((items: { id: number }[]) => {
+              for (const item of items) {
+                updateStmt.run(randomUUID(), item.id);
+              }
+            });
+            updateTransaction(rows);
+            console.log(`Migration 8: Added UUIDs to ${rows.length} rows in ${table}`);
+          }
+        } catch (error: any) {
+          console.warn(`Migration 8 warning (${table}):`, error.message);
+        }
+      }
+    }
+  } catch (error: any) {
+    console.warn('Migration 8 critical warning:', error.message);
+  }
+
+  // Migration 9: Add active and dropout_round to tournament_players
+  try {
+    database.exec(`ALTER TABLE tournament_players ADD COLUMN active INTEGER DEFAULT 1`);
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 9.1 warning:', errorMsg);
+    }
+  }
+
+  try {
+    database.exec(`ALTER TABLE tournament_players ADD COLUMN dropout_round INTEGER`);
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('Migration 9.2 warning:', errorMsg);
+    }
+  }
+
+  // Migration 10: Add UUID Foreign Keys for Sync
+  const fkUuidColumns = [
+    { table: 'places', column: 'city_uuid' },
+    { table: 'tournaments', column: 'circuit_uuid' },
+    { table: 'tournaments', column: 'place_uuid' },
+    { table: 'rounds', column: 'tournament_uuid' },
+    { table: 'matches', column: 'round_uuid' },
+    { table: 'matches', column: 'first_player_uuid' },
+    { table: 'tournament_players', column: 'tournament_uuid' },
+    { table: 'tournament_players', column: 'player_uuid' },
+    { table: 'match_players', column: 'match_uuid' },
+    { table: 'match_players', column: 'player_uuid' },
+    { table: 'match_results', column: 'match_uuid' },
+    { table: 'match_results', column: 'player_uuid' },
+    { table: 'player_byes', column: 'tournament_uuid' },
+    { table: 'player_byes', column: 'player_uuid' },
+    { table: 'tournament_configs', column: 'tournament_uuid' },
+  ];
+
+  console.log('🔄 Running Migrations (including #10)...');
+  let addedColumns = 0;
+
+  for (const item of fkUuidColumns) {
+    try {
+      database.exec(`ALTER TABLE ${item.table} ADD COLUMN ${item.column} TEXT`);
+      console.log(`✅ [Migration 10] Added column ${item.table}.${item.column}`);
+      addedColumns++;
+    } catch (error: any) {
+      const errorMsg = error.message || '';
+      if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+        console.warn(`⚠️ [Migration 10] Warning (${item.table}.${item.column}):`, errorMsg);
+      }
+    }
+  }
+
+  if (addedColumns > 0) {
+    console.log(`🎉 Migration 10 complete: Added ${addedColumns} missing UUID columns.`);
+  } else {
+    console.log('ℹ️ Migration 10: All columns already exist.');
+  }
+
+  // Force wal checkpoint to ensure changes are written
+  try {
+    database.pragma('wal_checkpoint(RESTART)');
+  } catch (e) {
+    console.warn('Could not checkpoint WAL:', e);
   }
 }
 

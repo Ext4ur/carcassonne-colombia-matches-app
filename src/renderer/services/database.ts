@@ -1,40 +1,42 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Database service for interacting with database through API client
-import { getApiClient } from '@api/clients/clientFactory';
-import { DB_CONFIG, DEFAULT_PLACE_NAME } from '../constants';
+// Database service for interacting with local SQLite database and syncing with Supabase
+import { SqliteClient } from '../api/clients/SqliteClient';
+import { DEFAULT_PLACE_NAME } from '../constants';
 import * as dbCache from './dbCache';
 import { getPlayerDisplayName } from '@utils/playerDisplayName';
+import { SyncService } from './syncService';
 
 export class DatabaseService {
-  private static getClient() {
-    return getApiClient();
-  }
+  // Always use local SQLite client for read/write
+  private static client = new SqliteClient();
 
-  /** Cliente real (Supabase/SQLite); si hay wrapper de conteo, lo usa para acceder a .client en Supabase */
-  private static getRawClient(): any {
-    const client = this.getClient();
-    return (client as any)._client ?? client;
+  /**
+   * Helper to get UUID from local ID.
+   * Cached? Maybe not needed for low volume. Queries are fast in SQLite.
+   */
+  private static async getUuid(table: string, id: number): Promise<string | null> {
+    const res = await this.client.query(`SELECT uuid FROM ${table} WHERE id = ?`, [id]);
+    return res[0]?.uuid || null;
   }
 
   static async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
-    const client = this.getClient();
-    return client.query<T>(sql, params);
+    return this.client.query<T>(sql, params);
   }
 
   static async execute(
     sql: string,
     params?: any[]
   ): Promise<{ lastInsertRowid: number; changes: number }> {
-    const client = this.getClient();
-    return client.execute(sql, params);
+    return this.client.execute(sql, params);
   }
 
   static async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<any[]> {
-    const client = this.getClient();
-    return client.transaction(queries);
+    return this.client.transaction(queries);
   }
 
+  // ==========================================
   // Player operations
+  // ==========================================
   static async getAllPlayers() {
     const cached = dbCache.get(dbCache.LIST_KEYS.players);
     if (cached !== undefined) return cached;
@@ -64,10 +66,12 @@ export class DatabaseService {
     email?: string;
     age?: number;
   }) {
+    const uuid = self.crypto.randomUUID();
     const result = await this.execute(
-      `INSERT INTO players (name, bga_username, display_preference, phone, email, age) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO players (uuid, name, bga_username, display_preference, phone, email, age) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
+        uuid,
         player.name,
         player.bga_username || null,
         player.display_preference || 'name',
@@ -76,6 +80,18 @@ export class DatabaseService {
         player.age || null,
       ]
     );
+
+    // Sync Queue
+    await SyncService.addToQueue('players', 'INSERT', {
+      uuid,
+      name: player.name,
+      bga_username: player.bga_username || null,
+      display_preference: player.display_preference || 'name',
+      phone: player.phone || null,
+      email: player.email || null,
+      age: player.age || null,
+    });
+
     dbCache.invalidate(dbCache.LIST_KEYS.players);
     return result.lastInsertRowid;
   }
@@ -91,33 +107,19 @@ export class DatabaseService {
       age?: number;
     }
   ) {
+    const uuid = await this.getUuid('players', id);
+    if (!uuid) throw new Error(`Player ${id} has no UUID`);
+
     const updates: string[] = [];
     const params: any[] = [];
 
-    if (player.name !== undefined) {
-      updates.push('name = ?');
-      params.push(player.name);
-    }
-    if (player.bga_username !== undefined) {
-      updates.push('bga_username = ?');
-      params.push(player.bga_username);
-    }
-    if (player.display_preference !== undefined) {
-      updates.push('display_preference = ?');
-      params.push(player.display_preference);
-    }
-    if (player.phone !== undefined) {
-      updates.push('phone = ?');
-      params.push(player.phone);
-    }
-    if (player.email !== undefined) {
-      updates.push('email = ?');
-      params.push(player.email);
-    }
-    if (player.age !== undefined) {
-      updates.push('age = ?');
-      params.push(player.age);
-    }
+    // Build update query
+    Object.entries(player).forEach(([key, value]) => {
+      if (value !== undefined) {
+        updates.push(`${key} = ?`);
+        params.push(value);
+      }
+    });
 
     if (updates.length === 0) return;
 
@@ -125,16 +127,29 @@ export class DatabaseService {
     params.push(id);
 
     await this.execute(`UPDATE players SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    // Sync Queue
+    await SyncService.addToQueue('players', 'UPDATE', { uuid, ...player });
+
     dbCache.invalidate(dbCache.LIST_KEYS.players);
   }
 
   static async deletePlayer(id: number) {
+    const uuid = await this.getUuid('players', id);
+    if (!uuid) throw new Error(`Player ${id} has no UUID`);
+
     const result = await this.execute('DELETE FROM players WHERE id = ?', [id]);
+
+    // Sync Queue
+    await SyncService.addToQueue('players', 'DELETE', { uuid });
+
     dbCache.invalidate(dbCache.LIST_KEYS.players);
     return result;
   }
 
+  // ==========================================
   // Circuit operations
+  // ==========================================
   static async getAllCircuits() {
     const cached = dbCache.get(dbCache.LIST_KEYS.circuits);
     if (cached !== undefined) return cached;
@@ -160,10 +175,12 @@ export class DatabaseService {
     end_date?: string;
     status?: 'active' | 'finalized';
   }) {
+    const uuid = self.crypto.randomUUID();
     const result = await this.execute(
-      `INSERT INTO circuits (name, description, start_date, end_date, status) 
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO circuits (uuid, name, description, start_date, end_date, status) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
+        uuid,
         circuit.name,
         circuit.description || null,
         circuit.start_date || null,
@@ -171,6 +188,15 @@ export class DatabaseService {
         circuit.status || 'active',
       ]
     );
+
+    await SyncService.addToQueue('circuits', 'INSERT', {
+      uuid,
+      name: circuit.name,
+      description: circuit.description || null,
+      start_date: circuit.start_date || null,
+      end_date: circuit.end_date || null,
+      status: circuit.status || 'active',
+    });
     dbCache.invalidate(dbCache.LIST_KEYS.circuits);
     return result.lastInsertRowid;
   }
@@ -185,29 +211,18 @@ export class DatabaseService {
       status?: 'active' | 'finalized';
     }
   ) {
+    const uuid = await this.getUuid('circuits', id);
+    if (!uuid) throw new Error(`Circuit ${id} has no UUID`);
+
     const updates: string[] = [];
     const params: any[] = [];
 
-    if (circuit.name !== undefined) {
-      updates.push('name = ?');
-      params.push(circuit.name);
-    }
-    if (circuit.description !== undefined) {
-      updates.push('description = ?');
-      params.push(circuit.description);
-    }
-    if (circuit.start_date !== undefined) {
-      updates.push('start_date = ?');
-      params.push(circuit.start_date);
-    }
-    if (circuit.end_date !== undefined) {
-      updates.push('end_date = ?');
-      params.push(circuit.end_date);
-    }
-    if (circuit.status !== undefined) {
-      updates.push('status = ?');
-      params.push(circuit.status);
-    }
+    Object.entries(circuit).forEach(([key, value]) => {
+      if (value !== undefined) {
+        updates.push(`${key} = ?`);
+        params.push(value);
+      }
+    });
 
     if (updates.length === 0) return;
 
@@ -215,46 +230,38 @@ export class DatabaseService {
     params.push(id);
 
     await this.execute(`UPDATE circuits SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    await SyncService.addToQueue('circuits', 'UPDATE', { uuid, ...circuit });
     dbCache.invalidate(dbCache.LIST_KEYS.circuits);
   }
 
-  /** Tournaments of a circuit (completed only), ordered by date for "paradas" / stops. */
+  /** Tournaments of a circuit (completed only), ordered by date. */
   static async getCircuitTournaments(circuitId: number) {
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    if (isSupabase) {
-      const tournaments = await this.query(
-        `SELECT * FROM tournaments WHERE circuit_id = ? AND status = ? ORDER BY date ASC, id ASC`,
-        [circuitId, 'completed']
-      );
-      if (tournaments.length === 0) return [];
-      const placeIds = [
-        ...new Set((tournaments as any[]).map((t: any) => t.place_id).filter(Boolean)),
-      ];
-      const places = placeIds.length
-        ? await this.query(
-            'SELECT * FROM places WHERE id IN (' + placeIds.map(() => '?').join(',') + ')',
-            placeIds
-          )
-        : [];
-      const placesMap = new Map((places as any[]).map((p: any) => [p.id, p]));
-      return (tournaments as any[]).map((t: any) => ({
-        ...t,
-        place_name: t.place_id ? placesMap.get(t.place_id)?.name || null : null,
-      }));
-    }
     return this.query(
-      `SELECT t.*, p.name as place_name FROM tournaments t LEFT JOIN places p ON t.place_id = p.id WHERE t.circuit_id = ? AND t.status = ? ORDER BY t.date ASC, t.id ASC`,
+      `SELECT t.*, p.name as place_name, c.name as city_name 
+       FROM tournaments t 
+       LEFT JOIN places p ON t.place_id = p.id 
+       LEFT JOIN cities c ON p.city_id = c.id
+       WHERE t.circuit_id = ? AND t.status = ? 
+       ORDER BY t.date ASC, t.id ASC`,
       [circuitId, 'completed']
     );
   }
 
   static async deleteCircuit(id: number) {
+    const uuid = await this.getUuid('circuits', id);
+    if (!uuid) throw new Error(`Circuit ${id} has no UUID`);
+
     const result = await this.execute('DELETE FROM circuits WHERE id = ?', [id]);
+
+    await SyncService.addToQueue('circuits', 'DELETE', { uuid });
     dbCache.invalidate(dbCache.LIST_KEYS.circuits);
     return result;
   }
 
+  // ==========================================
   // City operations
+  // ==========================================
   static async getAllCities() {
     const cached = dbCache.get(dbCache.LIST_KEYS.cities);
     if (cached !== undefined) return cached;
@@ -269,22 +276,37 @@ export class DatabaseService {
   }
 
   static async createCity(city: { name: string }) {
-    const result = await this.execute('INSERT INTO cities (name) VALUES (?)', [city.name.trim()]);
+    const uuid = self.crypto.randomUUID();
+    const result = await this.execute('INSERT INTO cities (uuid, name) VALUES (?, ?)', [
+      uuid,
+      city.name.trim(),
+    ]);
+
+    await SyncService.addToQueue('cities', 'INSERT', { uuid, name: city.name.trim() });
     dbCache.invalidate(dbCache.LIST_KEYS.cities);
     return result.lastInsertRowid;
   }
 
   static async updateCity(id: number, city: { name?: string }) {
     if (city.name === undefined) return;
+    const uuid = await this.getUuid('cities', id);
+    if (!uuid) throw new Error(`City ${id} has no UUID`);
+
     await this.execute('UPDATE cities SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
       city.name.trim(),
       id,
     ]);
+
+    await SyncService.addToQueue('cities', 'UPDATE', { uuid, name: city.name.trim() });
+
     dbCache.invalidate(dbCache.LIST_KEYS.cities);
     dbCache.invalidate(dbCache.LIST_KEYS.places);
   }
 
   static async deleteCity(id: number) {
+    const uuid = await this.getUuid('cities', id);
+    if (!uuid) throw new Error(`City ${id} has no UUID`);
+
     const inUse = await this.query<{ count: number }>(
       'SELECT COUNT(*) as count FROM places WHERE city_id = ?',
       [id]
@@ -293,45 +315,26 @@ export class DatabaseService {
       throw new Error('No se puede eliminar la ciudad: hay lugares que la usan.');
     }
     await this.execute('DELETE FROM cities WHERE id = ?', [id]);
+
+    await SyncService.addToQueue('cities', 'DELETE', { uuid });
     dbCache.invalidate(dbCache.LIST_KEYS.cities);
     dbCache.invalidate(dbCache.LIST_KEYS.places);
   }
 
+  // ==========================================
   // Place operations
+  // ==========================================
   static async getAllPlaces() {
     const cached = dbCache.get(dbCache.LIST_KEYS.places);
     if (cached !== undefined) return cached;
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    let data: any[];
-    if (isSupabase) {
-      const places = await this.query('SELECT * FROM places ORDER BY name');
-      const cities = await this.query('SELECT * FROM cities');
-      const citiesMap = new Map(cities.map((c: any) => [c.id, c]));
-      data = places.map((p: any) => ({
-        ...p,
-        city_name: p.city_id ? citiesMap.get(p.city_id)?.name || null : null,
-      }));
-    } else {
-      data = await this.query(
-        'SELECT p.*, c.name as city_name FROM places p LEFT JOIN cities c ON p.city_id = c.id ORDER BY p.name'
-      );
-    }
+    const data = await this.query(
+      'SELECT p.*, c.name as city_name FROM places p LEFT JOIN cities c ON p.city_id = c.id ORDER BY p.name'
+    );
     dbCache.set(dbCache.LIST_KEYS.places, data);
     return data;
   }
 
   static async getPlaceById(id: number) {
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    if (isSupabase) {
-      const results = await this.query('SELECT * FROM places WHERE id = ?', [id]);
-      const place = results[0] || null;
-      if (!place) return null;
-      if (place.city_id) {
-        const cities = await this.query('SELECT * FROM cities WHERE id = ?', [place.city_id]);
-        return { ...place, city_name: cities[0]?.name ?? null };
-      }
-      return { ...place, city_name: null };
-    }
     const results = await this.query(
       'SELECT p.*, c.name as city_name FROM places p LEFT JOIN cities c ON p.city_id = c.id WHERE p.id = ?',
       [id]
@@ -353,33 +356,57 @@ export class DatabaseService {
   }
 
   static async createPlace(place: { name: string; city_id: number }) {
-    const result = await this.execute('INSERT INTO places (name, city_id) VALUES (?, ?)', [
+    const uuid = self.crypto.randomUUID();
+    const cityUuid = await this.getUuid('cities', place.city_id);
+
+    const result = await this.execute('INSERT INTO places (uuid, name, city_id) VALUES (?, ?, ?)', [
+      uuid,
       place.name.trim(),
       place.city_id,
     ]);
+
+    await SyncService.addToQueue('places', 'INSERT', {
+      uuid,
+      name: place.name.trim(),
+      city_uuid: cityUuid,
+    });
     dbCache.invalidate(dbCache.LIST_KEYS.places);
     return result.lastInsertRowid;
   }
 
   static async updatePlace(id: number, place: { name?: string; city_id?: number }) {
+    const uuid = await this.getUuid('places', id);
+    if (!uuid) throw new Error(`Place ${id} has no UUID`);
+
     const updates: string[] = [];
     const params: any[] = [];
+    const payload: any = {};
+
     if (place.name !== undefined) {
       updates.push('name = ?');
       params.push(place.name.trim());
+      payload.name = place.name.trim();
     }
     if (place.city_id !== undefined) {
       updates.push('city_id = ?');
       params.push(place.city_id);
+      payload.city_uuid = await this.getUuid('cities', place.city_id);
     }
+
     if (updates.length === 0) return;
     updates.push('updated_at = CURRENT_TIMESTAMP');
     params.push(id);
+
     await this.execute(`UPDATE places SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    await SyncService.addToQueue('places', 'UPDATE', { uuid, ...payload });
     dbCache.invalidate(dbCache.LIST_KEYS.places);
   }
 
   static async deletePlace(id: number) {
+    const uuid = await this.getUuid('places', id);
+    if (!uuid) throw new Error(`Place ${id} has no UUID`);
+
     const inUse = await this.query<{ count: number }>(
       'SELECT COUNT(*) as count FROM tournaments WHERE place_id = ?',
       [id]
@@ -388,40 +415,26 @@ export class DatabaseService {
       throw new Error('No se puede eliminar el lugar: hay torneos que lo usan.');
     }
     await this.execute('DELETE FROM places WHERE id = ?', [id]);
+
+    await SyncService.addToQueue('places', 'DELETE', { uuid });
     dbCache.invalidate(dbCache.LIST_KEYS.places);
   }
 
+  // ==========================================
   // Tournament operations
+  // ==========================================
   static async getAllTournaments() {
     const cached = dbCache.get(dbCache.LIST_KEYS.tournaments);
     if (cached !== undefined) return cached;
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    let data: any[];
-    if (isSupabase) {
-      const tournaments = await this.query(`
-        SELECT * FROM tournaments 
-        ORDER BY date DESC, created_at DESC
-      `);
-      const circuits = await this.query('SELECT * FROM circuits');
-      const places = await this.query('SELECT * FROM places');
-      const circuitsMap = new Map(circuits.map((c: any) => [c.id, c]));
-      const placesMap = new Map(places.map((p: any) => [p.id, p]));
-      data = tournaments.map((tournament: any) => ({
-        ...tournament,
-        circuit_name: tournament.circuit_id
-          ? circuitsMap.get(tournament.circuit_id)?.name || null
-          : null,
-        place_name: tournament.place_id ? placesMap.get(tournament.place_id)?.name || null : null,
-      }));
-    } else {
-      data = await this.query(`
+
+    const data = await this.query(`
         SELECT t.*, c.name as circuit_name, p.name as place_name 
         FROM tournaments t 
         LEFT JOIN circuits c ON t.circuit_id = c.id 
         LEFT JOIN places p ON t.place_id = p.id 
         ORDER BY t.date DESC, t.created_at DESC
       `);
-    }
+
     dbCache.set(dbCache.LIST_KEYS.tournaments, data);
     return data;
   }
@@ -439,41 +452,17 @@ export class DatabaseService {
     const cached = dbCache.get(`tournament:${id}`);
     if (cached !== undefined) return cached;
 
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    let result: any;
-    if (isSupabase) {
-      const results = await this.query('SELECT * FROM tournaments WHERE id = ?', [id]);
-      const tournament = results[0] || null;
-      if (!tournament) {
-        result = null;
-      } else {
-        const [circuits, places] = await Promise.all([
-          tournament.circuit_id
-            ? this.query('SELECT * FROM circuits WHERE id = ?', [tournament.circuit_id])
-            : Promise.resolve([]),
-          tournament.place_id
-            ? this.query('SELECT * FROM places WHERE id = ?', [tournament.place_id])
-            : Promise.resolve([]),
-        ]);
-        result = {
-          ...tournament,
-          circuit_name: circuits[0]?.name ?? null,
-          place_name: places[0]?.name ?? null,
-        };
-      }
-    } else {
-      const results = await this.query(
-        `
+    const results = await this.query(
+      `
         SELECT t.*, c.name as circuit_name, p.name as place_name 
         FROM tournaments t 
         LEFT JOIN circuits c ON t.circuit_id = c.id 
         LEFT JOIN places p ON t.place_id = p.id 
         WHERE t.id = ?
       `,
-        [id]
-      );
-      result = results[0] || null;
-    }
+      [id]
+    );
+    const result = results[0] || null;
     dbCache.set(`tournament:${id}`, result);
     return result;
   }
@@ -494,10 +483,13 @@ export class DatabaseService {
       }
     }
     const placeId = tournament.place_id ?? (await this.getDefaultPlaceId());
+
+    const uuid = self.crypto.randomUUID();
     const result = await this.execute(
-      `INSERT INTO tournaments (name, type, circuit_id, date, players_per_match, number_of_rounds, place_id) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tournaments (uuid, name, type, circuit_id, date, players_per_match, number_of_rounds, place_id) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        uuid,
         tournament.name,
         tournament.type,
         tournament.circuit_id || null,
@@ -507,6 +499,24 @@ export class DatabaseService {
         placeId,
       ]
     );
+
+    // Convert FKs to UUIDs for Sync
+    const circuitUuid = tournament.circuit_id
+      ? await this.getUuid('circuits', tournament.circuit_id)
+      : null;
+    const placeUuid = await this.getUuid('places', placeId);
+
+    await SyncService.addToQueue('tournaments', 'INSERT', {
+      uuid,
+      name: tournament.name,
+      type: tournament.type,
+      date: tournament.date,
+      players_per_match: tournament.players_per_match,
+      number_of_rounds: tournament.number_of_rounds,
+      circuit_uuid: circuitUuid,
+      place_uuid: placeUuid,
+    });
+
     dbCache.invalidate(dbCache.LIST_KEYS.tournaments);
     return result.lastInsertRowid;
   }
@@ -522,51 +532,61 @@ export class DatabaseService {
       place_id?: number;
     }
   ) {
+    const uuid = await this.getUuid('tournaments', id);
+    if (!uuid) throw new Error(`Tournament ${id} has no UUID`);
+
     const updates: string[] = [];
     const params: any[] = [];
+    const payload: any = {};
 
-    if (tournament.name !== undefined) {
-      updates.push('name = ?');
-      params.push(tournament.name);
-    }
-    if (tournament.date !== undefined) {
-      updates.push('date = ?');
-      params.push(tournament.date);
-    }
-    if (tournament.status !== undefined) {
-      updates.push('status = ?');
-      params.push(tournament.status);
-    }
-    if (tournament.players_per_match !== undefined) {
-      updates.push('players_per_match = ?');
-      params.push(tournament.players_per_match);
-    }
-    if (tournament.number_of_rounds !== undefined) {
-      updates.push('number_of_rounds = ?');
-      params.push(tournament.number_of_rounds);
-    }
-    if (tournament.place_id !== undefined) {
-      updates.push('place_id = ?');
-      params.push(tournament.place_id);
-    }
+    Object.entries(tournament).forEach(([key, value]) => {
+      if (value !== undefined) {
+        updates.push(`${key} = ?`);
+        params.push(value);
+      }
+    });
 
     if (updates.length === 0) return;
+
+    // Resolve updated FKs
+    if (tournament.place_id) {
+      payload.place_uuid = await this.getUuid('places', tournament.place_id);
+    }
+    // Build payload without IDs
+    if (tournament.name !== undefined) payload.name = tournament.name;
+    if (tournament.date !== undefined) payload.date = tournament.date;
+    if (tournament.status !== undefined) payload.status = tournament.status;
+    if (tournament.players_per_match !== undefined)
+      payload.players_per_match = tournament.players_per_match;
+    if (tournament.number_of_rounds !== undefined)
+      payload.number_of_rounds = tournament.number_of_rounds;
 
     updates.push('updated_at = CURRENT_TIMESTAMP');
     params.push(id);
 
     await this.execute(`UPDATE tournaments SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    await SyncService.addToQueue('tournaments', 'UPDATE', { uuid, ...payload });
+
     dbCache.invalidateTournament(id);
     dbCache.invalidate(dbCache.LIST_KEYS.tournaments);
   }
 
   static async deleteTournament(id: number) {
+    const uuid = await this.getUuid('tournaments', id);
+    if (!uuid) throw new Error(`Tournament ${id} has no UUID`);
+
     await this.execute('DELETE FROM tournaments WHERE id = ?', [id]);
+
+    await SyncService.addToQueue('tournaments', 'DELETE', { uuid });
+
     dbCache.invalidateTournament(id);
     dbCache.invalidate(dbCache.LIST_KEYS.tournaments);
   }
 
+  // ==========================================
   // Tournament config operations
+  // ==========================================
   static async getTournamentConfig(tournamentId: number) {
     const cached = dbCache.get(`tournament:${tournamentId}:config`);
     if (cached !== undefined) return cached;
@@ -580,15 +600,9 @@ export class DatabaseService {
         tiebreak_criteria: JSON.parse(results[0].tiebreak_criteria),
         scoring_system: JSON.parse(results[0].scoring_system),
         avoid_rematches: Boolean(results[0].avoid_rematches),
+        bye_selection: results[0].bye_selection || 'worst',
+        player_display_mode: results[0].player_display_mode || 'per_player',
       };
-      if (results[0].bye_selection) {
-        (config as any).bye_selection = results[0].bye_selection;
-      }
-      if (results[0].player_display_mode) {
-        (config as any).player_display_mode = results[0].player_display_mode;
-      } else {
-        (config as any).player_display_mode = 'per_player';
-      }
     }
     dbCache.set(`tournament:${tournamentId}:config`, config);
     return config;
@@ -602,10 +616,14 @@ export class DatabaseService {
     bye_selection?: 'worst' | 'random' | 'round_robin';
     player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
   }) {
+    const uuid = self.crypto.randomUUID();
+    const tournamentUuid = await this.getUuid('tournaments', config.tournament_id);
+
     await this.execute(
-      `INSERT INTO tournament_configs (tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection, player_display_mode) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tournament_configs (uuid, tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection, player_display_mode) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
+        uuid,
         config.tournament_id,
         config.avoid_rematches ? 1 : 0,
         JSON.stringify(config.tiebreak_criteria),
@@ -614,6 +632,17 @@ export class DatabaseService {
         config.player_display_mode || 'per_player',
       ]
     );
+
+    await SyncService.addToQueue('tournament_configs', 'INSERT', {
+      uuid,
+      tournament_uuid: tournamentUuid,
+      avoid_rematches: config.avoid_rematches,
+      tiebreak_criteria: config.tiebreak_criteria, // serialized handled by Supabase client or we send JSON
+      scoring_system: config.scoring_system,
+      bye_selection: config.bye_selection,
+      player_display_mode: config.player_display_mode,
+    });
+
     dbCache.invalidateTournament(config.tournament_id);
   }
 
@@ -627,28 +656,44 @@ export class DatabaseService {
       player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
     }
   ) {
+    // Determine config UUID via tournament configs?
+    // We added uuid to tournament_configs.
+    // Query it first.
+    const res = await this.query('SELECT uuid FROM tournament_configs WHERE tournament_id=?', [
+      tournamentId,
+    ]);
+    const uuid = res[0]?.uuid;
+    // If not found, create? Should exist if tournament created offline mode.
+    // If migration happened, it exists.
+
     const updates: string[] = [];
     const params: any[] = [];
+    const payload: any = {};
 
     if (config.avoid_rematches !== undefined) {
       updates.push('avoid_rematches = ?');
       params.push(config.avoid_rematches ? 1 : 0);
+      payload.avoid_rematches = config.avoid_rematches;
     }
     if (config.tiebreak_criteria !== undefined) {
       updates.push('tiebreak_criteria = ?');
       params.push(JSON.stringify(config.tiebreak_criteria));
+      payload.tiebreak_criteria = config.tiebreak_criteria;
     }
     if (config.scoring_system !== undefined) {
       updates.push('scoring_system = ?');
       params.push(JSON.stringify(config.scoring_system));
+      payload.scoring_system = config.scoring_system;
     }
     if (config.bye_selection !== undefined) {
       updates.push('bye_selection = ?');
       params.push(config.bye_selection);
+      payload.bye_selection = config.bye_selection;
     }
     if (config.player_display_mode !== undefined) {
       updates.push('player_display_mode = ?');
       params.push(config.player_display_mode);
+      payload.player_display_mode = config.player_display_mode;
     }
 
     if (updates.length === 0) return;
@@ -660,10 +705,14 @@ export class DatabaseService {
       `UPDATE tournament_configs SET ${updates.join(', ')} WHERE tournament_id = ?`,
       params
     );
+
+    if (uuid) {
+      await SyncService.addToQueue('tournament_configs', 'UPDATE', { uuid, ...payload });
+    }
+
     dbCache.invalidateTournament(tournamentId);
   }
 
-  /** Get tournament IDs where a player is registered (single query, for player stats). */
   static async getTournamentIdsForPlayer(playerId: number): Promise<number[]> {
     const rows = await this.query<{ tournament_id: number }>(
       'SELECT DISTINCT tournament_id FROM tournament_players WHERE player_id = ?',
@@ -672,7 +721,9 @@ export class DatabaseService {
     return [...new Set(rows.map((r) => r.tournament_id))];
   }
 
+  // ==========================================
   // Round operations
+  // ==========================================
   static async getTournamentRounds(tournamentId: number) {
     const cached = dbCache.get<any[]>(`tournament:${tournamentId}:rounds`);
     if (cached !== undefined) return cached;
@@ -689,11 +740,22 @@ export class DatabaseService {
     round_number: number;
     status?: 'pending' | 'in_progress' | 'completed';
   }) {
+    const uuid = self.crypto.randomUUID();
+    const tournamentUuid = await this.getUuid('tournaments', round.tournament_id);
+
     const result = await this.execute(
-      `INSERT INTO rounds (tournament_id, round_number, status) 
-       VALUES (?, ?, ?)`,
-      [round.tournament_id, round.round_number, round.status || 'pending']
+      `INSERT INTO rounds (uuid, tournament_id, round_number, status) 
+       VALUES (?, ?, ?, ?)`,
+      [uuid, round.tournament_id, round.round_number, round.status || 'pending']
     );
+
+    await SyncService.addToQueue('rounds', 'INSERT', {
+      uuid,
+      round_number: round.round_number,
+      status: round.status || 'pending',
+      tournament_uuid: tournamentUuid,
+    });
+
     dbCache.invalidateTournament(round.tournament_id);
     return result.lastInsertRowid;
   }
@@ -706,30 +768,33 @@ export class DatabaseService {
       completed_at?: string;
     }
   ) {
+    const uuid = await this.getUuid('rounds', id);
+    if (!uuid) throw new Error(`Round ${id} has no UUID`);
+
     const updates: string[] = [];
     const params: any[] = [];
+    const payload: any = {};
 
-    if (round.status !== undefined) {
-      updates.push('status = ?');
-      params.push(round.status);
-    }
-    if (round.started_at !== undefined) {
-      updates.push('started_at = ?');
-      params.push(round.started_at);
-    }
-    if (round.completed_at !== undefined) {
-      updates.push('completed_at = ?');
-      params.push(round.completed_at);
-    }
+    Object.entries(round).forEach(([key, value]) => {
+      if (value !== undefined) {
+        updates.push(`${key} = ?`);
+        params.push(value);
+        payload[key] = value;
+      }
+    });
 
     if (updates.length === 0) return;
 
     params.push(id);
     await this.execute(`UPDATE rounds SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    await SyncService.addToQueue('rounds', 'UPDATE', { uuid, ...payload });
     dbCache.invalidateAllRounds();
   }
 
+  // ==========================================
   // Match operations
+  // ==========================================
   static async getRoundMatches(roundId: number) {
     return this.query('SELECT * FROM matches WHERE round_id = ? ORDER BY match_number', [roundId]);
   }
@@ -740,11 +805,32 @@ export class DatabaseService {
     status?: 'pending' | 'completed';
     first_player_id?: number;
   }) {
+    const uuid = self.crypto.randomUUID();
+    const roundUuid = await this.getUuid('rounds', match.round_id);
+    const firstPlayerUuid = match.first_player_id
+      ? await this.getUuid('players', match.first_player_id)
+      : null;
+
     const result = await this.execute(
-      `INSERT INTO matches (round_id, match_number, status, first_player_id) 
-       VALUES (?, ?, ?, ?)`,
-      [match.round_id, match.match_number, match.status || 'pending', match.first_player_id || null]
+      `INSERT INTO matches (uuid, round_id, match_number, status, first_player_id) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        uuid,
+        match.round_id,
+        match.match_number,
+        match.status || 'pending',
+        match.first_player_id || null,
+      ]
     );
+
+    await SyncService.addToQueue('matches', 'INSERT', {
+      uuid,
+      match_number: match.match_number,
+      status: match.status || 'pending',
+      round_uuid: roundUuid,
+      first_player_uuid: firstPlayerUuid,
+    });
+
     return result.lastInsertRowid;
   }
 
@@ -756,35 +842,40 @@ export class DatabaseService {
       first_player_id?: number;
     }
   ) {
+    const uuid = await this.getUuid('matches', id);
+    if (!uuid) throw new Error(`Match ${id} has no UUID`);
+
     const updates: string[] = [];
     const params: any[] = [];
+    const payload: any = {};
 
     if (match.status !== undefined) {
       updates.push('status = ?');
       params.push(match.status);
+      payload.status = match.status;
     }
     if (match.completed_at !== undefined) {
       updates.push('completed_at = ?');
       params.push(match.completed_at);
+      payload.completed_at = match.completed_at;
     }
     if (match.first_player_id !== undefined) {
       updates.push('first_player_id = ?');
       params.push(match.first_player_id);
+      payload.first_player_uuid = await this.getUuid('players', match.first_player_id);
     }
 
     if (updates.length === 0) return;
 
     params.push(id);
     await this.execute(`UPDATE matches SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    await SyncService.addToQueue('matches', 'UPDATE', { uuid, ...payload });
   }
 
   static async getPlayerStartStatistics(tournamentId: number): Promise<{
     [playerId: number]: { totalStarts: number; lastStartRound: number };
   }> {
-    // SupabaseClient parser has limitations with joins and aliased where clauses.
-    // We'll split this into two simple queries.
-
-    // 1. Get all rounds for the tournament
     const rounds = await this.query<{ id: number; round_number: number }>(
       'SELECT id, round_number FROM rounds WHERE tournament_id = ?',
       [tournamentId]
@@ -796,30 +887,6 @@ export class DatabaseService {
     rounds.forEach((r) => roundMap.set(r.id!, r.round_number));
     const roundIds = rounds.map((r) => r.id!);
 
-    // 2. Get matches for these rounds
-    // Note: 'IN' clause support in SupabaseClient.parseWhereClause is not visible in the snippet
-    // but typically it might be limited. Let's iterate if necessary or check constraints.
-    // Since parseWhereClause only supports '=', let's fetch all matches and filter in JS if the array is small,
-    // or loop through rounds if there are few.
-    // Actually, checking SupabaseClient.ts again, it mentions "column IN (...)" in comment but implementation only has eqMatch.
-    // So 'IN' is likely NOT supported by the custom parser either!
-
-    // Safer approach: Fetch all matches for each round loop, or likely fetching all matches for tournament via a simplified join that is supported...
-    // but avoiding join is better.
-    // Given the constraints, let's just fetch all matches for the rounds.
-    // If we assume the number of rounds is small (< 10-20), we can validly loop or do simple queries.
-
-    // Optimization: query matches by round_id
-    // But sending 10 queries is slow.
-    // Does SupabaseClient support "SELECT * FROM matches" without where? Yes.
-    // But that fetches ALL matches in DB. Bad.
-
-    // If we can't use IN, and can't use JOIN with WHERE on alias...
-    // Maybe we can use JOIN but filter in memory?
-    // "SELECT m.first_player_id, m.round_id FROM matches m JOIN rounds r ON m.round_id = r.id"
-    // And NO where clause on 'r.tournament_id'? That would fetch entire DB matches.
-
-    // Let's use Promise.all to fetch matches for each round. It's robust enough for a tournament app.
     const matchesPromises = roundIds.map((roundId) =>
       this.query<{ first_player_id: number }>(
         'SELECT first_player_id FROM matches WHERE round_id = ?',
@@ -839,7 +906,6 @@ export class DatabaseService {
             stats[m.first_player_id] = { totalStarts: 0, lastStartRound: 0 };
           }
           stats[m.first_player_id].totalStarts += 1;
-          // Keep the highest round number
           if (roundNumber > stats[m.first_player_id].lastStartRound) {
             stats[m.first_player_id].lastStartRound = roundNumber;
           }
@@ -850,92 +916,52 @@ export class DatabaseService {
     return stats;
   }
 
-  // Match result operations. When tournamentId is provided, player_name is resolved using tournament player_display_mode.
+  // ==========================================
+  // Match Result operations
+  // ==========================================
   static async getMatchResults(matchId: number, tournamentId?: number) {
     const mode =
       tournamentId != null
         ? ((await this.getTournamentConfig(tournamentId))?.player_display_mode ?? 'per_player')
         : null;
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    if (isSupabase) {
-      const matchResults = await this.query(
-        'SELECT * FROM match_results WHERE match_id = ? ORDER BY position',
-        [matchId]
-      );
-      if (matchResults.length === 0) return [];
-      const playerIds = [...new Set(matchResults.map((mr: any) => mr.player_id))];
-      if (playerIds.length > 0) {
-        let playersMap = new Map<number, any>();
-        const raw = this.getRawClient() as any;
-        if (raw?.client) {
-          const { data: players, error } = await raw.client
-            .from('players')
-            .select('*')
-            .in('id', playerIds);
-          if (error) throw new Error(`Error fetching players: ${error.message}`);
-          playersMap = new Map((players || []).map((p: any) => [p.id, p]));
-        } else {
-          for (const pid of playerIds) {
-            const p = await this.getPlayerById(pid);
-            if (p) playersMap.set(pid, p);
-          }
-        }
-        return matchResults.map((mr: any) => {
-          const player = playersMap.get(mr.player_id);
-          const player_name =
-            mode != null && player
-              ? getPlayerDisplayName(
-                  {
-                    name: player.name,
-                    bga_username: player.bga_username,
-                    display_preference: player.display_preference,
-                  },
-                  mode
-                )
-              : (player?.name ?? null);
-          return { ...mr, player_name };
-        });
-      }
-      return matchResults;
-    } else {
-      if (mode == null) {
-        return this.query(
-          `
+
+    if (mode == null) {
+      return this.query(
+        `
           SELECT mr.*, p.name as player_name
           FROM match_results mr
           JOIN players p ON mr.player_id = p.id
           WHERE mr.match_id = ?
           ORDER BY mr.position
         `,
-          [matchId]
-        );
-      }
-      const rows = await this.query<Record<string, unknown>>(
-        `
+        [matchId]
+      );
+    }
+    const rows = await this.query<Record<string, unknown>>(
+      `
         SELECT mr.*, p.name, p.bga_username, p.display_preference
         FROM match_results mr
         JOIN players p ON mr.player_id = p.id
         WHERE mr.match_id = ?
         ORDER BY mr.position
       `,
-        [matchId]
-      );
-      return rows.map((r) => ({
-        match_id: r.match_id,
-        player_id: r.player_id,
-        position: r.position,
-        points: r.points,
-        tournament_points: r.tournament_points,
-        player_name: getPlayerDisplayName(
-          {
-            name: (r.name as string) ?? '',
-            bga_username: (r.bga_username as string | null) ?? null,
-            display_preference: (r.display_preference as 'name' | 'username' | null) ?? null,
-          },
-          mode
-        ),
-      }));
-    }
+      [matchId]
+    );
+    return rows.map((r) => ({
+      match_id: r.match_id,
+      player_id: r.player_id,
+      position: r.position,
+      points: r.points,
+      tournament_points: r.tournament_points,
+      player_name: getPlayerDisplayName(
+        {
+          name: (r.name as string) ?? '',
+          bga_username: (r.bga_username as string | null) ?? null,
+          display_preference: (r.display_preference as 'name' | 'username' | null) ?? null,
+        },
+        mode
+      ),
+    }));
   }
 
   static async createMatchResult(result: {
@@ -945,209 +971,67 @@ export class DatabaseService {
     points: number;
     tournament_points: number;
   }) {
-    return this.execute(
-      `INSERT INTO match_results (match_id, player_id, position, points, tournament_points) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [result.match_id, result.player_id, result.position, result.points, result.tournament_points]
+    const uuid = self.crypto.randomUUID();
+    const matchUuid = await this.getUuid('matches', result.match_id);
+    const playerUuid = await this.getUuid('players', result.player_id);
+
+    const res = await this.execute(
+      `INSERT INTO match_results (uuid, match_id, player_id, position, points, tournament_points) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        uuid,
+        result.match_id,
+        result.player_id,
+        result.position,
+        result.points,
+        result.tournament_points,
+      ]
     );
+
+    await SyncService.addToQueue('match_results', 'INSERT', {
+      uuid,
+      match_uuid: matchUuid,
+      player_uuid: playerUuid,
+      position: result.position,
+      points: result.points,
+      tournament_points: result.tournament_points,
+    });
+
+    return res;
   }
 
   static async deleteMatchResults(matchId: number) {
-    return this.execute('DELETE FROM match_results WHERE match_id = ?', [matchId]);
+    // We need UUIDs of deleted results to sync DELETE
+    const results = await this.query('SELECT uuid FROM match_results WHERE match_id = ?', [
+      matchId,
+    ]);
+
+    const res = await this.execute('DELETE FROM match_results WHERE match_id = ?', [matchId]);
+
+    // Helper: Bulk deletes to queue? Loop is fine for small scale
+    for (const r of results) {
+      if (r.uuid) {
+        await SyncService.addToQueue('match_results', 'DELETE', { uuid: r.uuid });
+      }
+    }
+    return res;
   }
 
-  // Circuit standings
+  // ==========================================
+  // Circuit Standings - SQLite Optimized
+  // ==========================================
   static async getCircuitStandings(circuitId: number) {
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    if (isSupabase) {
-      const tournaments = await this.query(
-        'SELECT * FROM tournaments WHERE circuit_id = ? AND status = ?',
-        [circuitId, 'completed']
-      );
-      if (tournaments.length === 0) return [];
-      const tournamentIds = tournaments.map((t: any) => t.id);
-      const raw = this.getRawClient() as any;
-      if (!raw.client) {
-        throw new Error('Supabase client not available');
-      }
-      const { data: tournamentPlayers, error: tpError } = await raw.client
-        .from('tournament_players')
-        .select('*')
-        .in('tournament_id', tournamentIds);
-
-      if (tpError) throw new Error(`Error fetching tournament players: ${tpError.message}`);
-
-      const playerIds = [
-        ...new Set((tournamentPlayers || []).map((tp: any) => tp.player_id)),
-      ] as number[];
-      if (playerIds.length === 0) return [];
-
-      // 3. Obtener todos los jugadores
-      const { data: players, error: playersError } = await raw.client
-        .from('players')
-        .select('*')
-        .in('id', playerIds);
-
-      if (playersError) throw new Error(`Error fetching players: ${playersError.message}`);
-
-      const playersMap = new Map<number, any>((players || []).map((p: any) => [p.id, p]));
-
-      // 4. Obtener todas las rondas de estos torneos
-      const { data: rounds, error: roundsError } = await raw.client
-        .from('rounds')
-        .select('*')
-        .in('tournament_id', tournamentIds);
-
-      if (roundsError) throw new Error(`Error fetching rounds: ${roundsError.message}`);
-
-      const roundIds = (rounds || []).map((r: any) => r.id);
-
-      if (roundIds.length === 0) {
-        // Si no hay rondas, retornar jugadores con estadísticas en 0
-        return (players || []).map((p: any) => ({
-          player_id: p.id,
-          player_name: getPlayerDisplayName(
-            {
-              name: p.name,
-              bga_username: p.bga_username,
-              display_preference: p.display_preference,
-            },
-            'per_player'
-          ),
-          total_points: 0,
-          tournaments_played: new Set(
-            (tournamentPlayers || [])
-              .filter((tp: any) => tp.player_id === p.id)
-              .map((tp: any) => tp.tournament_id)
-          ).size,
-          wins: 0,
-        }));
-      }
-
-      // 5. Obtener todos los matches de estas rondas
-      const { data: matches, error: matchesError } = await raw.client
-        .from('matches')
-        .select('*')
-        .in('round_id', roundIds);
-
-      if (matchesError) throw new Error(`Error fetching matches: ${matchesError.message}`);
-
-      const matchIds = (matches || []).map((m: any) => m.id);
-
-      if (matchIds.length === 0) {
-        return (players || []).map((p: any) => ({
-          player_id: p.id,
-          player_name: getPlayerDisplayName(
-            {
-              name: p.name,
-              bga_username: p.bga_username,
-              display_preference: p.display_preference,
-            },
-            'per_player'
-          ),
-          total_points: 0,
-          tournaments_played: new Set(
-            (tournamentPlayers || [])
-              .filter((tp: any) => tp.player_id === p.id)
-              .map((tp: any) => tp.tournament_id)
-          ).size,
-          wins: 0,
-        }));
-      }
-
-      // 6. Obtener todos los resultados de estos matches
-      const { data: matchResults, error: resultsError } = await raw.client
-        .from('match_results')
-        .select('*')
-        .in('match_id', matchIds);
-
-      if (resultsError) throw new Error(`Error fetching match results: ${resultsError.message}`);
-
-      // 7. Calcular estadísticas por jugador
-      const standingsMap = new Map<
-        number,
-        {
-          player_id: number;
-          player_name: string;
-          total_points: number;
-          tournaments_played: Set<number>;
-          wins: Set<number>;
-        }
-      >();
-
-      // Inicializar todos los jugadores
-      playerIds.forEach((playerId: number) => {
-        const player = playersMap.get(playerId);
-        if (player) {
-          standingsMap.set(playerId, {
-            player_id: playerId,
-            player_name: getPlayerDisplayName(
-              {
-                name: player.name,
-                bga_username: player.bga_username,
-                display_preference: player.display_preference,
-              },
-              'per_player'
-            ),
-            total_points: 0,
-            tournaments_played: new Set(),
-            wins: new Set(),
-          });
-        }
-      });
-
-      // Procesar resultados
-      (matchResults || []).forEach((mr: any) => {
-        const standing = standingsMap.get(mr.player_id);
-        if (standing) {
-          standing.total_points += mr.tournament_points || 0;
-
-          // Encontrar el torneo de este match
-          const match = (matches || []).find((m: any) => m.id === mr.match_id);
-          if (match) {
-            const round = (rounds || []).find((r: any) => r.id === match.round_id);
-            if (round) {
-              standing.tournaments_played.add(round.tournament_id);
-
-              // Si ganó (position = 1), contar como win
-              if (mr.position === 1) {
-                standing.wins.add(mr.match_id);
-              }
-            }
-          }
-        }
-      });
-
-      // Convertir a array y ordenar
-      const standings = Array.from(standingsMap.values()).map((standing) => ({
-        player_id: standing.player_id,
-        player_name: standing.player_name,
-        total_points: standing.total_points,
-        tournaments_played: standing.tournaments_played.size,
-        wins: standing.wins.size,
-      }));
-
-      // Ordenar por total_points DESC, wins DESC
-      standings.sort((a, b) => {
-        if (b.total_points !== a.total_points) {
-          return b.total_points - a.total_points;
-        }
-        return b.wins - a.wins;
-      });
-
-      return standings;
-    } else {
-      // Para SQLite: JOINs y resolver player_name con preferencia del jugador
-      const rows = await this.query<{
-        player_id: number;
-        name: string;
-        bga_username: string | null;
-        display_preference: string | null;
-        total_points: number;
-        tournaments_played: number;
-        wins: number;
-      }>(
-        `
+    // Logic identical to previous SQLite path
+    const rows = await this.query<{
+      player_id: number;
+      name: string;
+      bga_username: string | null;
+      display_preference: string | null;
+      total_points: number;
+      tournaments_played: number;
+      wins: number;
+    }>(
+      `
         SELECT 
           p.id as player_id,
           p.name,
@@ -1166,102 +1050,82 @@ export class DatabaseService {
         GROUP BY p.id
         ORDER BY total_points DESC, wins DESC
       `,
-        [circuitId]
-      );
-      return rows.map((row) => ({
-        player_id: row.player_id,
-        player_name: getPlayerDisplayName(
-          {
-            name: row.name,
-            bga_username: row.bga_username ?? undefined,
-            display_preference: (row.display_preference as 'name' | 'username') ?? undefined,
-          },
-          'per_player'
-        ),
-        total_points: row.total_points,
-        tournaments_played: row.tournaments_played,
-        wins: row.wins,
-      }));
-    }
+      [circuitId]
+    );
+    return rows.map((row) => ({
+      player_id: row.player_id,
+      player_name: getPlayerDisplayName(
+        {
+          name: row.name,
+          bga_username: row.bga_username ?? undefined,
+          display_preference: (row.display_preference as 'name' | 'username') ?? undefined,
+        },
+        'per_player'
+      ),
+      total_points: row.total_points,
+      tournaments_played: row.tournaments_played,
+      wins: row.wins,
+    }));
   }
 
-  // Tournament players operations
+  // ==========================================
+  // Tournament Players
+  // ==========================================
   static async getTournamentPlayers(tournamentId: number) {
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    if (isSupabase) {
-      const results = await this.query('SELECT * FROM tournament_players WHERE tournament_id = ?', [
-        tournamentId,
-      ]);
-      if (results.length === 0) return [];
-      const playerIds = results.map((r: any) => r.player_id);
-      const raw = this.getRawClient() as any;
-      if (playerIds.length > 0 && raw.client) {
-        const { data: players, error } = await raw.client
-          .from('players')
-          .select('*')
-          .in('id', playerIds)
-          .order('name', { ascending: true });
-
-        if (error) throw new Error(`Error fetching players: ${error.message}`);
-
-        // Merge active status from tournament_players
-        const tpMap = new Map(results.map((r: any) => [r.player_id, r]));
-        return (players || []).map((p: any) => ({
-          ...p,
-          active: tpMap.get(p.id)?.active ?? true,
-          dropout_round: tpMap.get(p.id)?.dropout_round ?? null,
-        }));
-      }
-      return results.map((r: any) => ({
-        id: r.player_id,
-        name: null,
-        active: r.active ?? true,
-        dropout_round: r.dropout_round ?? null,
-      }));
-    } else {
-      // SQLite
-      return this.query(
-        `
+    return this.query(
+      `
         SELECT p.*, tp.active, tp.dropout_round
         FROM tournament_players tp
         JOIN players p ON tp.player_id = p.id
         WHERE tp.tournament_id = ?
         ORDER BY p.name ASC
       `,
-        [tournamentId]
-      );
-    }
+      [tournamentId]
+    );
   }
 
   static async registerPlayerToTournament(tournamentId: number, playerId: number) {
-    return this.execute(
-      'INSERT INTO tournament_players (tournament_id, player_id, active) VALUES (?, ?, ?)',
+    const uuid = self.crypto.randomUUID();
+    const tournamentUuid = await this.getUuid('tournaments', tournamentId);
+    const playerUuid = await this.getUuid('players', playerId);
+
+    const res = await this.execute(
+      'INSERT INTO tournament_players (uuid, tournament_id, player_id, active) VALUES (?, ?, ?, ?)',
       [
+        uuid,
         tournamentId,
         playerId,
         1, // active default (true)
       ]
     );
+
+    await SyncService.addToQueue('tournament_players', 'INSERT', {
+      uuid,
+      tournament_uuid: tournamentUuid,
+      player_uuid: playerUuid,
+      active: true,
+    });
+    return res;
   }
 
   static async removePlayerFromTournament(tournamentId: number, playerId: number) {
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    if (isSupabase) {
-      const raw = this.getRawClient() as any;
-      const { error } = await raw.client
-        .from('tournament_players')
-        .delete()
-        .eq('tournament_id', tournamentId)
-        .eq('player_id', playerId);
+    // Get UUID before delete to sync
+    // BUT wait, unique key is (tournament_id, player_id)
+    const row = await this.query(
+      'SELECT uuid FROM tournament_players WHERE tournament_id=? AND player_id=?',
+      [tournamentId, playerId]
+    );
+    const uuid = row[0]?.uuid;
 
-      if (error) throw new Error(`Error removing player from tournament: ${error.message}`);
-      return true;
-    } else {
-      return this.execute(
-        'DELETE FROM tournament_players WHERE tournament_id = ? AND player_id = ?',
-        [tournamentId, playerId]
-      );
+    const res = await this.execute(
+      'DELETE FROM tournament_players WHERE tournament_id = ? AND player_id = ?',
+      [tournamentId, playerId]
+    );
+
+    if (uuid) {
+      await SyncService.addToQueue('tournament_players', 'DELETE', { uuid });
     }
+    return res;
   }
 
   static async updateTournamentPlayerStatus(
@@ -1269,119 +1133,114 @@ export class DatabaseService {
     playerId: number,
     updates: { active?: boolean; dropout_round?: number | null }
   ) {
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    if (isSupabase) {
-      const raw = this.getRawClient() as any;
-      const { error } = await raw.client
-        .from('tournament_players')
-        .update(updates)
-        .eq('tournament_id', tournamentId)
-        .eq('player_id', playerId);
+    const row = await this.query(
+      'SELECT uuid FROM tournament_players WHERE tournament_id=? AND player_id=?',
+      [tournamentId, playerId]
+    );
+    const uuid = row[0]?.uuid;
+    if (!uuid) throw new Error('Tournament Player UUID not found');
 
-      if (error && error.message.includes("Could not find the 'active' column")) {
-        // Retry: Reload schema cache might not be directly possible, but let's try a direct query or
-        // just try again if it was a transient issue.
-        // Actually, this error usually means the local Supabase client instance has a stale schema definition.
-        // We can try to force a refresh by creating a new client instance or restart, but here we can't.
-        // However, often just re-trying the operation or ensuring the column exists helps.
-        // Let's at least log it better or try a raw SQL execution if possible (but we don't have rpc for this).
-        console.warn("Schema cache missing 'active' column. Ensuring migration is applied.");
-      }
+    const setClause = [];
+    const params = [];
+    const payload: any = {};
 
-      if (error) throw new Error(`Error updating player status: ${error.message}`);
-      return true;
-    } else {
-      const setClause = [];
-      const params = [];
-      if (updates.active !== undefined) {
-        setClause.push('active = ?');
-        params.push(updates.active ? 1 : 0);
-      }
-      if (updates.dropout_round !== undefined) {
-        setClause.push('dropout_round = ?');
-        params.push(updates.dropout_round);
-      }
-
-      if (setClause.length === 0) return;
-
-      params.push(tournamentId, playerId);
-
-      return this.execute(
-        `UPDATE tournament_players SET ${setClause.join(', ')} WHERE tournament_id = ? AND player_id = ?`,
-        params
-      );
+    if (updates.active !== undefined) {
+      setClause.push('active = ?');
+      params.push(updates.active ? 1 : 0);
+      payload.active = updates.active;
     }
+    if (updates.dropout_round !== undefined) {
+      setClause.push('dropout_round = ?');
+      params.push(updates.dropout_round);
+      payload.dropout_round = updates.dropout_round;
+    }
+
+    if (setClause.length === 0) return;
+
+    params.push(tournamentId, playerId);
+
+    const res = await this.execute(
+      `UPDATE tournament_players SET ${setClause.join(', ')} WHERE tournament_id = ? AND player_id = ?`,
+      params
+    );
+
+    await SyncService.addToQueue('tournament_players', 'UPDATE', { uuid, ...payload });
+    return res;
   }
 
-  // Match players operations
+  // ==========================================
+  // Match Players
+  // ==========================================
   static async getMatchPlayers(matchId: number) {
-    const isSupabase = DB_CONFIG.mode === 'remote';
-    if (isSupabase) {
-      const matchPlayers = await this.query('SELECT * FROM match_players WHERE match_id = ?', [
-        matchId,
-      ]);
-      if (matchPlayers.length === 0) return [];
-      const playerIds = [...new Set(matchPlayers.map((mp: any) => mp.player_id))];
-      const raw = this.getRawClient() as any;
-      if (playerIds.length > 0 && raw.client) {
-        const { data: players, error } = await raw.client
-          .from('players')
-          .select('*')
-          .in('id', playerIds)
-          .order('name', { ascending: true });
-
-        if (error) throw new Error(`Error fetching players: ${error.message}`);
-
-        return players || [];
-      }
-      // Fallback: return match_players data as minimal player objects (like getMatchResults)
-      return matchPlayers.map((mp: any) => ({
-        id: mp.player_id,
-        name: null,
-        bga_username: null,
-        phone: null,
-        email: null,
-        age: null,
-      }));
-    } else {
-      // Para SQLite: usar la query original con JOIN
-      return this.query(
-        `
+    return this.query(
+      `
         SELECT p.* 
         FROM match_players mp
         JOIN players p ON mp.player_id = p.id
         WHERE mp.match_id = ?
         ORDER BY p.name
       `,
-        [matchId]
-      );
-    }
+      [matchId]
+    );
   }
 
   static async addPlayerToMatch(matchId: number, playerId: number) {
-    return this.execute('INSERT INTO match_players (match_id, player_id) VALUES (?, ?)', [
-      matchId,
-      playerId,
-    ]);
+    const uuid = self.crypto.randomUUID();
+    const matchUuid = await this.getUuid('matches', matchId);
+    const playerUuid = await this.getUuid('players', playerId);
+
+    const res = await this.execute(
+      'INSERT INTO match_players (uuid, match_id, player_id) VALUES (?, ?, ?)',
+      [uuid, matchId, playerId]
+    );
+
+    await SyncService.addToQueue('match_players', 'INSERT', {
+      uuid,
+      match_uuid: matchUuid,
+      player_uuid: playerUuid,
+    });
+    return res;
   }
 
   static async removePlayerFromMatch(matchId: number, playerId: number) {
-    return this.execute('DELETE FROM match_players WHERE match_id = ? AND player_id = ?', [
-      matchId,
-      playerId,
-    ]);
+    const row = await this.query(
+      'SELECT uuid FROM match_players WHERE match_id=? AND player_id=?',
+      [matchId, playerId]
+    );
+    const uuid = row[0]?.uuid;
+
+    const res = await this.execute(
+      'DELETE FROM match_players WHERE match_id = ? AND player_id = ?',
+      [matchId, playerId]
+    );
+
+    if (uuid) {
+      await SyncService.addToQueue('match_players', 'DELETE', { uuid });
+    }
+    return res;
   }
 
   static async setMatchPlayers(matchId: number, playerIds: number[]) {
+    // Get existing UUIDs for delete sync
+    const existing = await this.query<any>('SELECT uuid FROM match_players WHERE match_id = ?', [
+      matchId,
+    ]);
+    for (const row of existing) {
+      if (row.uuid) await SyncService.addToQueue('match_players', 'DELETE', { uuid: row.uuid });
+    }
+
     // Delete existing
     await this.execute('DELETE FROM match_players WHERE match_id = ?', [matchId]);
+
     // Add new ones
     for (const playerId of playerIds) {
       await this.addPlayerToMatch(matchId, playerId);
     }
   }
 
-  // Player byes operations
+  // ==========================================
+  // Player Byes
+  // ==========================================
   static async getPlayerByes(tournamentId: number) {
     return this.query(
       `
@@ -1394,10 +1253,22 @@ export class DatabaseService {
   }
 
   static async addPlayerBye(tournamentId: number, playerId: number, roundNumber: number) {
-    return this.execute(
-      'INSERT INTO player_byes (tournament_id, player_id, round_number) VALUES (?, ?, ?)',
-      [tournamentId, playerId, roundNumber]
+    const uuid = self.crypto.randomUUID();
+    const tournamentUuid = await this.getUuid('tournaments', tournamentId);
+    const playerUuid = await this.getUuid('players', playerId);
+
+    const res = await this.execute(
+      'INSERT INTO player_byes (uuid, tournament_id, player_id, round_number) VALUES (?, ?, ?, ?)',
+      [uuid, tournamentId, playerId, roundNumber]
     );
+
+    await SyncService.addToQueue('player_byes', 'INSERT', {
+      uuid,
+      tournament_uuid: tournamentUuid,
+      player_uuid: playerUuid,
+      round_number: roundNumber,
+    });
+    return res;
   }
 
   static async hasPlayerReceivedBye(tournamentId: number, playerId: number): Promise<boolean> {

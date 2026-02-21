@@ -1,0 +1,1118 @@
+{
+  "cities": [
+    {
+      "id": 1,
+      "name": "Bogotá",
+      "created_at": "2026-01-29T03:26:28.315168",
+      "updated_at": "2026-01-29T03:26:28.315168"
+    },
+    {
+      "id": 2,
+      "name": "Chía",
+      "created_at": "2026-01-29T03:26:28.315168",
+      "updated_at": "2026-01-29T03:26:28.315168"
+    },
+    {
+      "id": 3,
+      "name": "Medellín",
+      "created_at": "2026-01-29T03:26:28.315168",
+      "updated_at": "2026-01-29T03:26:28.315168"
+    },
+    {
+      "id": 4,
+      "name": "Cali",
+      "created_at": "2026-01-29T03:26:28.315168",
+      "updated_at": "2026-01-29T03:26:28.315168"
+    },
+    {
+      "id": 5,
+      "name": "Ibagué",
+      "created_at": "2026-01-29T03:26:28.315168",
+      "updated_at": "2026-01-29T03:26:28.315168"
+    },
+    {
+      "id": 6,
+      "name": "Neiva",
+      "created_at": "2026-01-29T03:26:28.315168",
+      "updated_at": "2026-01-29T03:26:28.315168"
+    }
+  ],
+  "places": [
+    {
+      "id": 1,
+      "name": "Online",
+      "created_at": "2026-01-29T03:18:51.971898",
+      "updated_at": "2026-01-29T03:18:51.971898",
+      "city_id": 1
+    },
+    {
+      "id": 2,
+      "name": "Biblioteca Julio Mario Santo Domingo",
+      "created_at": "2026-01-29T03:20:05.305695",
+      "updated_at": "2026-02-01T02:36:00.026",
+      "city_id": 1
+    }
+  ],
+  "circuits": [
+    {
+      "id": 2,
+      "name": "Circuito Bogotá 2026",
+      "description": "Serie de torneos en los sitios donde se pueden jugar juegos de mesa en Bogotá",
+      "start_date": "2026-01-31",
+      "end_date": "2026-08-31",
+      "created_at": "2026-01-31T15:28:00.91899",
+      "updated_at": "2026-01-31T18:41:48.428472",
+      "status": "active"
+    }
+  ],
+  "players": [
+    {
+      "id": 1,
+      "name": "Tomás Rojas Henao",
+      "bga_username": "TRojasHenao",
+      "phone": "3142307909",
+      "email": "trojashenao@gmail.com",
+      "age": 19,
+      "created_at": "2026-01-28T17:39:33.43627",
+      "updated_at": "2026-01-31T15:26:01.61897",
+      "display_preference": "username"
+    },
+    {
+      "id": 6,
+      "name": "Alejandro Baron",
+      "bga_username": null,
+      "phone": "3208391277",
+      "email": null,
+      "age": 7,
+      "created_at": "2026-01-31T18:26:02.326356",
+      "updated_at": "2026-01-31T18:26:02.326356",
+      "display_preference": "name"
+    },
+    {
+      "id": 7,
+      "name": "Jose Ferrario",
+      "bga_username": "Pechitoz",
+      "phone": "3004408597",
+      "email": "ochenta@hotmail.com",
+      "age": 40,
+      "created_at": "2026-01-31T18:26:56.96102",
+      "updated_at": "2026-01-31T18:26:56.96102",
+      "display_preference": "name"
+    },
+    {
+      "id": 8,
+      "name": "Yesid Lancheros",
+      "bga_username": null,
+      "phone": "3115522602",
+      "email": null,
+      "age": null,
+      "created_at": "2026-01-31T18:27:39.210176",
+      "updated_at": "2026-01-31T18:27:39.210176",
+      "display_preference": "name"
+    },
+    {
+      "id": 9,
+      "name": "Salvador Gutierrez",
+      "bga_username": "Salva3xz",
+      "phone": "3175724059",
+      "email": "salvagutip@gmail.com",
+      "age": 22,
+      "created_at": "2026-01-31T18:34:19.641231",
+      "updated_at": "2026-01-31T18:34:19.641231",
+      "display_preference": "name"
+    },
+    {
+      "id": 10,
+      "name": "Aldo Villamarín",
+      "bga_username": "Lixorigami",
+      "phone": null,
+      "email": null,
+      "age": null,
+      "created_at": "2026-01-31T18:34:56.514032",
+      "updated_at": "2026-01-31T18:34:56.514032",
+      "display_preference": "name"
+    },
+    {
+      "id": 11,
+      "name": "Dante Villamarín",
+      "bga_username": null,
+      "phone": null,
+      "email": null,
+      "age": 12,
+      "created_at": "2026-01-31T18:35:37.556293",
+      "updated_at": "2026-01-31T18:35:37.556293",
+      "display_preference": "name"
+    },
+    {
+      "id": 12,
+      "name": "Juan Camilo Murillo",
+      "bga_username": null,
+      "phone": "3183411836",
+      "email": "juancamur92@gmail.com",
+      "age": 34,
+      "created_at": "2026-01-31T18:37:50.310176",
+      "updated_at": "2026-01-31T18:37:50.310176",
+      "display_preference": "name"
+    },
+    {
+      "id": 13,
+      "name": "Pablo Diaz",
+      "bga_username": null,
+      "phone": "3150009613",
+      "email": null,
+      "age": null,
+      "created_at": "2026-01-31T18:56:25.32209",
+      "updated_at": "2026-01-31T18:56:25.32209",
+      "display_preference": "name"
+    },
+    {
+      "id": 14,
+      "name": "Marcela Hernandez",
+      "bga_username": null,
+      "phone": "3208391277",
+      "email": null,
+      "age": null,
+      "created_at": "2026-01-31T19:04:27.579185",
+      "updated_at": "2026-01-31T19:04:27.579185",
+      "display_preference": "name"
+    },
+    {
+      "id": 15,
+      "name": "Susana Novoa",
+      "bga_username": "Anaxa",
+      "phone": "3112742655",
+      "email": "susnovoa@gmail.com",
+      "age": 40,
+      "created_at": "2026-01-31T19:07:45.862215",
+      "updated_at": "2026-01-31T19:07:45.862215",
+      "display_preference": "name"
+    },
+    {
+      "id": 16,
+      "name": "German Rodriguez",
+      "bga_username": null,
+      "phone": "3142315859",
+      "email": null,
+      "age": null,
+      "created_at": "2026-01-31T19:11:27.71309",
+      "updated_at": "2026-01-31T19:11:27.71309",
+      "display_preference": "name"
+    }
+  ],
+  "tournaments": [
+    {
+      "id": 7,
+      "name": "JMSD",
+      "type": "circuit",
+      "circuit_id": 2,
+      "date": "2026-01-31",
+      "status": "completed",
+      "players_per_match": 2,
+      "number_of_rounds": 4,
+      "created_at": "2026-01-31T19:17:27.688845",
+      "updated_at": "2026-02-01T02:36:28.550917",
+      "place_id": 2
+    },
+    {
+      "id": 17,
+      "name": "Test",
+      "type": "qualifier",
+      "circuit_id": null,
+      "date": "2026-02-11",
+      "status": "in_progress",
+      "players_per_match": 2,
+      "number_of_rounds": 3,
+      "created_at": "2026-02-11T20:40:34.746218",
+      "updated_at": "2026-02-11T20:55:18.77447",
+      "place_id": 1
+    }
+  ],
+  "tournament_configs": [
+    {
+      "id": 7,
+      "tournament_id": 7,
+      "avoid_rematches": 1,
+      "tiebreak_criteria": "[{\"id\":\"wins\",\"name\":\"Número de victorias\",\"enabled\":true,\"order\":1},{\"id\":\"opponent_points_drop_worst\",\"name\":\"Suma de puntos de oponentes (quitando el peor)\",\"enabled\":true,\"order\":2},{\"id\":\"opponent_points_drop_best_worst\",\"name\":\"Suma de puntos de oponentes (quitando el mejor y el peor)\",\"enabled\":true,\"order\":3},{\"id\":\"head_to_head\",\"name\":\"Victoria en enfrentamiento directo\",\"enabled\":true,\"order\":4},{\"id\":\"point_difference\",\"name\":\"Suma de diferencia de puntos\",\"enabled\":true,\"order\":5}]",
+      "scoring_system": "{\"1\":1,\"2\":0}",
+      "bye_selection": "worst",
+      "created_at": "2026-01-31T19:17:27.839755",
+      "updated_at": "2026-01-31T19:17:27.839755",
+      "player_display_mode": "per_player"
+    },
+    {
+      "id": 17,
+      "tournament_id": 17,
+      "avoid_rematches": 1,
+      "tiebreak_criteria": "[{\"id\":\"wins\",\"name\":\"Número de victorias\",\"enabled\":true,\"order\":1},{\"id\":\"opponent_points_drop_worst\",\"name\":\"Suma de puntos de oponentes (quitando el peor)\",\"enabled\":true,\"order\":2},{\"id\":\"opponent_points_drop_best_worst\",\"name\":\"Suma de puntos de oponentes (quitando el mejor y el peor)\",\"enabled\":true,\"order\":3},{\"id\":\"head_to_head\",\"name\":\"Victoria en enfrentamiento directo\",\"enabled\":true,\"order\":4},{\"id\":\"point_difference\",\"name\":\"Suma de diferencia de puntos\",\"enabled\":true,\"order\":5}]",
+      "scoring_system": "{\"1\":1,\"2\":0}",
+      "bye_selection": "worst",
+      "created_at": "2026-02-11T20:40:35.152577",
+      "updated_at": "2026-02-11T20:40:35.152577",
+      "player_display_mode": "per_player"
+    }
+  ],
+  "tournament_players": [
+    {
+      "id": 21,
+      "tournament_id": 7,
+      "player_id": 10,
+      "registered_at": "2026-01-31T19:17:27.990424",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 22,
+      "tournament_id": 7,
+      "player_id": 11,
+      "registered_at": "2026-01-31T19:17:28.125674",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 23,
+      "tournament_id": 7,
+      "player_id": 9,
+      "registered_at": "2026-01-31T19:17:28.255857",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 24,
+      "tournament_id": 7,
+      "player_id": 7,
+      "registered_at": "2026-01-31T19:17:28.390304",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 25,
+      "tournament_id": 7,
+      "player_id": 16,
+      "registered_at": "2026-01-31T19:17:28.513637",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 26,
+      "tournament_id": 7,
+      "player_id": 12,
+      "registered_at": "2026-01-31T19:17:28.643023",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 27,
+      "tournament_id": 7,
+      "player_id": 13,
+      "registered_at": "2026-01-31T19:17:28.775244",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 28,
+      "tournament_id": 7,
+      "player_id": 6,
+      "registered_at": "2026-01-31T19:17:28.902148",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 29,
+      "tournament_id": 7,
+      "player_id": 14,
+      "registered_at": "2026-01-31T19:17:29.027725",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 30,
+      "tournament_id": 7,
+      "player_id": 8,
+      "registered_at": "2026-01-31T19:17:29.160103",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 87,
+      "tournament_id": 17,
+      "player_id": 6,
+      "registered_at": "2026-02-11T20:40:35.478759",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 88,
+      "tournament_id": 17,
+      "player_id": 11,
+      "registered_at": "2026-02-11T20:40:35.677219",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 89,
+      "tournament_id": 17,
+      "player_id": 16,
+      "registered_at": "2026-02-11T20:40:35.889829",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 90,
+      "tournament_id": 17,
+      "player_id": 7,
+      "registered_at": "2026-02-11T20:40:36.068183",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 91,
+      "tournament_id": 17,
+      "player_id": 13,
+      "registered_at": "2026-02-11T20:40:36.380009",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 92,
+      "tournament_id": 17,
+      "player_id": 10,
+      "registered_at": "2026-02-11T20:41:08.417694",
+      "active": true,
+      "dropout_round": null
+    },
+    {
+      "id": 93,
+      "tournament_id": 17,
+      "player_id": 14,
+      "registered_at": "2026-02-11T20:42:41.931164",
+      "active": false,
+      "dropout_round": 2
+    }
+  ],
+  "rounds": [
+    {
+      "id": 9,
+      "tournament_id": 7,
+      "round_number": 1,
+      "status": "completed",
+      "started_at": null,
+      "completed_at": "2026-01-31T19:57:21.557"
+    },
+    {
+      "id": 10,
+      "tournament_id": 7,
+      "round_number": 2,
+      "status": "completed",
+      "started_at": null,
+      "completed_at": "2026-01-31T20:39:07.785"
+    },
+    {
+      "id": 11,
+      "tournament_id": 7,
+      "round_number": 3,
+      "status": "completed",
+      "started_at": null,
+      "completed_at": "2026-01-31T21:26:14.679"
+    },
+    {
+      "id": 13,
+      "tournament_id": 7,
+      "round_number": 4,
+      "status": "completed",
+      "started_at": null,
+      "completed_at": "2026-01-31T22:09:53.49"
+    },
+    {
+      "id": 44,
+      "tournament_id": 17,
+      "round_number": 1,
+      "status": "completed",
+      "started_at": null,
+      "completed_at": "2026-02-11T20:42:27.648"
+    },
+    {
+      "id": 45,
+      "tournament_id": 17,
+      "round_number": 2,
+      "status": "completed",
+      "started_at": null,
+      "completed_at": "2026-02-11T20:54:53.736"
+    },
+    {
+      "id": 46,
+      "tournament_id": 17,
+      "round_number": 3,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null
+    }
+  ],
+  "matches": [
+    {
+      "id": 118,
+      "round_id": 44,
+      "match_number": 1,
+      "status": "completed",
+      "completed_at": "2026-02-11T20:41:20.268",
+      "first_player_id": 6
+    },
+    {
+      "id": 119,
+      "round_id": 44,
+      "match_number": 2,
+      "status": "completed",
+      "completed_at": "2026-02-11T20:42:20.376",
+      "first_player_id": 11
+    },
+    {
+      "id": 120,
+      "round_id": 44,
+      "match_number": 3,
+      "status": "completed",
+      "completed_at": "2026-02-11T20:42:26.419",
+      "first_player_id": 16
+    },
+    {
+      "id": 124,
+      "round_id": 45,
+      "match_number": 4,
+      "status": "completed",
+      "completed_at": "2026-02-11T20:42:49.512",
+      "first_player_id": null
+    },
+    {
+      "id": 121,
+      "round_id": 45,
+      "match_number": 1,
+      "status": "completed",
+      "completed_at": "2026-02-11T20:54:41.334",
+      "first_player_id": 6
+    },
+    {
+      "id": 122,
+      "round_id": 45,
+      "match_number": 2,
+      "status": "completed",
+      "completed_at": "2026-02-11T20:54:45.326",
+      "first_player_id": 10
+    },
+    {
+      "id": 123,
+      "round_id": 45,
+      "match_number": 3,
+      "status": "completed",
+      "completed_at": "2026-02-11T20:54:51.951",
+      "first_player_id": 13
+    },
+    {
+      "id": 13,
+      "round_id": 9,
+      "match_number": 2,
+      "status": "completed",
+      "completed_at": "2026-01-31T19:49:24.885",
+      "first_player_id": 11
+    },
+    {
+      "id": 12,
+      "round_id": 9,
+      "match_number": 1,
+      "status": "completed",
+      "completed_at": "2026-01-31T19:53:14.242",
+      "first_player_id": 7
+    },
+    {
+      "id": 14,
+      "round_id": 9,
+      "match_number": 3,
+      "status": "completed",
+      "completed_at": "2026-01-31T19:56:55.559",
+      "first_player_id": 12
+    },
+    {
+      "id": 15,
+      "round_id": 9,
+      "match_number": 4,
+      "status": "completed",
+      "completed_at": "2026-01-31T19:57:07.941",
+      "first_player_id": 6
+    },
+    {
+      "id": 16,
+      "round_id": 9,
+      "match_number": 5,
+      "status": "completed",
+      "completed_at": "2026-01-31T19:57:20.674",
+      "first_player_id": 10
+    },
+    {
+      "id": 18,
+      "round_id": 10,
+      "match_number": 2,
+      "status": "completed",
+      "completed_at": "2026-01-31T20:31:40.682",
+      "first_player_id": 6
+    },
+    {
+      "id": 20,
+      "round_id": 10,
+      "match_number": 4,
+      "status": "completed",
+      "completed_at": "2026-01-31T20:32:01.779",
+      "first_player_id": 8
+    },
+    {
+      "id": 19,
+      "round_id": 10,
+      "match_number": 3,
+      "status": "completed",
+      "completed_at": "2026-01-31T20:33:16.688",
+      "first_player_id": 14
+    },
+    {
+      "id": 21,
+      "round_id": 10,
+      "match_number": 5,
+      "status": "completed",
+      "completed_at": "2026-01-31T20:36:21.179",
+      "first_player_id": 16
+    },
+    {
+      "id": 17,
+      "round_id": 10,
+      "match_number": 1,
+      "status": "completed",
+      "completed_at": "2026-01-31T20:39:06.942",
+      "first_player_id": 9
+    },
+    {
+      "id": 22,
+      "round_id": 11,
+      "match_number": 1,
+      "status": "completed",
+      "completed_at": "2026-01-31T21:15:26.239",
+      "first_player_id": 12
+    },
+    {
+      "id": 26,
+      "round_id": 11,
+      "match_number": 5,
+      "status": "completed",
+      "completed_at": "2026-01-31T21:15:41.871",
+      "first_player_id": 11
+    },
+    {
+      "id": 24,
+      "round_id": 11,
+      "match_number": 3,
+      "status": "completed",
+      "completed_at": "2026-01-31T21:23:43.27",
+      "first_player_id": 8
+    },
+    {
+      "id": 23,
+      "round_id": 11,
+      "match_number": 2,
+      "status": "completed",
+      "completed_at": "2026-01-31T21:24:50.599",
+      "first_player_id": 10
+    },
+    {
+      "id": 25,
+      "round_id": 11,
+      "match_number": 4,
+      "status": "completed",
+      "completed_at": "2026-01-31T21:26:13.781",
+      "first_player_id": 13
+    },
+    {
+      "id": 31,
+      "round_id": 13,
+      "match_number": 5,
+      "status": "completed",
+      "completed_at": "2026-01-31T22:00:31.494",
+      "first_player_id": 16
+    },
+    {
+      "id": 27,
+      "round_id": 13,
+      "match_number": 1,
+      "status": "completed",
+      "completed_at": "2026-01-31T22:03:44.345",
+      "first_player_id": 9
+    },
+    {
+      "id": 29,
+      "round_id": 13,
+      "match_number": 3,
+      "status": "completed",
+      "completed_at": "2026-01-31T22:07:55.37",
+      "first_player_id": 10
+    },
+    {
+      "id": 30,
+      "round_id": 13,
+      "match_number": 4,
+      "status": "completed",
+      "completed_at": "2026-01-31T22:08:13.849",
+      "first_player_id": 13
+    },
+    {
+      "id": 28,
+      "round_id": 13,
+      "match_number": 2,
+      "status": "completed",
+      "completed_at": "2026-01-31T22:09:52.627",
+      "first_player_id": 6
+    },
+    {
+      "id": 125,
+      "round_id": 46,
+      "match_number": 1,
+      "status": "pending",
+      "completed_at": null,
+      "first_player_id": 11
+    },
+    {
+      "id": 126,
+      "round_id": 46,
+      "match_number": 2,
+      "status": "pending",
+      "completed_at": null,
+      "first_player_id": 7
+    },
+    {
+      "id": 127,
+      "round_id": 46,
+      "match_number": 3,
+      "status": "pending",
+      "completed_at": null,
+      "first_player_id": 16
+    }
+  ],
+  "match_results": [
+    {
+      "id": 199,
+      "match_id": 118,
+      "player_id": 6,
+      "position": 1,
+      "points": 87,
+      "tournament_points": 1
+    },
+    {
+      "id": 200,
+      "match_id": 118,
+      "player_id": 10,
+      "position": 2,
+      "points": 76,
+      "tournament_points": 0
+    },
+    {
+      "id": 201,
+      "match_id": 119,
+      "player_id": 11,
+      "position": 1,
+      "points": 88,
+      "tournament_points": 1
+    },
+    {
+      "id": 202,
+      "match_id": 119,
+      "player_id": 7,
+      "position": 2,
+      "points": 75,
+      "tournament_points": 0
+    },
+    {
+      "id": 203,
+      "match_id": 120,
+      "player_id": 16,
+      "position": 1,
+      "points": 124,
+      "tournament_points": 1
+    },
+    {
+      "id": 204,
+      "match_id": 120,
+      "player_id": 13,
+      "position": 2,
+      "points": 121,
+      "tournament_points": 0
+    },
+    {
+      "id": 205,
+      "match_id": 124,
+      "player_id": 14,
+      "position": 1,
+      "points": 0,
+      "tournament_points": 1
+    },
+    {
+      "id": 206,
+      "match_id": 121,
+      "player_id": 11,
+      "position": 1,
+      "points": 98,
+      "tournament_points": 1
+    },
+    {
+      "id": 207,
+      "match_id": 121,
+      "player_id": 6,
+      "position": 2,
+      "points": 98,
+      "tournament_points": 0
+    },
+    {
+      "id": 208,
+      "match_id": 122,
+      "player_id": 10,
+      "position": 1,
+      "points": 98,
+      "tournament_points": 1
+    },
+    {
+      "id": 209,
+      "match_id": 122,
+      "player_id": 16,
+      "position": 2,
+      "points": 78,
+      "tournament_points": 0
+    },
+    {
+      "id": 20,
+      "match_id": 13,
+      "player_id": 9,
+      "position": 1,
+      "points": 138,
+      "tournament_points": 1
+    },
+    {
+      "id": 21,
+      "match_id": 13,
+      "player_id": 11,
+      "position": 2,
+      "points": 91,
+      "tournament_points": 0
+    },
+    {
+      "id": 22,
+      "match_id": 12,
+      "player_id": 7,
+      "position": 1,
+      "points": 137,
+      "tournament_points": 1
+    },
+    {
+      "id": 23,
+      "match_id": 12,
+      "player_id": 13,
+      "position": 2,
+      "points": 108,
+      "tournament_points": 0
+    },
+    {
+      "id": 24,
+      "match_id": 14,
+      "player_id": 12,
+      "position": 1,
+      "points": 118,
+      "tournament_points": 1
+    },
+    {
+      "id": 25,
+      "match_id": 14,
+      "player_id": 8,
+      "position": 2,
+      "points": 113,
+      "tournament_points": 0
+    },
+    {
+      "id": 26,
+      "match_id": 15,
+      "player_id": 6,
+      "position": 1,
+      "points": 101,
+      "tournament_points": 1
+    },
+    {
+      "id": 27,
+      "match_id": 15,
+      "player_id": 14,
+      "position": 2,
+      "points": 90,
+      "tournament_points": 0
+    },
+    {
+      "id": 28,
+      "match_id": 16,
+      "player_id": 10,
+      "position": 1,
+      "points": 94,
+      "tournament_points": 1
+    },
+    {
+      "id": 29,
+      "match_id": 16,
+      "player_id": 16,
+      "position": 2,
+      "points": 60,
+      "tournament_points": 0
+    },
+    {
+      "id": 30,
+      "match_id": 18,
+      "player_id": 7,
+      "position": 1,
+      "points": 115,
+      "tournament_points": 1
+    },
+    {
+      "id": 31,
+      "match_id": 18,
+      "player_id": 6,
+      "position": 2,
+      "points": 115,
+      "tournament_points": 0
+    },
+    {
+      "id": 32,
+      "match_id": 20,
+      "player_id": 8,
+      "position": 1,
+      "points": 98,
+      "tournament_points": 1
+    },
+    {
+      "id": 33,
+      "match_id": 20,
+      "player_id": 13,
+      "position": 2,
+      "points": 95,
+      "tournament_points": 0
+    },
+    {
+      "id": 34,
+      "match_id": 19,
+      "player_id": 12,
+      "position": 1,
+      "points": 147,
+      "tournament_points": 1
+    },
+    {
+      "id": 35,
+      "match_id": 19,
+      "player_id": 14,
+      "position": 2,
+      "points": 70,
+      "tournament_points": 0
+    },
+    {
+      "id": 36,
+      "match_id": 21,
+      "player_id": 16,
+      "position": 1,
+      "points": 112,
+      "tournament_points": 1
+    },
+    {
+      "id": 37,
+      "match_id": 21,
+      "player_id": 11,
+      "position": 2,
+      "points": 89,
+      "tournament_points": 0
+    },
+    {
+      "id": 38,
+      "match_id": 17,
+      "player_id": 9,
+      "position": 1,
+      "points": 110,
+      "tournament_points": 1
+    },
+    {
+      "id": 39,
+      "match_id": 17,
+      "player_id": 10,
+      "position": 2,
+      "points": 90,
+      "tournament_points": 0
+    },
+    {
+      "id": 40,
+      "match_id": 22,
+      "player_id": 9,
+      "position": 1,
+      "points": 95,
+      "tournament_points": 1
+    },
+    {
+      "id": 41,
+      "match_id": 22,
+      "player_id": 12,
+      "position": 2,
+      "points": 81,
+      "tournament_points": 0
+    },
+    {
+      "id": 42,
+      "match_id": 26,
+      "player_id": 14,
+      "position": 1,
+      "points": 132,
+      "tournament_points": 1
+    },
+    {
+      "id": 43,
+      "match_id": 26,
+      "player_id": 11,
+      "position": 2,
+      "points": 78,
+      "tournament_points": 0
+    },
+    {
+      "id": 44,
+      "match_id": 24,
+      "player_id": 6,
+      "position": 1,
+      "points": 146,
+      "tournament_points": 1
+    },
+    {
+      "id": 45,
+      "match_id": 24,
+      "player_id": 8,
+      "position": 2,
+      "points": 128,
+      "tournament_points": 0
+    },
+    {
+      "id": 46,
+      "match_id": 23,
+      "player_id": 7,
+      "position": 1,
+      "points": 148,
+      "tournament_points": 1
+    },
+    {
+      "id": 47,
+      "match_id": 23,
+      "player_id": 10,
+      "position": 2,
+      "points": 91,
+      "tournament_points": 0
+    },
+    {
+      "id": 48,
+      "match_id": 25,
+      "player_id": 13,
+      "position": 1,
+      "points": 110,
+      "tournament_points": 1
+    },
+    {
+      "id": 49,
+      "match_id": 25,
+      "player_id": 16,
+      "position": 2,
+      "points": 88,
+      "tournament_points": 0
+    },
+    {
+      "id": 50,
+      "match_id": 31,
+      "player_id": 16,
+      "position": 1,
+      "points": 99,
+      "tournament_points": 1
+    },
+    {
+      "id": 51,
+      "match_id": 31,
+      "player_id": 11,
+      "position": 2,
+      "points": 84,
+      "tournament_points": 0
+    },
+    {
+      "id": 52,
+      "match_id": 27,
+      "player_id": 7,
+      "position": 1,
+      "points": 98,
+      "tournament_points": 1
+    },
+    {
+      "id": 53,
+      "match_id": 27,
+      "player_id": 9,
+      "position": 2,
+      "points": 79,
+      "tournament_points": 0
+    },
+    {
+      "id": 54,
+      "match_id": 29,
+      "player_id": 10,
+      "position": 1,
+      "points": 105,
+      "tournament_points": 1
+    },
+    {
+      "id": 55,
+      "match_id": 29,
+      "player_id": 8,
+      "position": 2,
+      "points": 82,
+      "tournament_points": 0
+    },
+    {
+      "id": 56,
+      "match_id": 30,
+      "player_id": 14,
+      "position": 1,
+      "points": 104,
+      "tournament_points": 1
+    },
+    {
+      "id": 57,
+      "match_id": 30,
+      "player_id": 13,
+      "position": 2,
+      "points": 102,
+      "tournament_points": 0
+    },
+    {
+      "id": 58,
+      "match_id": 28,
+      "player_id": 12,
+      "position": 1,
+      "points": 94,
+      "tournament_points": 1
+    },
+    {
+      "id": 59,
+      "match_id": 28,
+      "player_id": 6,
+      "position": 2,
+      "points": 92,
+      "tournament_points": 0
+    },
+    {
+      "id": 210,
+      "match_id": 123,
+      "player_id": 7,
+      "position": 1,
+      "points": 126,
+      "tournament_points": 1
+    },
+    {
+      "id": 211,
+      "match_id": 123,
+      "player_id": 13,
+      "position": 2,
+      "points": 57,
+      "tournament_points": 0
+    }
+  ]
+}

@@ -51,18 +51,9 @@ export default function DatabaseStatus() {
       <div className="space-y-3">
         <div>
           <p className="text-sm text-gray-600 dark:text-gray-400">Cliente actual:</p>
-          <p
-            className={`font-medium ${
-              clientInfo.type === 'supabase'
-                ? 'text-green-600 dark:text-green-400'
-                : clientInfo.type === 'dual'
-                  ? 'text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400'
-            }`}
-          >
-            {clientInfo.type === 'sqlite' && 'SQLite (Local)'}
-            {clientInfo.type === 'supabase' && 'Supabase (Remoto)'}
-            {clientInfo.type === 'dual' && 'Dual (SQLite + Supabase)'}
+          <p className="font-medium text-gray-600 dark:text-gray-400">
+            {clientInfo.type === 'local' && 'SQLite (Local)'}
+            {clientInfo.type === 'cloud-sync' && 'SQLite (Local) + Supabase (Sync)'}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{clientInfo.message}</p>
         </div>
@@ -104,7 +95,7 @@ export default function DatabaseStatus() {
           </p>
         </div>
 
-        {clientInfo.type === 'supabase' || clientInfo.configured ? (
+        {clientInfo.type === 'cloud-sync' || clientInfo.configured ? (
           <div>
             <Button
               onClick={handleTestConnection}

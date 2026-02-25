@@ -62,11 +62,10 @@ export default function SyncStatus() {
     <div className="flex items-center space-x-2 text-sm">
       {/* Network Status Icon */}
       <div
-        className={`flex items-center justify-center w-6 h-6 rounded-full ${
-          status.isOnline
+        className={`flex items-center justify-center w-6 h-6 rounded-full ${status.isOnline
             ? 'text-green-500 bg-green-50 dark:bg-green-900/20'
             : 'text-red-500 bg-red-50 dark:bg-red-900/20'
-        }`}
+          }`}
         title={`${status.isOnline ? 'Internet: Conectado' : 'Internet: Desconectado'}
 Navegador: ${navigator.onLine ? 'Online' : 'Offline'}
 Supabase: ${status.isOnline ? 'Online' : 'Offline'}
@@ -114,15 +113,14 @@ Supabase: ${status.isOnline ? 'Online' : 'Offline'}
 
       {/* Sync Status Icon */}
       <div
-        className={`flex items-center px-3 py-1 rounded-full border transition-all duration-300 ${
-          !status.isOnline
+        className={`flex items-center px-3 py-1 rounded-full border transition-all duration-300 ${!status.isOnline
             ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
             : status.isSyncing
               ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
               : queueSize > 0
                 ? 'bg-yellow-50 text-yellow-600 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
                 : 'bg-green-50 text-green-600 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
-        }`}
+          }`}
         title={
           !status.isOnline
             ? 'Sin conexión a internet'
@@ -189,13 +187,13 @@ Supabase: ${status.isOnline ? 'Online' : 'Offline'}
         </span>
 
         <span className="font-medium text-xs hidden sm:inline">
-          {status.isSyncing
-            ? 'Sync...'
-            : queueSize > 0
+          {!status.isOnline
+            ? queueSize > 0
               ? `Pendiente (${queueSize})`
-              : !status.isOnline
-                ? 'Offline'
-                : 'Sync OK'}
+              : 'Offline'
+            : status.isSyncing
+              ? 'Sincronizando...'
+              : 'Sync OK'}
         </span>
       </div>
 

@@ -189,17 +189,16 @@ Supabase: ${status.isOnline ? 'Online' : 'Offline'}
         </span>
 
         <span className="font-medium text-xs hidden sm:inline">
-          {status.isSyncing
-            ? 'Sync...'
-            : queueSize > 0
+          {!status.isOnline
+            ? queueSize > 0
               ? `Pendiente (${queueSize})`
-              : !status.isOnline
-                ? 'Offline'
-                : 'Sync OK'}
+              : 'Offline'
+            : status.isSyncing
+              ? 'Sincronizando...'
+              : 'Sync OK'}
         </span>
       </div>
 
-      {/* Manual Sync Button (only visible if there are pending items and online) */}
       {/* Manual Sync Button (only visible if there are pending items and online) */}
       {status.isOnline && !status.isSyncing && (
         <button

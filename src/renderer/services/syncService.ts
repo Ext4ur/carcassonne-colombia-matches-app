@@ -24,9 +24,9 @@ export class SyncService {
 
   /**
    * Start the background sync process
-   * @param intervalMs Check interval in milliseconds (default 30s)
+   * @param intervalMs Check interval in milliseconds (default 10s)
    */
-  static async startSync(intervalMs = 30000) {
+  static async startSync(intervalMs = 10000) {
     if (this.syncInterval) return;
 
     console.log('🔄 Sync Service Started');
@@ -368,101 +368,123 @@ export class SyncService {
    * PUSH: Send pending local changes to Supabase
    */
   private static async pushChanges() {
-    const queue = await this.sqlite.query<SyncQueueItem>(
-      "SELECT * FROM sync_queue WHERE status IN ('pending', 'failed') AND retry_count < 5 ORDER BY id ASC LIMIT 50"
-    );
+    let processedCount = 0;
+    const MAX_PER_SYNC = 200;
 
-    if (queue.length === 0) return;
+    while (processedCount < MAX_PER_SYNC) {
+      const queue = await this.sqlite.query<SyncQueueItem>(
+        "SELECT * FROM sync_queue WHERE status IN ('pending', 'failed') AND retry_count < 5 ORDER BY id ASC LIMIT 20"
+      );
 
-    for (const item of queue) {
-      try {
-        await this.sqlite.execute("UPDATE sync_queue SET status = 'processing' WHERE id = ?", [
-          item.id,
-        ]);
+      if (queue.length === 0) break;
 
-        const payload = JSON.parse(item.payload);
-        const table = item.table_name;
-        const supabaseClient = this.supabase.client;
+      console.log(
+        `⬆️ Pushing ${queue.length} items to Supabase (Total this run: ${processedCount})`
+      );
 
-        if (!supabaseClient) throw new Error('Supabase client not initialized');
+      for (const item of queue) {
+        processedCount++;
+        try {
+          await this.sqlite.execute("UPDATE sync_queue SET status = 'processing' WHERE id = ?", [
+            item.id,
+          ]);
 
-        // Hydration logic
-        const fkDefs = this.FK_DEFINITIONS[table];
-        let payloadModified = false;
+          const payload = JSON.parse(item.payload);
+          const table = item.table_name;
+          const supabaseClient = this.supabase.client;
 
-        if (fkDefs) {
-          for (const [fkColumn, targetTable] of Object.entries(fkDefs)) {
-            const uuidColumn = fkColumn.replace('_id', '_uuid');
-            if (payload[fkColumn] && !payload[uuidColumn]) {
-              const related = await this.sqlite.query<{ uuid: string }>(
-                `SELECT uuid FROM ${targetTable} WHERE id = ?`,
-                [payload[fkColumn]]
-              );
-              if (related && related.length > 0 && related[0].uuid) {
-                payload[uuidColumn] = related[0].uuid;
-                payloadModified = true;
+          if (!supabaseClient) throw new Error('Supabase client not initialized');
+
+          // Hydration logic
+          const fkDefs = this.FK_DEFINITIONS[table];
+          let payloadModified = false;
+
+          if (fkDefs) {
+            for (const [fkColumn, targetTable] of Object.entries(fkDefs)) {
+              const uuidColumn = fkColumn.replace('_id', '_uuid');
+              if (payload[fkColumn] && !payload[uuidColumn]) {
+                const related = await this.sqlite.query<{ uuid: string }>(
+                  `SELECT uuid FROM ${targetTable} WHERE id = ?`,
+                  [payload[fkColumn]]
+                );
+                if (related && related.length > 0 && related[0].uuid) {
+                  payload[uuidColumn] = related[0].uuid;
+                  payloadModified = true;
+                }
               }
             }
           }
-        }
 
-        if (payloadModified) {
-          await this.sqlite.execute('UPDATE sync_queue SET payload = ? WHERE id = ?', [
-            JSON.stringify(payload),
-            item.id,
-          ]);
-        }
-
-        const apiPayload = { ...payload };
-        delete apiPayload.id;
-        if (fkDefs) {
-          for (const fkColumn of Object.keys(fkDefs)) {
-            delete apiPayload[fkColumn];
+          if (payloadModified) {
+            await this.sqlite.execute('UPDATE sync_queue SET payload = ? WHERE id = ?', [
+              JSON.stringify(payload),
+              item.id,
+            ]);
           }
-        }
 
-        if (!apiPayload.uuid && payload.uuid) apiPayload.uuid = payload.uuid;
-
-        let result;
-        if (item.operation === 'INSERT') {
-          const { data: existing } = await supabaseClient
-            .from(table)
-            .select('id')
-            .eq('uuid', payload.uuid)
-            .maybeSingle();
-          if (existing) {
-            // Success (already exists)
-          } else {
-            result = await supabaseClient.from(table).insert(apiPayload).select();
+          const apiPayload = { ...payload };
+          delete apiPayload.id;
+          if (fkDefs) {
+            for (const fkColumn of Object.keys(fkDefs)) {
+              delete apiPayload[fkColumn];
+            }
           }
-        } else if (item.operation === 'UPDATE') {
-          if (payload.uuid) {
-            result = await supabaseClient
+
+          // Convert any boolean values to integers (1/0) for Supabase compatibility
+          for (const key of Object.keys(apiPayload)) {
+            if (typeof apiPayload[key] === 'boolean') {
+              apiPayload[key] = apiPayload[key] ? 1 : 0;
+            }
+          }
+
+          if (!apiPayload.uuid && payload.uuid) apiPayload.uuid = payload.uuid;
+
+          let result;
+          if (item.operation === 'INSERT') {
+            const { data: existing } = await supabaseClient
               .from(table)
-              .update(apiPayload)
+              .select('id')
               .eq('uuid', payload.uuid)
-              .select();
+              .maybeSingle();
+            if (existing) {
+              // Success (already exists)
+            } else {
+              result = await supabaseClient.from(table).insert(apiPayload).select();
+            }
+          } else if (item.operation === 'UPDATE') {
+            if (payload.uuid) {
+              result = await supabaseClient
+                .from(table)
+                .update(apiPayload)
+                .eq('uuid', payload.uuid)
+                .select();
+            }
+          } else if (item.operation === 'DELETE') {
+            if (payload.uuid) {
+              result = await supabaseClient.from(table).delete().eq('uuid', payload.uuid).select();
+            }
           }
-        } else if (item.operation === 'DELETE') {
-          if (payload.uuid) {
-            result = await supabaseClient.from(table).delete().eq('uuid', payload.uuid).select();
-          }
+
+          if (result && result.error) throw result.error;
+
+          console.log(`✅ Successfully synced ${table} (item ${item.id})`);
+          await this.sqlite.execute('DELETE FROM sync_queue WHERE id = ?', [item.id]);
+        } catch (error: any) {
+          let errorDetails = error.message || 'Unknown error';
+          if (error.details) errorDetails += ` (${error.details})`;
+          if (error.hint) errorDetails += ` [Hint: ${error.hint}]`;
+
+          console.error(`❌ Failed to push item ${item.id}:`, errorDetails, error);
+          await this.sqlite.execute(
+            "UPDATE sync_queue SET status = 'failed', retry_count = retry_count + 1, last_error = ? WHERE id = ?",
+            [errorDetails, item.id]
+          );
         }
-
-        if (result && result.error) throw result.error;
-
-        await this.sqlite.execute('DELETE FROM sync_queue WHERE id = ?', [item.id]);
-      } catch (error: any) {
-        let errorDetails = error.message || 'Unknown error';
-        if (error.details) errorDetails += ` (${error.details})`;
-        if (error.hint) errorDetails += ` [Hint: ${error.hint}]`;
-
-        console.error(`❌ Failed to push item ${item.id}:`, errorDetails, error);
-        await this.sqlite.execute(
-          "UPDATE sync_queue SET status = 'failed', retry_count = retry_count + 1, last_error = ? WHERE id = ?",
-          [errorDetails, item.id]
-        );
       }
+    }
+
+    if (processedCount >= MAX_PER_SYNC) {
+      console.warn('⚠️ Sync reached MAX_PER_SYNC limit. Some items remain in queue.');
     }
   }
 

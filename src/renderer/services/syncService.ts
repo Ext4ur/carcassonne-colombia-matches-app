@@ -436,7 +436,6 @@ export class SyncService {
               apiPayload[key] = apiPayload[key] ? 1 : 0;
             }
           }
-
           if (!apiPayload.uuid && payload.uuid) apiPayload.uuid = payload.uuid;
 
           let result;

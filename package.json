@@ -24,7 +24,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.main.json",
     "postinstall": "electron-builder install-app-deps",
-    "rebuild-sqlite": "electron-rebuild -f -w better-sqlite3"
+    "rebuild-sqlite": "electron-rebuild -f -w better-sqlite3",
+    "db:fix": "electron scripts/fix-db.js"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx}": [

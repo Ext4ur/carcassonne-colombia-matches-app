@@ -189,8 +189,14 @@ export default function Players() {
       });
     } catch (error) {
       console.error('Error deleting player:', error);
+      const err = error as Error;
+      const errorMessage =
+        err.message?.includes('No se puede eliminar') || err.message?.includes('ha participado')
+          ? err.message
+          : 'Error al eliminar el jugador';
+
       addNotification({
-        message: 'Error al eliminar el jugador',
+        message: errorMessage,
         type: 'error',
       });
     } finally {

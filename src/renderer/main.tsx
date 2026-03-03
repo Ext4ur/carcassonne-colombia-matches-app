@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { SyncService } from './services/syncService';
 
 // Error boundary for React errors
 class ErrorBoundary extends React.Component<
@@ -89,6 +90,11 @@ if (!window.electronAPI) {
   `;
 } else {
   console.log('electronAPI is available:', typeof window.electronAPI);
+
+  // Start the background sync service
+  console.log('🔄 Starting Background Sync Service...');
+  SyncService.startSync(30000); // 30s interval for heavy sync
+
   console.log('Starting React app...');
 
   try {

@@ -571,33 +571,84 @@ export default function TournamentDetail() {
   };
 
   const handleDropout = async (playerStanding: PlayerStanding) => {
-    if (!tournament?.id || !currentRound) return;
-    if (
-      !confirm(
-        `¿Estás seguro de que deseas retirar a ${playerStanding.player_name}? Ya no será emparejado en futuras rondas.`
-      )
-    )
-      return;
+    if (!tournament?.id) return;
 
-    try {
-      setIsLoading(true);
-      await DatabaseService.updateTournamentPlayerStatus(tournament.id, playerStanding.player_id, {
-        active: false,
-        dropout_round: currentRound.round_number,
-      });
-      addNotification({
-        message: 'Jugador retirado exitosamente',
-        type: 'success',
-      });
-      await loadStandings();
-    } catch (error) {
-      console.error('Error dropping player:', error);
-      addNotification({
-        message: 'Error al retirar al jugador',
-        type: 'error',
-      });
-    } finally {
-      setIsLoading(false);
+    const isUnstarted = rounds.length === 0;
+
+    if (isUnstarted) {
+      const newPlayerCount = standings.length - 1;
+      const newCalculatedRounds = calculateNumberOfRounds(newPlayerCount);
+      const currentRoundsVal =
+        tournament.number_of_rounds || calculateNumberOfRounds(standings.length);
+
+      if (newCalculatedRounds < currentRoundsVal) {
+        if (
+          !confirm(
+            `Alerta: Retirar a este jugador reducirá la cantidad de rondas del torneo de ${currentRoundsVal} a ${newCalculatedRounds}. ¿Deseas continuar y eliminar al jugador?`
+          )
+        )
+          return;
+      } else {
+        if (!confirm(`¿Estás seguro de eliminar a ${playerStanding.player_name} del torneo?`))
+          return;
+      }
+
+      try {
+        setIsLoading(true);
+        await DatabaseService.removePlayerFromTournament(tournament.id, playerStanding.player_id);
+        if (newCalculatedRounds < currentRoundsVal) {
+          await DatabaseService.updateTournament(tournament.id, {
+            number_of_rounds: newCalculatedRounds,
+          });
+          loadTournament();
+        }
+        addNotification({
+          message: 'Jugador eliminado exitosamente',
+          type: 'success',
+        });
+        await loadStandings();
+      } catch (error) {
+        console.error('Error removing player:', error);
+        addNotification({
+          message: 'Error al eliminar al jugador',
+          type: 'error',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      if (!currentRound) return;
+      if (
+        !confirm(
+          `¿Estás seguro de que deseas retirar a ${playerStanding.player_name}? Ya no será emparejado en futuras rondas.`
+        )
+      )
+        return;
+
+      try {
+        setIsLoading(true);
+        await DatabaseService.updateTournamentPlayerStatus(
+          tournament.id,
+          playerStanding.player_id,
+          {
+            active: false,
+            dropout_round: currentRound.round_number,
+          }
+        );
+        addNotification({
+          message: 'Jugador retirado exitosamente',
+          type: 'success',
+        });
+        await loadStandings();
+      } catch (error) {
+        console.error('Error dropping player:', error);
+        addNotification({
+          message: 'Error al retirar al jugador',
+          type: 'error',
+        });
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -1461,6 +1512,10 @@ export default function TournamentDetail() {
           onPlayerAdded={handlePlayerAdded}
           tournamentId={tournament.id}
           existingPlayerIds={standings.map((s) => s.player_id)}
+          currentRoundsVal={
+            tournament.number_of_rounds || calculateNumberOfRounds(standings.length)
+          }
+          isUnstarted={rounds.length === 0}
         />
       )}
     </div>

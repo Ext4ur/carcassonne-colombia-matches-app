@@ -105,15 +105,15 @@ export class TiebreakService {
       }
     }
     if (opponentPoints.length === 0) return 0;
-    let points = [...opponentPoints];
-    if (dropWorst && points.length > 1) {
-      points = points.sort((a, b) => b - a);
+    const points = [...opponentPoints].sort((a, b) => b - a);
+
+    if (dropWorst && points.length > 0) {
       points.pop();
     }
-    if (dropBest && points.length > 1) {
-      points = points.sort((a, b) => b - a);
+    if (dropBest && points.length > 0) {
       points.shift();
     }
+
     return points.reduce((sum, p) => sum + p, 0);
   }
 
@@ -189,15 +189,13 @@ export class TiebreakService {
 
     if (opponentPoints.length === 0) return 0;
 
-    let points = [...opponentPoints];
+    const points = [...opponentPoints].sort((a, b) => b - a);
 
-    if (dropWorst && points.length > 1) {
-      points = points.sort((a, b) => b - a);
+    if (dropWorst && points.length > 0) {
       points.pop(); // Remove worst
     }
 
-    if (dropBest && points.length > 1) {
-      points = points.sort((a, b) => b - a);
+    if (dropBest && points.length > 0) {
       points.shift(); // Remove best
     }
 

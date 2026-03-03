@@ -138,6 +138,22 @@ export class DatabaseService {
     const uuid = await this.getUuid('players', id);
     if (!uuid) throw new Error(`Player ${id} has no UUID`);
 
+    // Prevent deletion if the player is involved in tournaments or matches
+    const references = await this.query<{ tournamentsCount: number; matchesCount: number }>(
+      `
+      SELECT 
+        (SELECT COUNT(*) FROM tournament_players WHERE player_id = ?) as tournamentsCount,
+        (SELECT COUNT(*) FROM match_players WHERE player_id = ?) as matchesCount
+      `,
+      [id, id]
+    );
+
+    if (references[0] && (references[0].tournamentsCount > 0 || references[0].matchesCount > 0)) {
+      throw new Error(
+        'No se puede eliminar el jugador porque ha participado en torneos o partidas. Si deseas ocultarlo, considera cambiar su estado en su lugar.'
+      );
+    }
+
     const result = await this.execute('DELETE FROM players WHERE id = ?', [id]);
 
     // Sync Queue

@@ -1264,6 +1264,13 @@ export class DatabaseService {
     }
   }
 
+  static async getMatchWithResults(matchId: number): Promise<any> {
+    const rows = await this.query(`SELECT * FROM matches WHERE id = ?`, [matchId]);
+    if (rows.length === 0) return null;
+    const results = await this.getMatchResults(matchId);
+    return { ...rows[0], results };
+  }
+
   // ==========================================
   // Player Byes
   // ==========================================

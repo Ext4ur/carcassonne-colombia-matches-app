@@ -9,6 +9,8 @@ export interface Column<T> {
   className?: string;
   /** Optional width (e.g. "8%"). Columns without width share the remaining space. */
   width?: string;
+  /** Optional tooltip title for the header. */
+  title?: string;
 }
 
 interface TableProps<T> {
@@ -19,6 +21,8 @@ interface TableProps<T> {
   className?: string;
   /** When true, header stays fixed and only the body scrolls (scrollbar appears only next to tbody). */
   scrollableBody?: boolean;
+  /** Optional function to get custom CSS classes for a row. */
+  getRowClassName?: (item: T, index: number) => string;
 }
 
 function getColWidthStyle<T>(columns: Column<T>[], column: Column<T>): string {
@@ -47,7 +51,8 @@ function TableHeader<T extends Record<string, any>>({ columns }: { columns: Colu
             <th
               key={column.key}
               scope="col"
-              className={`px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700 ${column.className || ''}`}
+              title={column.title}
+              className={`px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700 whitespace-normal ${column.className || ''}`}
             >
               {column.header}
             </th>
@@ -65,6 +70,7 @@ export default function Table<T extends Record<string, any>>({
   emptyMessage = 'No hay datos disponibles',
   className = '',
   scrollableBody = false,
+  getRowClassName,
 }: TableProps<T>) {
   if (data.length === 0) {
     return (
@@ -88,7 +94,8 @@ export default function Table<T extends Record<string, any>>({
               <th
                 key={column.key}
                 scope="col"
-                className={`px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${column.className || ''}`}
+                title={column.title}
+                className={`px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-normal ${column.className || ''}`}
               >
                 {column.header}
               </th>
@@ -100,7 +107,8 @@ export default function Table<T extends Record<string, any>>({
             <tr
               key={keyExtractor(item)}
               className={`hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
-                index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'
+                getRowClassName?.(item, index) ||
+                (index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800')
               }`}
             >
               {columns.map((column) => (
@@ -138,7 +146,8 @@ export default function Table<T extends Record<string, any>>({
                 <tr
                   key={keyExtractor(item)}
                   className={`hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
-                    index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'
+                    getRowClassName?.(item, index) ||
+                    (index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800')
                   }`}
                 >
                   {columns.map((column) => (

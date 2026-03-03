@@ -92,7 +92,7 @@ export default function Circuits() {
     try {
       setIsLoading(true);
       const [data, posEvo, ptsEvo, stops, placesData] = await Promise.all([
-        DatabaseService.getCircuitStandings(circuitId),
+        CircuitService.getCircuitStandings(circuitId),
         CircuitService.getCircuitPositionEvolution(circuitId),
         CircuitService.getCircuitPointsEvolution(circuitId),
         DatabaseService.getCircuitTournaments(circuitId),
@@ -345,25 +345,42 @@ export default function Circuits() {
   const standingsColumns: Column<CircuitStandings>[] = [
     {
       key: 'position',
-      header: 'Pos.',
+      header: 'Posición',
       render: (_standing, index) => (index != null ? index + 1 : 1),
+      width: '8%',
     },
     {
       key: 'player_name',
       header: 'Jugador',
+      className: 'whitespace-nowrap font-medium',
+      width: '40%',
     },
     {
       key: 'total_points',
       header: 'Puntos Totales',
-      render: (standing) => standing.total_points.toFixed(2),
+      render: (standing) => standing.total_points.toFixed(0),
+      className: 'text-center',
+      width: '13%',
     },
     {
       key: 'tournaments_played',
       header: 'Torneos',
+      className: 'text-center',
+      width: '13%',
     },
     {
       key: 'wins',
       header: 'Victorias',
+      className: 'text-center',
+      width: '13%',
+    },
+    {
+      key: 'sos',
+      header: 'Victorias Oponentes',
+      render: (standing) => standing.sos.toFixed(0),
+      title: 'Suma de victorias de los oponentes',
+      className: 'text-center',
+      width: '13%',
     },
   ];
 
@@ -444,40 +461,30 @@ export default function Circuits() {
 
   const hasStopFilter = stopIndices !== null && stopIndices.length > 0;
 
-  // When filtering by place/parada, recompute standings from pointsEvolution for those stops only
-  const filteredStandings = (() => {
-    let base = standings;
-    if (hasStopFilter && pointsEvolution && positionEvolution) {
-      const filteredTotals = new Map<number, number>();
-      const filteredWins = new Map<number, number>();
-      for (const p of pointsEvolution.players) {
-        let total = 0;
-        let prevCum = 0;
-        for (let k = 0; k < p.pointsCumulative.length; k++) {
-          if (stopIndices!.includes(k)) {
-            total += p.pointsCumulative[k] - prevCum;
-          }
-          prevCum = p.pointsCumulative[k];
-        }
-        filteredTotals.set(p.player_id, total);
-        const posData = positionEvolution.players.find((x) => x.player_id === p.player_id);
-        const wins = posData ? stopIndices!.filter((i) => posData.positions[i] === 1).length : 0;
-        filteredWins.set(p.player_id, wins);
+  // When filtering by place/parada, recompute standings by calling CircuitService with the filtered IDs
+  const [filteredStandings, setFilteredStandings] = useState<CircuitStandings[]>([]);
+
+  useEffect(() => {
+    if (!selectedCircuit?.id) return;
+
+    const stopIds = hasStopFilter ? stopIndices!.map((i) => circuitTournaments[i].id) : undefined;
+
+    CircuitService.getCircuitStandings(selectedCircuit.id, stopIds).then((data) => {
+      let final = data;
+      if (selectedPlayerIds.length > 0) {
+        final = data.filter((s) => selectedPlayerIds.includes(s.player_id));
       }
-      base = standings
-        .map((s) => ({
-          ...s,
-          total_points: filteredTotals.get(s.player_id) ?? 0,
-          tournaments_played: stopIndices!.length,
-          wins: filteredWins.get(s.player_id) ?? 0,
-        }))
-        .sort((a, b) => b.total_points - a.total_points);
-    }
-    if (selectedPlayerIds.length > 0) {
-      return base.filter((s) => selectedPlayerIds.includes(s.player_id));
-    }
-    return base;
-  })();
+      setFilteredStandings(final);
+    });
+  }, [
+    selectedCircuit,
+    selectedStopIds,
+    selectedPlaceIds,
+    selectedPlayerIds,
+    circuitTournaments,
+    hasStopFilter,
+    stopIndices,
+  ]);
 
   const filteredPositionEvolution =
     positionEvolution && (hasStopFilter || selectedPlayerIds.length > 0)
@@ -702,46 +709,46 @@ export default function Circuits() {
               </div>
             )}
 
-            {selectedCircuit?.status === 'finalized' && standings.length > 0 && (
+            {selectedCircuit?.status === 'finalized' && filteredStandings.length > 0 && (
               <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-4">
                 <h3 className="text-lg font-semibold mb-3">Podio final</h3>
                 <div className="flex flex-wrap gap-4 justify-center items-end">
-                  {standings[1] && (
+                  {filteredStandings[1] && (
                     <div className="flex flex-col items-center order-2 md:order-1">
                       <span className="text-2xl" aria-hidden>
                         🥈
                       </span>
                       <div className="font-bold text-gray-700 dark:text-gray-300">
-                        {standings[1].player_name}
+                        {filteredStandings[1].player_name}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {standings[1].total_points.toFixed(2)} pts
+                        {filteredStandings[1].total_points.toFixed(0)} pts
                       </div>
                     </div>
                   )}
-                  {standings[0] && (
+                  {filteredStandings[0] && (
                     <div className="flex flex-col items-center order-1 md:order-2">
                       <span className="text-3xl" aria-hidden>
                         🥇
                       </span>
                       <div className="font-bold text-gray-900 dark:text-white">
-                        {standings[0].player_name}
+                        {filteredStandings[0].player_name}
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {standings[0].total_points.toFixed(2)} pts
+                        {filteredStandings[0].total_points.toFixed(0)} pts
                       </div>
                     </div>
                   )}
-                  {standings[2] && (
+                  {filteredStandings[2] && (
                     <div className="flex flex-col items-center order-3">
                       <span className="text-2xl" aria-hidden>
                         🥉
                       </span>
                       <div className="font-bold text-gray-700 dark:text-gray-300">
-                        {standings[2].player_name}
+                        {filteredStandings[2].player_name}
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {standings[2].total_points.toFixed(2)} pts
+                        {filteredStandings[2].total_points.toFixed(0)} pts
                       </div>
                     </div>
                   )}
@@ -811,6 +818,14 @@ export default function Circuits() {
                 data={filteredStandings}
                 keyExtractor={(standing) => standing.player_id}
                 emptyMessage="No hay datos de acumulado disponibles"
+                getRowClassName={(_item, index) => {
+                  const pos = index + 1;
+                  if (pos === 1) return 'bg-yellow-100/60 dark:bg-yellow-900/40 font-semibold';
+                  if (pos === 2) return 'bg-slate-100/70 dark:bg-slate-800/50 font-semibold';
+                  if (pos === 3) return 'bg-orange-100/60 dark:bg-orange-900/30 font-semibold';
+                  if (pos === 4) return 'bg-blue-50/80 dark:bg-blue-900/20 font-semibold';
+                  return '';
+                }}
               />
             </div>
           </div>

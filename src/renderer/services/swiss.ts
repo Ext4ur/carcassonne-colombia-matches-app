@@ -706,7 +706,16 @@ export class SwissPairingService {
         tiebreak_values: {},
         active: player.active ?? true,
         dropout_round: player.dropout_round ?? null,
+        starts_count: 0,
       };
+    });
+
+    // Count first player starts
+    roundMatches.forEach((match) => {
+      if (match.first_player_id && standings[match.first_player_id]) {
+        standings[match.first_player_id].starts_count =
+          (standings[match.first_player_id].starts_count || 0) + 1;
+      }
     });
 
     // Process all match results

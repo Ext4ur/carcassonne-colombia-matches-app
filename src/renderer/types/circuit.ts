@@ -18,4 +18,5 @@ export interface CircuitStandings {
   total_points: number;
   tournaments_played: number;
   wins: number;
+  sos: number; // Sum of Opponents' Wins
 }

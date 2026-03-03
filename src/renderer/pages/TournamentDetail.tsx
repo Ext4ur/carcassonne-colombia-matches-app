@@ -11,6 +11,7 @@ import Modal from '../components/common/Modal';
 import MatchResultForm from '../components/tournament/MatchResultForm';
 import TournamentStats from '../components/tournament/TournamentStats';
 import RoundPreviewDialog from '../components/tournament/RoundPreviewDialog';
+import ManualPairingDialog from '../components/tournament/ManualPairingDialog';
 import AddPlayerDialog from '../components/tournament/AddPlayerDialog';
 import MultiSelect from '../components/common/MultiSelect';
 import Input from '../components/common/Input';
@@ -38,6 +39,7 @@ export default function TournamentDetail() {
 
   // Preview State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isManualPairingOpen, setIsManualPairingOpen] = useState(false);
   const [previewData, setPreviewData] = useState<{
     matches: Array<{
       player1: any;
@@ -351,6 +353,40 @@ export default function TournamentDetail() {
     }
   };
 
+  const handleConfirmManualPairing = async (pairings: any[]) => {
+    if (!tournament?.id) return;
+
+    try {
+      setIsLoading(true);
+
+      const nextRoundNumber = rounds.length + 1;
+
+      await SwissPairingService.createRoundFromPairings(tournament.id, nextRoundNumber, pairings);
+
+      const roundsData = await loadRounds();
+      const newRound = roundsData.length > 0 ? roundsData[roundsData.length - 1] : null;
+      if (newRound) {
+        setCurrentRound(newRound);
+        await loadMatches(newRound.id);
+      }
+      await loadStandings();
+
+      setIsManualPairingOpen(false);
+      addNotification({
+        message: 'Ronda manual generada exitosamente',
+        type: 'success',
+      });
+    } catch (error: any) {
+      console.error('Error generating manual round:', error);
+      addNotification({
+        message: error.message || 'Error al generar la ronda manual',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleOpenMatchModal = (match: Match) => {
     // Set the match and open modal - MatchResultForm will reload data via useEffect
     setSelectedMatch(match);
@@ -571,33 +607,84 @@ export default function TournamentDetail() {
   };
 
   const handleDropout = async (playerStanding: PlayerStanding) => {
-    if (!tournament?.id || !currentRound) return;
-    if (
-      !confirm(
-        `¿Estás seguro de que deseas retirar a ${playerStanding.player_name}? Ya no será emparejado en futuras rondas.`
-      )
-    )
-      return;
+    if (!tournament?.id) return;
 
-    try {
-      setIsLoading(true);
-      await DatabaseService.updateTournamentPlayerStatus(tournament.id, playerStanding.player_id, {
-        active: false,
-        dropout_round: currentRound.round_number,
-      });
-      addNotification({
-        message: 'Jugador retirado exitosamente',
-        type: 'success',
-      });
-      await loadStandings();
-    } catch (error) {
-      console.error('Error dropping player:', error);
-      addNotification({
-        message: 'Error al retirar al jugador',
-        type: 'error',
-      });
-    } finally {
-      setIsLoading(false);
+    const isUnstarted = rounds.length === 0;
+
+    if (isUnstarted) {
+      const newPlayerCount = standings.length - 1;
+      const newCalculatedRounds = calculateNumberOfRounds(newPlayerCount);
+      const currentRoundsVal =
+        tournament.number_of_rounds || calculateNumberOfRounds(standings.length);
+
+      if (newCalculatedRounds < currentRoundsVal) {
+        if (
+          !confirm(
+            `Alerta: Retirar a este jugador reducirá la cantidad de rondas del torneo de ${currentRoundsVal} a ${newCalculatedRounds}. ¿Deseas continuar y eliminar al jugador?`
+          )
+        )
+          return;
+      } else {
+        if (!confirm(`¿Estás seguro de eliminar a ${playerStanding.player_name} del torneo?`))
+          return;
+      }
+
+      try {
+        setIsLoading(true);
+        await DatabaseService.removePlayerFromTournament(tournament.id, playerStanding.player_id);
+        if (newCalculatedRounds < currentRoundsVal) {
+          await DatabaseService.updateTournament(tournament.id, {
+            number_of_rounds: newCalculatedRounds,
+          });
+          loadTournament();
+        }
+        addNotification({
+          message: 'Jugador eliminado exitosamente',
+          type: 'success',
+        });
+        await loadStandings();
+      } catch (error) {
+        console.error('Error removing player:', error);
+        addNotification({
+          message: 'Error al eliminar al jugador',
+          type: 'error',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      if (!currentRound) return;
+      if (
+        !confirm(
+          `¿Estás seguro de que deseas retirar a ${playerStanding.player_name}? Ya no será emparejado en futuras rondas.`
+        )
+      )
+        return;
+
+      try {
+        setIsLoading(true);
+        await DatabaseService.updateTournamentPlayerStatus(
+          tournament.id,
+          playerStanding.player_id,
+          {
+            active: false,
+            dropout_round: currentRound.round_number,
+          }
+        );
+        addNotification({
+          message: 'Jugador retirado exitosamente',
+          type: 'success',
+        });
+        await loadStandings();
+      } catch (error) {
+        console.error('Error dropping player:', error);
+        addNotification({
+          message: 'Error al retirar al jugador',
+          type: 'error',
+        });
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -1150,13 +1237,22 @@ export default function TournamentDetail() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Rondas</h2>
             {rounds.length === 0 ? (
-              <Button
-                onClick={handleGenerateFirstRound}
-                isLoading={isLoading}
-                disabled={tournament?.status === 'completed'}
-              >
-                Generar Primera Ronda
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleGenerateFirstRound}
+                  isLoading={isLoading}
+                  disabled={tournament?.status === 'completed'}
+                >
+                  Generar Primera Ronda
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsManualPairingOpen(true)}
+                  disabled={tournament?.status === 'completed' || isLoading}
+                >
+                  Cruces Manuales
+                </Button>
+              </div>
             ) : tournament.status === 'completed' ? (
               <Button onClick={() => setShowStats(true)} variant="primary" disabled>
                 Torneo Finalizado
@@ -1186,9 +1282,18 @@ export default function TournamentDetail() {
                 }
                 if (currentRound?.status === 'completed') {
                   return (
-                    <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
-                      Generar Siguiente Ronda
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
+                        Generar Siguiente Ronda
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setIsManualPairingOpen(true)}
+                        disabled={isLoading}
+                      >
+                        Cruces Manuales
+                      </Button>
+                    </div>
                   );
                 }
                 return (
@@ -1461,6 +1566,20 @@ export default function TournamentDetail() {
           onPlayerAdded={handlePlayerAdded}
           tournamentId={tournament.id}
           existingPlayerIds={standings.map((s) => s.player_id)}
+          currentRoundsVal={
+            tournament.number_of_rounds || calculateNumberOfRounds(standings.length)
+          }
+          isUnstarted={rounds.length === 0}
+        />
+      )}
+      {tournament && isManualPairingOpen && (
+        <ManualPairingDialog
+          isOpen={isManualPairingOpen}
+          onClose={() => setIsManualPairingOpen(false)}
+          onConfirm={handleConfirmManualPairing}
+          isLoading={isLoading}
+          players={standings.filter((s) => s.active !== false)}
+          roundNumber={rounds.length + 1}
         />
       )}
     </div>

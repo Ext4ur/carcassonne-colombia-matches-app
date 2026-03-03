@@ -6,7 +6,6 @@ import { DEFAULT_TIEBREAK_CRITERIA } from '../../utils/tiebreak';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
-// @ts-expect-error -- react-beautiful-dnd types missing
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 interface TournamentConfigProps {

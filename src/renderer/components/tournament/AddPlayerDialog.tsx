@@ -7,12 +7,16 @@ import Button from '../common/Button';
 import PlayerSearch from '../common/PlayerSearch';
 import Input from '../common/Input';
 
+import { calculateNumberOfRounds } from '../../utils/tournament';
+
 interface AddPlayerDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onPlayerAdded: () => void;
   tournamentId: number;
   existingPlayerIds: number[];
+  currentRoundsVal: number;
+  isUnstarted: boolean;
 }
 
 export default function AddPlayerDialog({
@@ -21,6 +25,8 @@ export default function AddPlayerDialog({
   onPlayerAdded,
   tournamentId,
   existingPlayerIds,
+  currentRoundsVal,
+  isUnstarted,
 }: AddPlayerDialogProps) {
   const [isNewPlayerMode, setIsNewPlayerMode] = useState(false);
   const [newPlayerData, setNewPlayerData] = useState({
@@ -32,13 +38,54 @@ export default function AddPlayerDialog({
   });
   const [isLoading, setIsLoading] = useState(false);
 
+  // Common registration logic that evaluates the round thresholds
+  const processPlayerRegistration = async (playerId: number): Promise<boolean> => {
+    const newPlayerCount = existingPlayerIds.length + 1;
+    const newCalculatedRounds = calculateNumberOfRounds(newPlayerCount);
+
+    let shouldUpdateRounds = false;
+
+    if (newCalculatedRounds > currentRoundsVal) {
+      if (isUnstarted) {
+        if (
+          !confirm(
+            `Alcanzaste un nivel superior de jugadores. Se agregará una nueva ronda al torneo (pasarán a ser ${newCalculatedRounds}). ¿Aceptar?`
+          )
+        ) {
+          return false;
+        }
+        shouldUpdateRounds = true;
+      } else {
+        if (
+          !confirm(
+            `Atención: Agregar este jugador superará el límite del bracket y forzará la generación de una ronda nueva recomendada al final (Serán ${newCalculatedRounds} rondas). No se recomienda hacer esto, y de hacerlo, procura ingresar a otra persona más (2 en total) para evitar byes. ¿Deseas arriesgarte y continuar?`
+          )
+        ) {
+          return false;
+        }
+        shouldUpdateRounds = true;
+      }
+    }
+
+    await DatabaseService.registerPlayerToTournament(tournamentId, playerId);
+    if (shouldUpdateRounds) {
+      await DatabaseService.updateTournament(tournamentId, {
+        number_of_rounds: newCalculatedRounds,
+      });
+    }
+
+    return true;
+  };
+
   const handleSelectPlayer = async (player: Player) => {
     if (!player.id) return;
     try {
       setIsLoading(true);
-      await DatabaseService.registerPlayerToTournament(tournamentId, player.id);
-      onPlayerAdded();
-      onClose();
+      const success = await processPlayerRegistration(player.id);
+      if (success) {
+        onPlayerAdded();
+        onClose();
+      }
     } catch (error: any) {
       if (error.message?.includes('UNIQUE constraint')) {
         alert('Este jugador ya está inscrito en el torneo');
@@ -66,11 +113,13 @@ export default function AddPlayerDialog({
         age: newPlayerData.age ? Number(newPlayerData.age) : undefined,
       });
 
-      await DatabaseService.registerPlayerToTournament(tournamentId, playerId);
-      onPlayerAdded();
-      onClose();
-      setNewPlayerData({ name: '', bga_username: '', phone: '', email: '', age: '' });
-      setIsNewPlayerMode(false);
+      const success = await processPlayerRegistration(playerId);
+      if (success) {
+        onPlayerAdded();
+        onClose();
+        setNewPlayerData({ name: '', bga_username: '', phone: '', email: '', age: '' });
+        setIsNewPlayerMode(false);
+      }
     } catch (error) {
       console.error('Error creating player:', error);
       alert('Error al crear el jugador');

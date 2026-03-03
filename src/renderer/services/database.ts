@@ -143,14 +143,24 @@ export class DatabaseService {
       `
       SELECT 
         (SELECT COUNT(*) FROM tournament_players WHERE player_id = ?) as tournamentsCount,
-        (SELECT COUNT(*) FROM match_players WHERE player_id = ?) as matchesCount
+        (
+          SELECT COUNT(*) FROM (
+            SELECT 1 FROM match_players WHERE player_id = ?
+            UNION ALL
+            SELECT 1 FROM matches WHERE first_player_id = ?
+            UNION ALL
+            SELECT 1 FROM match_results WHERE player_id = ?
+            UNION ALL
+            SELECT 1 FROM player_byes WHERE player_id = ?
+          )
+        ) as matchesCount
       `,
-      [id, id]
+      [id, id, id, id, id]
     );
 
     if (references[0] && (references[0].tournamentsCount > 0 || references[0].matchesCount > 0)) {
       throw new Error(
-        'No se puede eliminar el jugador porque ha participado en torneos o partidas. Si deseas ocultarlo, considera cambiar su estado en su lugar.'
+        'No se puede eliminar el jugador porque tiene registros asociados (torneos, partidas, inicios o resultados). Considera cambiar su estado a inactivo en su lugar.'
       );
     }
 

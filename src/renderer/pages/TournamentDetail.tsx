@@ -11,6 +11,7 @@ import Modal from '../components/common/Modal';
 import MatchResultForm from '../components/tournament/MatchResultForm';
 import TournamentStats from '../components/tournament/TournamentStats';
 import RoundPreviewDialog from '../components/tournament/RoundPreviewDialog';
+import ManualPairingDialog from '../components/tournament/ManualPairingDialog';
 import AddPlayerDialog from '../components/tournament/AddPlayerDialog';
 import MultiSelect from '../components/common/MultiSelect';
 import Input from '../components/common/Input';
@@ -38,6 +39,7 @@ export default function TournamentDetail() {
 
   // Preview State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isManualPairingOpen, setIsManualPairingOpen] = useState(false);
   const [previewData, setPreviewData] = useState<{
     matches: Array<{
       player1: any;
@@ -344,6 +346,40 @@ export default function TournamentDetail() {
       console.error('Error generating round:', error);
       addNotification({
         message: error.message || 'Error al generar la ronda',
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConfirmManualPairing = async (pairings: any[]) => {
+    if (!tournament?.id) return;
+
+    try {
+      setIsLoading(true);
+
+      const nextRoundNumber = rounds.length + 1;
+
+      await SwissPairingService.createRoundFromPairings(tournament.id, nextRoundNumber, pairings);
+
+      const roundsData = await loadRounds();
+      const newRound = roundsData.length > 0 ? roundsData[roundsData.length - 1] : null;
+      if (newRound) {
+        setCurrentRound(newRound);
+        await loadMatches(newRound.id);
+      }
+      await loadStandings();
+
+      setIsManualPairingOpen(false);
+      addNotification({
+        message: 'Ronda manual generada exitosamente',
+        type: 'success',
+      });
+    } catch (error: any) {
+      console.error('Error generating manual round:', error);
+      addNotification({
+        message: error.message || 'Error al generar la ronda manual',
         type: 'error',
       });
     } finally {
@@ -1201,13 +1237,22 @@ export default function TournamentDetail() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">Rondas</h2>
             {rounds.length === 0 ? (
-              <Button
-                onClick={handleGenerateFirstRound}
-                isLoading={isLoading}
-                disabled={tournament?.status === 'completed'}
-              >
-                Generar Primera Ronda
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleGenerateFirstRound}
+                  isLoading={isLoading}
+                  disabled={tournament?.status === 'completed'}
+                >
+                  Generar Primera Ronda
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsManualPairingOpen(true)}
+                  disabled={tournament?.status === 'completed' || isLoading}
+                >
+                  Cruces Manuales
+                </Button>
+              </div>
             ) : tournament.status === 'completed' ? (
               <Button onClick={() => setShowStats(true)} variant="primary" disabled>
                 Torneo Finalizado
@@ -1237,9 +1282,18 @@ export default function TournamentDetail() {
                 }
                 if (currentRound?.status === 'completed') {
                   return (
-                    <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
-                      Generar Siguiente Ronda
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
+                        Generar Siguiente Ronda
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setIsManualPairingOpen(true)}
+                        disabled={isLoading}
+                      >
+                        Cruces Manuales
+                      </Button>
+                    </div>
                   );
                 }
                 return (
@@ -1516,6 +1570,16 @@ export default function TournamentDetail() {
             tournament.number_of_rounds || calculateNumberOfRounds(standings.length)
           }
           isUnstarted={rounds.length === 0}
+        />
+      )}
+      {tournament && isManualPairingOpen && (
+        <ManualPairingDialog
+          isOpen={isManualPairingOpen}
+          onClose={() => setIsManualPairingOpen(false)}
+          onConfirm={handleConfirmManualPairing}
+          isLoading={isLoading}
+          players={standings.filter((s) => s.active !== false)}
+          roundNumber={rounds.length + 1}
         />
       )}
     </div>

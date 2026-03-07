@@ -13,12 +13,12 @@ describe('TiebreakService', () => {
     ],
     resultsByMatch: {
       101: [
-        { player_id: 1, position: 1, points: 100, tournament_points: 1 },
-        { player_id: 2, position: 2, points: 50, tournament_points: 0 },
+        { match_id: 1, player_id: 1, position: 1, points: 100, tournament_points: 1 },
+        { match_id: 1, player_id: 2, position: 2, points: 50, tournament_points: 0 },
       ],
       102: [
-        { player_id: 3, position: 1, points: 80, tournament_points: 1 },
-        { player_id: 4, position: 2, points: 60, tournament_points: 0 },
+        { match_id: 1, player_id: 3, position: 1, points: 80, tournament_points: 1 },
+        { match_id: 1, player_id: 4, position: 2, points: 70, tournament_points: 0 },
       ],
     },
     playerTotalPoints: {

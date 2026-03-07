@@ -7,8 +7,10 @@ import Modal from '../components/common/Modal';
 import Input from '../components/common/Input';
 import { Column } from '../components/common/Table';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useTranslation } from 'react-i18next';
 
 export default function Cities() {
+  const { t } = useTranslation();
   const { addNotification } = useNotifications();
   const [cities, setCities] = useState<City[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,11 +26,11 @@ export default function Cities() {
       setCities(data);
     } catch (error) {
       console.error('Error loading cities:', error);
-      addNotification({ message: 'Error al cargar las ciudades', type: 'error' });
+      addNotification({ message: t('cities.errors.load'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
-  }, [addNotification]);
+  }, [addNotification, t]);
 
   useEffect(() => {
     loadCities();
@@ -56,7 +58,7 @@ export default function Cities() {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) {
-      newErrors.name = 'El nombre es requerido';
+      newErrors.name = t('cities.errors.name_required');
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -68,17 +70,17 @@ export default function Cities() {
       setIsLoading(true);
       if (editingCity?.id) {
         await DatabaseService.updateCity(editingCity.id, { name: formData.name.trim() });
-        addNotification({ message: 'Ciudad actualizada', type: 'success' });
+        addNotification({ message: t('cities.errors.save_success'), type: 'success' });
       } else {
         await DatabaseService.createCity({ name: formData.name.trim() });
-        addNotification({ message: 'Ciudad creada', type: 'success' });
+        addNotification({ message: t('cities.errors.create_success'), type: 'success' });
       }
       handleCloseModal();
       loadCities();
     } catch (error) {
       console.error('Error saving city:', error);
       addNotification({
-        message: error instanceof Error ? error.message : 'Error al guardar la ciudad',
+        message: error instanceof Error ? error.message : t('cities.errors.save'),
         type: 'error',
       });
     } finally {
@@ -88,16 +90,16 @@ export default function Cities() {
 
   const handleDelete = async (city: City) => {
     if (!city.id) return;
-    if (!confirm(`¿Eliminar la ciudad "${city.name}"?`)) return;
+    if (!confirm(t('cities.alerts.delete_confirm', { name: city.name }))) return;
     try {
       setIsLoading(true);
       await DatabaseService.deleteCity(city.id);
-      addNotification({ message: 'Ciudad eliminada', type: 'success' });
+      addNotification({ message: t('cities.errors.delete_success'), type: 'success' });
       loadCities();
     } catch (error) {
       console.error('Error deleting city:', error);
       addNotification({
-        message: error instanceof Error ? error.message : 'Error al eliminar la ciudad',
+        message: error instanceof Error ? error.message : t('cities.errors.delete'),
         type: 'error',
       });
     } finally {
@@ -106,17 +108,17 @@ export default function Cities() {
   };
 
   const columns: Column<City>[] = [
-    { key: 'name', header: 'Nombre' },
+    { key: 'name', header: t('cities.columns.name') },
     {
       key: 'actions',
-      header: 'Acciones',
+      header: t('cities.columns.actions'),
       render: (city) => (
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => handleOpenModal(city)}>
-            Editar
+            {t('cities.actions.edit')}
           </Button>
           <Button variant="danger" size="sm" onClick={() => handleDelete(city)}>
-            Eliminar
+            {t('cities.actions.delete')}
           </Button>
         </div>
       ),
@@ -127,18 +129,18 @@ export default function Cities() {
     <div className="px-4 py-6">
       <div className="card">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Ciudades</h1>
-          <Button onClick={() => handleOpenModal()}>Nueva Ciudad</Button>
+          <h1 className="text-2xl font-bold">{t('cities.title')}</h1>
+          <Button onClick={() => handleOpenModal()}>{t('cities.new')}</Button>
         </div>
 
         {isLoading && cities.length === 0 ? (
-          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">{t('cities.loading')}</p>
         ) : (
           <Table
             columns={columns}
             data={cities}
             keyExtractor={(city) => city.id ?? Math.random()}
-            emptyMessage="No hay ciudades registradas"
+            emptyMessage={t('cities.empty_msg')}
           />
         )}
       </div>
@@ -146,21 +148,21 @@ export default function Cities() {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingCity ? 'Editar Ciudad' : 'Nueva Ciudad'}
+        title={editingCity ? t('cities.modal.edit') : t('cities.modal.new')}
         footer={
           <>
             <Button variant="secondary" onClick={handleCloseModal}>
-              Cancelar
+              {t('cities.modal.cancel_btn')}
             </Button>
             <Button onClick={handleSubmit} isLoading={isLoading}>
-              {editingCity ? 'Actualizar' : 'Crear'}
+              {editingCity ? t('cities.modal.update_btn') : t('cities.modal.create_btn')}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
-            label="Nombre *"
+            label={t('cities.form.name')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             error={errors.name}

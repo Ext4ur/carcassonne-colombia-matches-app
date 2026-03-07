@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Input from '../common/Input';
+import { useTranslation } from 'react-i18next';
 
 interface RoundsConfirmationModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export default function RoundsConfirmationModal({
   mode,
   currentRounds,
 }: RoundsConfirmationModalProps) {
+  const { t } = useTranslation();
   const [numberOfRounds, setNumberOfRounds] = useState<string>(
     currentRounds?.toString() || calculatedRounds.toString()
   );
@@ -37,27 +39,27 @@ export default function RoundsConfirmationModal({
   const handleConfirm = () => {
     const rounds = parseInt(numberOfRounds, 10);
     if (isNaN(rounds) || rounds < 1) {
-      setError('El número de rondas debe ser al menos 1');
+      setError(t('tournaments.rounds_modal.error_min'));
       return;
     }
     onConfirm(rounds);
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Confirmar Número de Rondas" size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('tournaments.rounds_modal.title')} size="sm">
       <div className="space-y-3">
         <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <p className="text-sm text-gray-700 dark:text-gray-300">
-            <strong>Jugadores inscritos:</strong> {numPlayers}
+            <strong>{t('tournaments.rounds_modal.registered')}</strong> {numPlayers}
           </p>
           <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-            <strong>Rondas calculadas:</strong> {calculatedRounds}
+            <strong>{t('tournaments.rounds_modal.calculated')}</strong> {calculatedRounds}
           </p>
         </div>
 
         <div>
           <Input
-            label="Número de Rondas"
+            label={t('tournaments.rounds_modal.label')}
             type="number"
             value={numberOfRounds}
             onChange={(e) => {
@@ -77,18 +79,18 @@ export default function RoundsConfirmationModal({
             error={error}
             helperText={
               mode === 'quick'
-                ? 'En modo rápido se calcula automáticamente'
-                : 'Ajusta el número de rondas si lo necesitas'
+                ? t('tournaments.rounds_modal.help_quick')
+                : t('tournaments.rounds_modal.help_advanced')
             }
           />
         </div>
 
         <div className="flex justify-end space-x-2 pt-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancelar
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleConfirm} variant="primary">
-            Confirmar
+            {t('common.confirm')}
           </Button>
         </div>
       </div>

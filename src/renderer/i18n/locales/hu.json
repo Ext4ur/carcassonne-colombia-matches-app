@@ -1,0 +1,482 @@
+{
+  "common": {
+    "save": "Mentés",
+    "cancel": "Mégse",
+    "edit": "Szerkesztés",
+    "delete": "Törlés",
+    "create": "Létrehozás",
+    "sync": "Szinkronizálás",
+    "loading": "Betöltés...",
+    "actions": "Műveletek",
+    "status": "Állapot",
+    "language": "Nyelv",
+    "close": "Bezárás",
+    "name": "Név",
+    "type": "Típus",
+    "circuit": "Sorozat",
+    "date": "Dátum",
+    "view": "Megtekintés",
+    "update": "Frissítés",
+    "delete_error": "Hiba a törlés során",
+    "error_loading": "Hiba a betöltés során",
+    "continue": "Folytatás",
+    "confirm": "Megerősítés",
+    "back": "Vissza",
+    "play": "Játék"
+  },
+  "nav": {
+    "home": "Kezdőlap",
+    "tournaments": "Versenyek",
+    "circuits": "Sorozatok",
+    "players": "Játékosok",
+    "places": "Helyszínek",
+    "cities": "Városok",
+    "settings": "Beállítások"
+  },
+  "home": {
+    "welcome": "Üdvözöljük a Carcassonne Versenykezelőben",
+    "description": "Kezelje profi módon a személyes Carcassonne versenyeit.",
+    "tournaments_desc": "Hozzon létre és kezeljen selejtező vagy sorozat versenyeket",
+    "players_desc": "Játékos adatbázis kezelése",
+    "circuits_desc": "Sorozatok és versenyek kezelése"
+  },
+  "circuits": {
+    "title": "Sorozatok",
+    "new_circuit": "Új Sorozat",
+    "search_placeholder": "Keresés sorozat neve alapján",
+    "empty_msg": "Nincsenek regisztrált sorozatok",
+    "loading": "Betöltés...",
+    "form": {
+      "name": "Név *",
+      "description": "Leírás",
+      "start_date": "Kezdési Dátum",
+      "end_date": "Befejezési Dátum",
+      "status": "Állapot",
+      "status_active": "Aktív",
+      "status_finalized": "Befejezve",
+      "status_help": "\"Befejezve\" állapotban nem adható több verseny a sorozathoz."
+    },
+    "columns": {
+      "name": "Név",
+      "status": "Állapot",
+      "start_date": "Kezdési Dátum",
+      "end_date": "Befejezési Dátum",
+      "actions": "Műveletek"
+    },
+    "actions": {
+      "view": "Megtekintés",
+      "edit": "Szerkesztés",
+      "finalize": "Befejezés",
+      "delete": "Törlés"
+    },
+    "alerts": {
+      "finalize_confirm": "Befejezi a(z) \"{{name}}\" sorozatot? Nem adható hozzá több verseny.",
+      "delete_confirm": "Biztosan törölni szeretné a(z) \"{{name}}\" sorozatot?",
+      "finalize_title": "Nem adható hozzá több verseny"
+    },
+    "errors": {
+      "load": "Hiba a sorozatok betöltésekor",
+      "load_standings": "Hiba a ranglista betöltésekor",
+      "finalize": "Hiba a sorozat befejezésekor",
+      "save": "Hiba a sorozat mentésekor",
+      "delete": "Hiba a sorozat törlésekor",
+      "report": "Hiba a jelentés készítésekor",
+      "report_success": "Jelentés sikeresen elkészítve",
+      "name_required": "A név megadása kötelező",
+      "date_order": "A befejezési dátumnak a kezdési dátum után kell lennie"
+    },
+    "modal": {
+      "edit": "Sorozat Szerkesztése",
+      "new": "Új Sorozat",
+      "update_btn": "Frissítés",
+      "create_btn": "Létrehozás",
+      "cancel_btn": "Mégsem"
+    },
+    "standings": {
+      "title_final": "Végső Statisztikák - {{name}}",
+      "title_active": "Ranglista - {{name}}",
+      "export_excel": "Excel Exportálása",
+      "export_csv": "CSV Exportálása",
+      "close": "Bezárás",
+      "filters": "Szűrők",
+      "filter_place": "Helyszín szerint",
+      "all_places": "Minden helyszín",
+      "filter_stop": "Állomás szerint",
+      "all_stops": "Minden állomás",
+      "filter_player": "Játékos szerint",
+      "all_players": "Minden játékos",
+      "final_podium": "Végső Dobogó",
+      "pts": "pont",
+      "chart_pos_title": "Pozíció minden sorozatállomáson",
+      "chart_pos_y": "Pozíció",
+      "chart_pos_x": "Állomás",
+      "chart_pts_title": "Megszerzett pontok állomásonként",
+      "chart_pts_y": "Megszerzett pontok",
+      "chart_pts_x": "Állomás",
+      "table_title": "Ranglista táblázat",
+      "empty_data": "Nincs elérhető ranglista adat",
+      "columns": {
+        "position": "Pozíció",
+        "player": "Játékos",
+        "total_points": "Összes Pont",
+        "tournaments": "Versenyek",
+        "wins": "Győzelmek",
+        "sos": "Ellenfelek Győzelmei",
+        "sos_title": "Ellenfelek győzelmeinek összege"
+      }
+    }
+  },
+  "theme": {
+    "dark": "Sötét mód",
+    "light": "Világos mód"
+  },
+  "tournaments": {
+    "title": "Versenykezelés",
+    "new": "Új Verseny",
+    "rounds": "Fordulók",
+    "matches": "Mérkőzések",
+    "standings": "Ranglista",
+    "players": "Játékosok",
+    "matrix": "Mátrix",
+    "position_name": "Hely. Név",
+    "stats": "Statisztika",
+    "buchholz_cut": "Buchholz Cut",
+    "median": "Medián",
+    "quick_tournament": "Gyors Verseny",
+    "search_placeholder": "Keresés verseny vagy helyszín alapján",
+    "filter_place": "Szűrés helyszín szerint",
+    "all_places": "Minden helyszín",
+    "empty_msg": "Nincsenek regisztrált versenyek",
+    "types": {
+      "qualifier": "Selejtező",
+      "circuit": "Sorozat"
+    },
+    "statuses": {
+      "draft": "Tervezet",
+      "in_progress": "Folyamatban",
+      "completed": "Befejeződött",
+      "pending": "Függőben",
+      "active": "Aktív",
+      "dropped": "Visszalépett ({{round}}. Forduló)"
+    },
+    "wizard": {
+      "cancel_confirm": "Mégsem? A verseny nem jön létre, és az űrlap adatai elvesznek.",
+      "missing_data": "Hiányzó verseny adatok",
+      "created": "Verseny sikeresen létrehozva",
+      "create_error": "Hiba a verseny létrehozásakor",
+      "delete_confirm": "Biztosan törölni szeretné a \\\"{{name}}\\\" versenyt?",
+      "quick_title": "Gyors Verseny Létrehozása",
+      "step1": "Verseny Létrehozása - 1. Lépés: Információ",
+      "step2": "Verseny Létrehozása - 2. Lépés: Beállítások",
+      "step3": "Verseny Létrehozása - 3. Lépés: Regisztráció",
+      "cancel_confirm_edit": "Szerkesztés visszavonása? A módosítások elvesznek."
+    },
+    "form": {
+      "name_req": "A név megadása kötelező",
+      "circuit_req": "Ki kell választani egy sorozatot",
+      "date_req": "A dátum megadása kötelező",
+      "place_req": "Ki kell választani egy helyszínt",
+      "players_range": "2 és 4 közötti játékosszám szükséges",
+      "name_label": "Verseny Neve *",
+      "type_label": "Verseny Típusa *",
+      "circuit_label": "Sorozat *",
+      "select_circuit": "Válasszon sorozatot...",
+      "place_label": "Helyszín *",
+      "select_place": "Válasszon helyszínt...",
+      "date_label": "Dátum *",
+      "players_label": "Játékosok Mérkőzésenként *",
+      "n_players": "{{count}} játékos",
+      "rounds_label": "Fordulók száma (opcionális, automatikusan számítva, ha üres)",
+      "rounds_help": "A 2 hatványaként lesz kiszámolva a játékosok száma alapján, ha üres"
+    },
+    "config": {
+      "avoid_rematches": "Ne játsszon két játékos egymás ellen kétszer",
+      "bye_selection": "Erőnyerő (Bye) kiválasztása (páratlan számú játékos esetén)",
+      "bye_worst": "A forduló legrosszabb játékosa (alapértelmezett)",
+      "bye_random": "Véletlenszerű",
+      "bye_round_robin": "Körmérkőzés (maximum 1 erőnyerő játékosonként)",
+      "bye_help": "Az erőnyerő játékos automatikusan megnyeri a mérkőzést",
+      "display_mode": "Játékosok megjelenítése",
+      "display_default": "Összes megjelenítése alapértelmezésként (a játékos preferenciája alapján)",
+      "display_names": "Csak nevek megjelenítése (keresztnév és vezetéknév)",
+      "display_usernames": "Csak felhasználónevek megjelenítése",
+      "display_help": "Hogyan jelenjenek meg a nevek a ranglistán és az eredményeknél",
+      "tiebreaks_title": "Holtverseny kritériumok",
+      "tiebreaks_help": "Húzza az átrendezéshez. Törölje a jelet a kritérium kikapcsolásához.",
+      "scoring_title": "Pontozási Rendszer",
+      "scoring_help": "Verseny pontszámok a mérkőzésen elért helyezés alapján",
+      "position_n": "{{position}}. helyezés",
+      "save_config": "Beállítások Mentése"
+    },
+    "registration": {
+      "title": "Játékosok Regisztrálása",
+      "load_error": "Hiba a játékosok betöltésekor",
+      "already_in_list": "Ez a játékos már rajta van a listán",
+      "already_registered": "Ez a játékos már regisztrált a versenyre",
+      "register_error": "Hiba a játékos regisztrálásakor",
+      "remove_draft_confirm": "Eltávolítja {{name}} játékost a listáról?",
+      "remove_confirm": "Biztosan törölni szeretné {{name}} játékost a versenyből?",
+      "remove_error": "Hiba a játékos eltávolításakor",
+      "create_error": "Hiba a játékos létrehozásakor",
+      "search_placeholder": "Létező játékos keresése...",
+      "new_player": "Új Játékos",
+      "registered_count": "Regisztrált játékosok ({{count}})",
+      "calculated_rounds": "Számított fordulók",
+      "empty_msg": "Nincsenek regisztrált játékosok. Keressen vagy hozzon létre egyet a regisztrációhoz.",
+      "continue_with_count": "Folytatás ({{count}} játékos)",
+      "create_and_register": "Létrehozás és Regisztráció"
+    },
+    "rounds_modal": {
+      "title": "Fordulók számának megerősítése",
+      "error_min": "A fordulók számának legalább 1-nek kell lennie",
+      "registered": "Regisztrált játékosok:",
+      "calculated": "Számított fordulók:",
+      "label": "Fordulók száma",
+      "help_quick": "Gyors módban automatikusan számolódik",
+      "help_advanced": "Módosítsa a fordulók számát szükség esetén"
+    },
+    "detail": {
+      "matrix_btn": "Mátrix",
+      "close_stats": "Stats Bezárása",
+      "stats": "Stats",
+      "generate_report": "Jelentés Készítése",
+      "rounds": "Fordulók",
+      "generate_first_round": "Első Forduló Generálása",
+      "manual_pairings": "Kézi Párosítások",
+      "tournament_finished": "Verseny Befejeződött",
+      "finish_tournament": "Verseny Befejezése",
+      "view_results": "Eredmények Megtekintése",
+      "generate_next_round": "Következő Forduló Generálása",
+      "complete_current_round": "Fejezze be a jelenlegi fordulót a folytatáshoz",
+      "matches": "Mérkőzések",
+      "matches_round": "Mérkőzések - {{round}}. Forduló",
+      "select_round": "Válasszon egy fordulót a mérkőzések megtekintéséhez",
+      "unassigned": "Nincs kiosztva",
+      "winner": "Győztes",
+      "second_place": "2. Helyezett",
+      "third_place": "3. Helyezett",
+      "fourth_place": "4. Helyezett",
+      "fifth_place": "5. Helyezett",
+      "bye_not_editable": "Bye - Nem szerkeszthető"
+    }
+  },
+  "tiebreaks": {
+    "wins": "Győzelmek száma",
+    "opponent_points_drop_worst": "Eddigi ellenfelek pontjainak összege (legrosszabb nélkül)",
+    "opponent_points_drop_best_worst": "Eddigi ellenfelek pontjainak összege (legjobb és legrosszabb nélkül)",
+    "head_to_head": "Egymás elleni eredmény (Head-to-head)",
+    "point_difference": "Pontkülönbség összege"
+  },
+  "tiebreaks_short": {
+    "wins": "🏆 Győzelmek",
+    "opponent_points_drop_worst": "📊 Ellenfél Pts (-legrosszabb)",
+    "opponent_points_drop_best_worst": "📈 Ellenfél Pts (-legjobb/legrosszabb)",
+    "head_to_head": "⚔️ Egymás elleni",
+    "point_difference": "📉 Különbség"
+  },
+  "stats": {
+    "title": "Statisztika",
+    "podium": "Dobogó",
+    "wins_distribution": "Győzelmek megoszlása",
+    "opponent_points": "Ellenfelek pontjai (-legrosszabb)",
+    "opponent_points_full": "Ellenfelek pontjai (-legjobb/rosszabb)",
+    "h2h": "Egymás elleni eredmények",
+    "diff": "Pontkülönbség"
+  },
+  "players": {
+    "title": "Játékosok",
+    "new": "Új Játékos",
+    "name": "Név",
+    "bga_username": "BGA Username",
+    "phone": "Telefon",
+    "email": "Email",
+    "age": "Kor",
+    "wins": "Győzelmek",
+    "search_placeholder": "Keresés név vagy BGA username alapján...",
+    "empty_msg": "Nincsenek regisztrált játékosok",
+    "loading": "Betöltés...",
+    "form": {
+      "name": "Név *",
+      "bga_username": "BGA Username",
+      "display_preference": "Megjelenítési preferencia",
+      "display_preference_help": "Ha megvan a név és a username, melyiket mutassa a versenyeken (ha megengedett).",
+      "display_name": "Név",
+      "display_username": "BGA Username",
+      "phone": "Telefon",
+      "email": "Email",
+      "age": "Kor"
+    },
+    "errors": {
+      "load": "Hiba a játékosok betöltésekor",
+      "email_invalid": "Érvénytelen email cím",
+      "age_invalid": "Az életkornak érvényes számnak kell lennie",
+      "save": "Hiba a játékos mentésekor",
+      "save_success": "Játékos sikeresen frissítve",
+      "create_success": "Játékos sikeresen létrehozva",
+      "delete": "Hiba a játékos törlésekor",
+      "delete_success": "Játékos sikeresen törölve",
+      "load_opponents": "Hiba az ellenfelek betöltésekor",
+      "name_required": "A név megadása kötelező"
+    },
+    "columns": {
+      "name": "Név",
+      "bga_username": "BGA Username",
+      "phone": "Telefon",
+      "email": "Email",
+      "age": "Kor",
+      "actions": "Műveletek"
+    },
+    "actions": {
+      "view_stats": "Statisztika megtekintése",
+      "view_stats_icon": "📊",
+      "view_opponents": "Ellenfelek megtekintése",
+      "view_opponents_icon": "👥",
+      "edit": "Szerkesztés",
+      "delete": "Törlés",
+      "view_history": "Előzmények megtekintése"
+    },
+    "alerts": {
+      "delete_confirm": "Biztosan törölni szeretné: {{name}}?"
+    },
+    "opponents_modal": {
+      "title": "Ellenfelek - {{name}}",
+      "empty_msg": "Nincsenek regisztrált ellenfelek",
+      "cols": {
+        "player": "Játékos",
+        "matches": "Mérkőzések",
+        "wins": "Győzelmek",
+        "losses": "Vereségek",
+        "actions": "Műveletek"
+      }
+    },
+    "stats_modal": {
+      "title": "Statisztika - {{name}}"
+    },
+    "modal": {
+      "edit": "Játékos Szerkesztése",
+      "new": "Új Játékos",
+      "update_btn": "Frissítés",
+      "create_btn": "Létrehozás",
+      "cancel_btn": "Mégsem"
+    }
+  },
+  "places": {
+    "title": "Helyszínek",
+    "new": "Új Helyszín",
+    "empty_msg": "Nincsenek regisztrált helyszínek",
+    "loading": "Betöltés...",
+    "form": {
+      "name": "Név *",
+      "city": "Város *",
+      "select_city": "Város kiválasztása..."
+    },
+    "errors": {
+      "load": "Hiba a helyszínek betöltésekor",
+      "save": "Hiba a helyszín mentésekor",
+      "save_success": "Helyszín frissítve",
+      "create_success": "Helyszín létrehozva",
+      "delete": "Hiba a helyszín törlésekor",
+      "delete_success": "Helyszín törölve",
+      "name_required": "A név megadása kötelező",
+      "city_required": "Ki kell választani egy várost",
+      "delete_default": "Az alapértelmezett helyszín ({{name}}) nem törölhető."
+    },
+    "columns": {
+      "name": "Név",
+      "city": "Város",
+      "actions": "Műveletek"
+    },
+    "actions": {
+      "edit": "Szerkesztés",
+      "delete": "Törlés",
+      "delete_default_tooltip": "Az alapértelmezett helyszín nem törölhető"
+    },
+    "alerts": {
+      "delete_confirm": "Törli a helyszínt: \"{{name}}\"?"
+    },
+    "modal": {
+      "edit": "Helyszín Szerkesztése",
+      "new": "Új Helyszín",
+      "update_btn": "Frissítés",
+      "create_btn": "Létrehozás",
+      "cancel_btn": "Mégsem"
+    }
+  },
+  "cities": {
+    "title": "Városok",
+    "new": "Új Város",
+    "empty_msg": "Nincsenek regisztrált városok",
+    "loading": "Betöltés...",
+    "form": {
+      "name": "Név *"
+    },
+    "errors": {
+      "load": "Hiba a városok betöltésekor",
+      "save": "Hiba a város mentésekor",
+      "save_success": "Város frissítve",
+      "create_success": "Város létrehozva",
+      "delete": "Hiba a város törlésekor",
+      "delete_success": "Város törölve",
+      "name_required": "A név megadása kötelező"
+    },
+    "columns": {
+      "name": "Név",
+      "actions": "Műveletek"
+    },
+    "actions": {
+      "edit": "Szerkesztés",
+      "delete": "Törlés"
+    },
+    "alerts": {
+      "delete_confirm": "Törli a várost: \"{{name}}\"?"
+    },
+    "modal": {
+      "edit": "Város Szerkesztése",
+      "new": "Új Város",
+      "update_btn": "Frissítés",
+      "create_btn": "Létrehozás",
+      "cancel_btn": "Mégsem"
+    }
+  },
+  "settings": {
+    "title": "Beállítások",
+    "appearance": "Megjelenés",
+    "language": "Nyelv",
+    "language_desc": "Válassza ki az alkalmazás nyelvét",
+    "theme": "Téma",
+    "theme_desc": "Váltás világos és sötét téma között",
+    "dark_mode": "🌙 Sötét Mód",
+    "light_mode": "☀️ Világos Mód",
+    "data": "Adatok",
+    "export_title": "Adatok Exportálása",
+    "export_desc": "Minden adat (versenyek, játékosok, áramkörök) exportálása JSON-fájlba biztonsági mentés céljából.",
+    "export_btn": "Adatok Exportálása",
+    "import_title": "Adatok Importálása",
+    "import_desc": "Adatok importálása JSON-fájlból. Ez hozzáadja az adatokat a meglévőkhöz.",
+    "import_btn": "Adatok Importálása",
+    "about": "Beállítások",
+    "developed_by": "Fejlesztő",
+    "app_name": "Carcassonne Tournament Manager v1.0",
+    "app_desc": "Alkalmazás a Carcassonne Colombia offline versenyeinek kezeléséhez",
+    "errors": {
+      "export_success": "Adatok sikeresen exportálva",
+      "export_error": "Hiba az adatok exportálásakor",
+      "import_success": "Adatok sikeresen importálva: {{summary}}",
+      "import_error": "Hiba az adatok importálásakor"
+    }
+  },
+  "database_status": {
+    "title": "Adatbázis Állapota",
+    "current_client": "Jelenlegi kliens:",
+    "local": "SQLite (Helyi)",
+    "sync": "SQLite (Helyi) + Supabase (Szinkron)",
+    "queries_db": "Kérések a Supabase / DB felé: ",
+    "queries_cache": "Gyorsítótárból: ",
+    "update_btn": "Számláló frissítése",
+    "reset_btn": "Visszaállítás",
+    "help_text": "A DB-kérések azok, amelyek elérik az ügyfelet; a gyorsítótárból származók a DB érintése nélkül megoldott olvasások.",
+    "test_btn": "Supabase Kapcsolat Tesztelése",
+    "testing_btn": "Tesztelés...",
+    "test_error": "Hiba a kapcsolat tesztelésekor"
+  }
+}

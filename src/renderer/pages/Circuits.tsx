@@ -11,6 +11,7 @@ import { Circuit, CircuitStandings } from '../types/circuit';
 import { Place } from '../types/place';
 import { formatDateForDisplay } from '../utils/dateUtils';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useTranslation } from 'react-i18next';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
@@ -43,7 +44,7 @@ ChartJS.register(
 );
 
 export default function Circuits() {
-  // const navigate = useNavigate();
+  const { t } = useTranslation();
   const { addNotification } = useNotifications();
   const [circuits, setCircuits] = useState<Circuit[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -78,11 +79,11 @@ export default function Circuits() {
       setCircuits(data);
     } catch (error) {
       console.error('Error loading circuits:', error);
-      addNotification({ message: 'Error al cargar los circuitos', type: 'error' });
+      addNotification({ message: t('circuits.errors.load'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
-  }, [addNotification]);
+  }, [addNotification, t]);
 
   useEffect(() => {
     loadCircuits();
@@ -116,7 +117,7 @@ export default function Circuits() {
       setStandingsModalOpen(true);
     } catch (error) {
       console.error('Error loading standings:', error);
-      addNotification({ message: 'Error al cargar el acumulado', type: 'error' });
+      addNotification({ message: t('circuits.errors.load_standings'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -124,15 +125,14 @@ export default function Circuits() {
 
   const handleFinalizeCircuit = async (circuit: Circuit) => {
     if (!circuit.id) return;
-    if (!confirm(`¿Finalizar el circuito "${circuit.name}"? No se podrán agregar más torneos.`))
-      return;
+    if (!confirm(t('circuits.alerts.finalize_confirm', { name: circuit.name }))) return;
     try {
       setIsLoading(true);
       await DatabaseService.updateCircuit(circuit.id, { status: 'finalized' });
       loadCircuits();
     } catch (error) {
       console.error('Error finalizing circuit:', error);
-      addNotification({ message: 'Error al finalizar el circuito', type: 'error' });
+      addNotification({ message: t('circuits.errors.finalize'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -179,11 +179,11 @@ export default function Circuits() {
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'El nombre es requerido';
+      newErrors.name = t('circuits.errors.name_required');
     }
 
     if (formData.start_date && formData.end_date && formData.start_date > formData.end_date) {
-      newErrors.end_date = 'La fecha de fin debe ser posterior a la fecha de inicio';
+      newErrors.end_date = t('circuits.errors.date_order');
     }
 
     setErrors(newErrors);
@@ -216,7 +216,7 @@ export default function Circuits() {
       loadCircuits();
     } catch (error) {
       console.error('Error saving circuit:', error);
-      addNotification({ message: 'Error al guardar el circuito', type: 'error' });
+      addNotification({ message: t('circuits.errors.save'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -224,7 +224,7 @@ export default function Circuits() {
 
   const handleDelete = async (circuit: Circuit) => {
     if (!circuit.id) return;
-    if (!confirm(`¿Estás seguro de eliminar el circuito "${circuit.name}"?`)) return;
+    if (!confirm(t('circuits.alerts.delete_confirm', { name: circuit.name }))) return;
 
     try {
       setIsLoading(true);
@@ -232,7 +232,7 @@ export default function Circuits() {
       loadCircuits();
     } catch (error) {
       console.error('Error deleting circuit:', error);
-      addNotification({ message: 'Error al eliminar el circuito', type: 'error' });
+      addNotification({ message: t('circuits.errors.delete'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -262,16 +262,16 @@ export default function Circuits() {
 
       const result = await window.electronAPI.saveFile(data, filename, type);
       if (result.success) {
-        addNotification({ message: 'Reporte generado exitosamente', type: 'success' });
+        addNotification({ message: t('circuits.errors.report_success'), type: 'success' });
       } else if (!result.canceled) {
         addNotification({
-          message: 'Error al generar el reporte: ' + (result.error || 'Error desconocido'),
+          message: t('circuits.errors.report') + ': ' + (result.error || 'Error desconocido'),
           type: 'error',
         });
       }
     } catch (error) {
       console.error('Error generating report:', error);
-      addNotification({ message: 'Error al generar el reporte', type: 'error' });
+      addNotification({ message: t('circuits.errors.report'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -280,11 +280,11 @@ export default function Circuits() {
   const columns: Column<Circuit>[] = [
     {
       key: 'name',
-      header: 'Nombre',
+      header: t('circuits.columns.name'),
     },
     {
       key: 'status',
-      header: 'Estado',
+      header: t('circuits.columns.status'),
       width: '8%',
       render: (circuit) => {
         const isFinalized = circuit.status === 'finalized';
@@ -296,46 +296,46 @@ export default function Circuits() {
                 : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
             }`}
           >
-            {isFinalized ? 'Finalizado' : 'Activo'}
+            {isFinalized ? t('circuits.form.status_finalized') : t('circuits.form.status_active')}
           </span>
         );
       },
     },
     {
       key: 'start_date',
-      header: 'Fecha Inicio',
+      header: t('circuits.columns.start_date'),
       width: '10%',
       render: (circuit) => formatDateForDisplay(circuit.start_date),
     },
     {
       key: 'end_date',
-      header: 'Fecha Fin',
+      header: t('circuits.columns.end_date'),
       width: '10%',
       render: (circuit) => formatDateForDisplay(circuit.end_date),
     },
     {
       key: 'actions',
-      header: 'Acciones',
+      header: t('circuits.columns.actions'),
       render: (circuit) => (
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" size="sm" onClick={() => handleViewStandings(circuit)}>
-            Ver
+            {t('circuits.actions.view')}
           </Button>
           <Button variant="secondary" size="sm" onClick={() => handleOpenModal(circuit)}>
-            Editar
+            {t('circuits.actions.edit')}
           </Button>
           {circuit.status !== 'finalized' && (
             <Button
               variant="secondary"
               size="sm"
               onClick={() => handleFinalizeCircuit(circuit)}
-              title="No se podrán agregar más torneos"
+              title={t('circuits.alerts.finalize_title')}
             >
-              Finalizar
+              {t('circuits.actions.finalize')}
             </Button>
           )}
           <Button variant="danger" size="sm" onClick={() => handleDelete(circuit)}>
-            Eliminar
+            {t('circuits.actions.delete')}
           </Button>
         </div>
       ),
@@ -345,40 +345,40 @@ export default function Circuits() {
   const standingsColumns: Column<CircuitStandings>[] = [
     {
       key: 'position',
-      header: 'Posición',
+      header: t('circuits.standings.columns.position'),
       render: (_standing, index) => (index != null ? index + 1 : 1),
       width: '8%',
     },
     {
       key: 'player_name',
-      header: 'Jugador',
+      header: t('circuits.standings.columns.player'),
       className: 'whitespace-nowrap font-medium',
       width: '40%',
     },
     {
       key: 'total_points',
-      header: 'Puntos Totales',
+      header: t('circuits.standings.columns.total_points'),
       render: (standing) => standing.total_points.toFixed(0),
       className: 'text-center',
       width: '13%',
     },
     {
       key: 'tournaments_played',
-      header: 'Torneos',
+      header: t('circuits.standings.columns.tournaments'),
       className: 'text-center',
       width: '13%',
     },
     {
       key: 'wins',
-      header: 'Victorias',
+      header: t('circuits.standings.columns.wins'),
       className: 'text-center',
       width: '13%',
     },
     {
       key: 'sos',
-      header: 'Victorias Oponentes',
+      header: t('circuits.standings.columns.sos'),
       render: (standing) => standing.sos.toFixed(0),
-      title: 'Suma de victorias de los oponentes',
+      title: t('circuits.standings.columns.sos_title'),
       className: 'text-center',
       width: '13%',
     },
@@ -400,18 +400,18 @@ export default function Circuits() {
     maintainAspectRatio: false,
     plugins: {
       legend: { position: 'top' as const },
-      title: { display: true, text: 'Posición en cada parada del circuito' },
+      title: { display: true, text: t('circuits.standings.chart_pos_title') },
       tooltip: { padding: 12 },
     },
     scales: {
       y: {
         reverse: true,
         min: 1,
-        title: { display: true, text: 'Posición' },
+        title: { display: true, text: t('circuits.standings.chart_pos_y') },
         grid: { color: 'rgba(0,0,0,0.06)' },
       },
       x: {
-        title: { display: true, text: 'Parada' },
+        title: { display: true, text: t('circuits.standings.chart_pos_x') },
         grid: { display: false },
       },
     },
@@ -422,17 +422,17 @@ export default function Circuits() {
     maintainAspectRatio: false,
     plugins: {
       legend: { position: 'top' as const },
-      title: { display: true, text: 'Puntos acumulados por parada' },
+      title: { display: true, text: t('circuits.standings.chart_pts_title') },
       tooltip: { padding: 12 },
     },
     scales: {
       y: {
         min: 0,
-        title: { display: true, text: 'Puntos acumulados' },
+        title: { display: true, text: t('circuits.standings.chart_pts_y') },
         grid: { color: 'rgba(0,0,0,0.06)' },
       },
       x: {
-        title: { display: true, text: 'Parada' },
+        title: { display: true, text: t('circuits.standings.chart_pts_x') },
         grid: { display: false },
       },
     },
@@ -545,26 +545,28 @@ export default function Circuits() {
     <div className="px-4 py-6">
       <div className="card">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Circuitos</h1>
-          <Button onClick={() => handleOpenModal()}>Nuevo Circuito</Button>
+          <h1 className="text-2xl font-bold">{t('circuits.title')}</h1>
+          <Button onClick={() => handleOpenModal()}>{t('circuits.new_circuit')}</Button>
         </div>
 
         <div className="mb-4 max-w-xs">
           <Input
-            placeholder="Buscar por nombre de circuito"
+            placeholder={t('circuits.search_placeholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
         {isLoading && circuits.length === 0 ? (
-          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">
+            {t('circuits.loading')}
+          </p>
         ) : (
           <Table
             columns={columns}
             data={filteredCircuits}
             keyExtractor={(circuit) => circuit.id || Math.random()}
-            emptyMessage="No hay circuitos registrados"
+            emptyMessage={t('circuits.empty_msg')}
           />
         )}
       </div>
@@ -572,40 +574,40 @@ export default function Circuits() {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingCircuit ? 'Editar Circuito' : 'Nuevo Circuito'}
+        title={editingCircuit ? t('circuits.modal.edit') : t('circuits.modal.new')}
         footer={
           <>
             <Button variant="secondary" onClick={handleCloseModal}>
-              Cancelar
+              {t('circuits.modal.cancel_btn')}
             </Button>
             <Button onClick={handleSubmit} isLoading={isLoading}>
-              {editingCircuit ? 'Actualizar' : 'Crear'}
+              {editingCircuit ? t('circuits.modal.update_btn') : t('circuits.modal.create_btn')}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
-            label="Nombre *"
+            label={t('circuits.form.name')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             error={errors.name}
             required
           />
           <Textarea
-            label="Descripción"
+            label={t('circuits.form.description')}
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             rows={3}
           />
           <Input
-            label="Fecha de Inicio"
+            label={t('circuits.form.start_date')}
             type="date"
             value={formData.start_date}
             onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
           />
           <Input
-            label="Fecha de Fin"
+            label={t('circuits.form.end_date')}
             type="date"
             value={formData.end_date}
             onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
@@ -614,7 +616,7 @@ export default function Circuits() {
           {editingCircuit && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Estado
+                {t('circuits.form.status')}
               </label>
               <select
                 value={formData.status}
@@ -623,11 +625,11 @@ export default function Circuits() {
                 }
                 className="input w-full"
               >
-                <option value="active">Activo</option>
-                <option value="finalized">Finalizado</option>
+                <option value="active">{t('circuits.form.status_active')}</option>
+                <option value="finalized">{t('circuits.form.status_finalized')}</option>
               </select>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                En &quot;Finalizado&quot; no se podrán agregar más torneos al circuito.
+                {t('circuits.form.status_help')}
               </p>
             </div>
           )}
@@ -639,8 +641,8 @@ export default function Circuits() {
         onClose={() => setStandingsModalOpen(false)}
         title={
           selectedCircuit?.status === 'finalized'
-            ? `Estadísticas finales - ${selectedCircuit?.name}`
-            : `Acumulado - ${selectedCircuit?.name}`
+            ? t('circuits.standings.title_final', { name: selectedCircuit?.name })
+            : t('circuits.standings.title_active', { name: selectedCircuit?.name })
         }
         size="xl"
         footer={
@@ -651,59 +653,61 @@ export default function Circuits() {
                 onClick={() => handleGenerateReport(selectedCircuit, 'excel')}
                 isLoading={isLoading}
               >
-                Exportar Excel
+                {t('circuits.standings.export_excel')}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => handleGenerateReport(selectedCircuit, 'csv')}
                 isLoading={isLoading}
               >
-                Exportar CSV
+                {t('circuits.standings.export_csv')}
               </Button>
               <Button variant="primary" onClick={() => setStandingsModalOpen(false)}>
-                Cerrar
+                {t('circuits.standings.close')}
               </Button>
             </div>
           )
         }
       >
         {isLoading ? (
-          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">
+            {t('circuits.loading')}
+          </p>
         ) : (
           <div className="space-y-6">
             {/* Filters */}
             {(circuitTournaments.length > 0 || standings.length > 0 || places.length > 0) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 col-span-full">
-                  Filtros
+                  {t('circuits.standings.filters')}
                 </h3>
                 {places.length > 0 && (
                   <MultiSelect
-                    label="Por lugar"
+                    label={t('circuits.standings.filter_place')}
                     options={places
                       .filter((p) => p.id !== undefined)
                       .map((p) => ({ value: p.id!, label: p.name }))}
                     value={selectedPlaceIds}
                     onChange={(v) => setSelectedPlaceIds(v as number[])}
-                    placeholder="Todos los lugares"
+                    placeholder={t('circuits.standings.all_places')}
                   />
                 )}
                 {circuitTournaments.length > 0 && (
                   <MultiSelect
-                    label="Por parada"
+                    label={t('circuits.standings.filter_stop')}
                     options={circuitTournaments.map((t) => ({ value: t.id, label: t.name }))}
                     value={selectedStopIds}
                     onChange={(v) => setSelectedStopIds(v as number[])}
-                    placeholder="Todas las paradas"
+                    placeholder={t('circuits.standings.all_stops')}
                   />
                 )}
                 {standings.length > 0 && (
                   <MultiSelect
-                    label="Por jugador"
+                    label={t('circuits.standings.filter_player')}
                     options={standings.map((s) => ({ value: s.player_id, label: s.player_name }))}
                     value={selectedPlayerIds}
                     onChange={(v) => setSelectedPlayerIds(v as number[])}
-                    placeholder="Todos los jugadores"
+                    placeholder={t('circuits.standings.all_players')}
                   />
                 )}
               </div>
@@ -711,7 +715,9 @@ export default function Circuits() {
 
             {selectedCircuit?.status === 'finalized' && filteredStandings.length > 0 && (
               <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-4">
-                <h3 className="text-lg font-semibold mb-3">Podio final</h3>
+                <h3 className="text-lg font-semibold mb-3">
+                  {t('circuits.standings.final_podium')}
+                </h3>
                 <div className="flex flex-wrap gap-4 justify-center items-end">
                   {filteredStandings[1] && (
                     <div className="flex flex-col items-center order-2 md:order-1">
@@ -722,7 +728,7 @@ export default function Circuits() {
                         {filteredStandings[1].player_name}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {filteredStandings[1].total_points.toFixed(0)} pts
+                        {filteredStandings[1].total_points.toFixed(0)} {t('circuits.standings.pts')}
                       </div>
                     </div>
                   )}
@@ -735,7 +741,7 @@ export default function Circuits() {
                         {filteredStandings[0].player_name}
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {filteredStandings[0].total_points.toFixed(0)} pts
+                        {filteredStandings[0].total_points.toFixed(0)} {t('circuits.standings.pts')}
                       </div>
                     </div>
                   )}
@@ -748,7 +754,7 @@ export default function Circuits() {
                         {filteredStandings[2].player_name}
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {filteredStandings[2].total_points.toFixed(0)} pts
+                        {filteredStandings[2].total_points.toFixed(0)} {t('circuits.standings.pts')}
                       </div>
                     </div>
                   )}
@@ -812,12 +818,12 @@ export default function Circuits() {
             )}
 
             <div>
-              <h3 className="text-lg font-semibold mb-2">Tabla de posiciones</h3>
+              <h3 className="text-lg font-semibold mb-2">{t('circuits.standings.table_title')}</h3>
               <Table
                 columns={standingsColumns}
                 data={filteredStandings}
                 keyExtractor={(standing) => standing.player_id}
-                emptyMessage="No hay datos de acumulado disponibles"
+                emptyMessage={t('circuits.standings.empty_data')}
                 getRowClassName={(_item, index) => {
                   const pos = index + 1;
                   if (pos === 1) return 'bg-yellow-100/60 dark:bg-yellow-900/40 font-semibold';

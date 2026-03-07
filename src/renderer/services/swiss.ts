@@ -1,7 +1,14 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
 import { TiebreakService } from './tiebreak';
-import { Tournament, Round, Match, PlayerStanding } from '../types/tournament';
+import {
+  Tournament,
+  Round,
+  Match,
+  PlayerStanding,
+  MatchResult,
+  TiebreakCriterion,
+} from '../types/tournament';
+import { Player } from '../types/player';
 import { calculateNumberOfRounds } from '../utils/tournament';
 import { getPlayerDisplayName, type PlayerDisplayMode } from '../utils/playerDisplayName';
 
@@ -83,8 +90,8 @@ export class SwissPairingService {
 
   static async previewFirstRound(tournamentId: number): Promise<{
     matches: Array<{
-      player1: any;
-      player2?: any;
+      player1: Player & { player_name: string; player_id: number };
+      player2?: Player & { player_name: string; player_id: number };
       startPlayerId?: number;
       reason?: string;
     }>;
@@ -101,11 +108,16 @@ export class SwissPairingService {
     const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const playersPerMatch = tournament.players_per_match;
 
-    const matches: any[] = [];
+    const matches: Array<{
+      player1: Player & { player_name: string; player_id: number };
+      player2?: Player & { player_name: string; player_id: number };
+      startPlayerId?: number;
+      reason?: string;
+    }> = [];
     const startStats: Record<number, { totalStarts: number; lastStartRound: number }> = {};
 
     // Initialize stats
-    players.forEach((p: any) => {
+    players.forEach((p) => {
       startStats[p.id!] = { totalStarts: 0, lastStartRound: 0 };
     });
 
@@ -118,7 +130,7 @@ export class SwissPairingService {
           player1: {
             ...matchPlayers[0],
             player_name: matchPlayers[0].name,
-            player_id: matchPlayers[0].id,
+            player_id: matchPlayers[0].id!,
           },
           reason: 'random',
         });
@@ -132,12 +144,12 @@ export class SwissPairingService {
           player1: {
             ...matchPlayers[0],
             player_name: matchPlayers[0].name,
-            player_id: matchPlayers[0].id,
+            player_id: matchPlayers[0].id!,
           },
           player2: {
             ...matchPlayers[1],
             player_name: matchPlayers[1].name,
-            player_id: matchPlayers[1].id,
+            player_id: matchPlayers[1].id!,
           },
           startPlayerId,
           reason: 'random',
@@ -152,8 +164,8 @@ export class SwissPairingService {
     tournamentId: number,
     roundNumber: number,
     pairings: Array<{
-      player1: any;
-      player2?: any;
+      player1: { id?: number; player_id?: number };
+      player2?: { id?: number; player_id?: number };
       startPlayerId?: number;
     }>
   ): Promise<void> {
@@ -178,7 +190,7 @@ export class SwissPairingService {
 
         await DatabaseService.createMatchResult({
           match_id: matchId,
-          player_id: pairing.player1.player_id || pairing.player1.id,
+          player_id: (pairing.player1.player_id || pairing.player1.id) as number,
           position: 1,
           points: 0,
           tournament_points: scoringSystem[1] || 1,
@@ -196,7 +208,7 @@ export class SwissPairingService {
         // If we really need to record the bye for history:
         await DatabaseService.addPlayerBye(
           tournamentId,
-          pairing.player1.player_id || pairing.player1.id,
+          (pairing.player1.player_id || pairing.player1.id) as number,
           roundNumber
         );
       } else {
@@ -209,8 +221,8 @@ export class SwissPairingService {
         });
 
         await DatabaseService.setMatchPlayers(matchId, [
-          pairing.player1.player_id || pairing.player1.id,
-          pairing.player2.player_id || pairing.player2.id,
+          (pairing.player1.player_id || pairing.player1.id) as number,
+          (pairing.player2.player_id || pairing.player2.id) as number,
         ]);
       }
       matchNumber++;
@@ -249,7 +261,7 @@ export class SwissPairingService {
     const allResults = await Promise.all(
       allMatches.map((m) => DatabaseService.getMatchResults(m.id!))
     );
-    const resultsByMatch: Record<number, any[]> = {};
+    const resultsByMatch: Record<number, MatchResult[]> = {};
     allMatches.forEach((m, i) => {
       resultsByMatch[m.id!] = allResults[i] || [];
     });
@@ -283,11 +295,11 @@ export class SwissPairingService {
     const { pointGroups, sortedPoints } = this.groupPlayersByPoints(standings);
 
     // Get bye selection method from config
-    const byeSelection = (config as any)?.bye_selection || 'worst';
+    const byeSelection = config?.bye_selection || 'worst';
 
     // Get players who have already received bye
     const byeHistory = await DatabaseService.getPlayerByes(tournamentId);
-    const playersWithBye = new Set(byeHistory.map((b: any) => b.player_id));
+    const playersWithBye = new Set(byeHistory.map((b) => b.player_id));
 
     // Process all players across all point groups
     // Pair players avoiding rematches
@@ -437,7 +449,7 @@ export class SwissPairingService {
     const allResults = await Promise.all(
       allMatches.map((m) => DatabaseService.getMatchResults(m.id!))
     );
-    const resultsByMatch: Record<number, any[]> = {};
+    const resultsByMatch: Record<number, MatchResult[]> = {};
     allMatches.forEach((m, i) => {
       resultsByMatch[m.id!] = allResults[i] || [];
     });
@@ -467,9 +479,9 @@ export class SwissPairingService {
     // Group players using shared logic
     const { pointGroups, sortedPoints } = this.groupPlayersByPoints(standings);
 
-    const byeSelection = (config as any)?.bye_selection || 'worst';
+    const byeSelection = config?.bye_selection || 'worst';
     const byeHistory = await DatabaseService.getPlayerByes(tournamentId);
-    const playersWithBye = new Set(byeHistory.map((b: any) => b.player_id));
+    const playersWithBye = new Set(byeHistory.map((b) => b.player_id));
 
     while (true) {
       const remaining: PlayerStanding[] = [];
@@ -656,12 +668,12 @@ export class SwissPairingService {
 
   static async calculateStandings(
     tournamentId: number,
-    tiebreakCriteria: any[],
+    tiebreakCriteria: TiebreakCriterion[],
     preFetchedData?: {
-      players?: any[];
+      players?: Player[];
       rounds?: Round[];
       roundMatches?: Match[][];
-      resultsByMatch?: Record<number, any[]>;
+      resultsByMatch?: Record<number, MatchResult[]>;
     },
     playerDisplayMode: PlayerDisplayMode = 'per_player'
   ): Promise<PlayerStanding[]> {
@@ -674,7 +686,7 @@ export class SwissPairingService {
       preFetchedData?.rounds || (await DatabaseService.getTournamentRounds(tournamentId));
 
     let roundMatches: Match[] = [];
-    let resultsByMatch: Record<number, any[]> = {};
+    let resultsByMatch: Record<number, MatchResult[]> = {};
 
     if (preFetchedData && preFetchedData.roundMatches && preFetchedData.resultsByMatch) {
       // Flatten matches if they are grouped by round
@@ -690,22 +702,24 @@ export class SwissPairingService {
       );
       resultsByMatch = {};
       roundMatches.forEach((m, i) => {
-        resultsByMatch[m.id!] = allResults[i] || [];
+        resultsByMatch[m.id!] = (allResults[i] || []) as MatchResult[];
       });
     }
 
     // Initialize standings
     const standings: Record<number, PlayerStanding> = {};
-    players.forEach((player: any) => {
-      standings[player.id] = {
-        player_id: player.id,
+    players.forEach((player: Player) => {
+      const pid = player.id!;
+      standings[pid] = {
+        player_id: pid,
         player_name: getPlayerDisplayName(player, playerDisplayMode),
         total_points: 0,
         matches_played: 0,
         wins: 0,
         tiebreak_values: {},
-        active: player.active ?? true,
-        dropout_round: player.dropout_round ?? null,
+        active: (player as unknown as { active: boolean }).active ?? true,
+        dropout_round:
+          (player as unknown as { dropout_round: number | null }).dropout_round ?? null,
         starts_count: 0,
       };
     });
@@ -721,7 +735,7 @@ export class SwissPairingService {
     // Process all match results
     Object.values(resultsByMatch)
       .flat()
-      .forEach((result: any) => {
+      .forEach((result: MatchResult) => {
         const pid = result.player_id;
         if (standings[pid]) {
           standings[pid].matches_played++;
@@ -775,8 +789,8 @@ export class SwissPairingService {
           let winsA = 0;
           let winsB = 0;
           Object.values(resultsByMatch).forEach((results) => {
-            const resA = results.find((r: any) => r.player_id === a.player_id);
-            const resB = results.find((r: any) => r.player_id === b.player_id);
+            const resA = results.find((r: MatchResult) => r.player_id === a.player_id);
+            const resB = results.find((r: MatchResult) => r.player_id === b.player_id);
             if (resA && resB) {
               if (resA.position < resB.position) winsA++;
               else if (resB.position < resA.position) winsB++;
@@ -803,14 +817,14 @@ export class SwissPairingService {
   private static getPreviousOpponentsFromData(
     rounds: Round[],
     roundMatches: Match[][],
-    resultsByMatch: Record<number, any[]>
+    resultsByMatch: Record<number, MatchResult[]>
   ): { [playerId: number]: number[] } {
     const opponents: { [playerId: number]: number[] } = {};
     for (let r = 0; r < rounds.length; r++) {
       const matches = roundMatches[r] || [];
       for (const match of matches) {
         const results = resultsByMatch[match.id!] || [];
-        const playerIds = results.map((res: any) => res.player_id);
+        const playerIds = results.map((res: MatchResult) => res.player_id);
         for (const playerId of playerIds) {
           if (!opponents[playerId]) opponents[playerId] = [];
           for (const opponentId of playerIds) {

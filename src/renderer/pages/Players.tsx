@@ -10,8 +10,10 @@ import PlayerStats from '../components/player/PlayerStats';
 import HeadToHeadHistory from '../components/player/HeadToHeadHistory';
 import { HeadToHeadService } from '../services/headToHead';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useTranslation } from 'react-i18next';
 
 export default function Players() {
+  const { t } = useTranslation();
   const { addNotification } = useNotifications();
   const [players, setPlayers] = useState<Player[]>([]);
   const [filteredPlayers, setFilteredPlayers] = useState<Player[]>([]);
@@ -47,13 +49,13 @@ export default function Players() {
     } catch (error) {
       console.error('Error loading players:', error);
       addNotification({
-        message: 'Error al cargar los jugadores',
+        message: t('players.errors.load'),
         type: 'error',
       });
     } finally {
       setIsLoading(false);
     }
-  }, [addNotification]);
+  }, [addNotification, t]);
 
   useEffect(() => {
     loadPlayers();
@@ -116,18 +118,18 @@ export default function Players() {
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'El nombre es requerido';
+      newErrors.name = t('players.errors.name_required');
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'El correo electrónico no es válido';
+      newErrors.email = t('players.errors.email_invalid');
     }
 
     if (
       formData.age &&
       (isNaN(Number(formData.age)) || Number(formData.age) < 0 || Number(formData.age) > 150)
     ) {
-      newErrors.age = 'La edad debe ser un número válido';
+      newErrors.age = t('players.errors.age_invalid');
     }
 
     setErrors(newErrors);
@@ -161,13 +163,15 @@ export default function Players() {
       handleCloseModal();
       loadPlayers();
       addNotification({
-        message: editingPlayer ? 'Jugador actualizado exitosamente' : 'Jugador creado exitosamente',
+        message: editingPlayer
+          ? t('players.errors.save_success')
+          : t('players.errors.create_success'),
         type: 'success',
       });
     } catch (error) {
       console.error('Error saving player:', error);
       addNotification({
-        message: 'Error al guardar el jugador',
+        message: t('players.errors.save'),
         type: 'error',
       });
     } finally {
@@ -177,14 +181,14 @@ export default function Players() {
 
   const handleDelete = async (player: Player) => {
     if (!player.id) return;
-    if (!confirm(`¿Estás seguro de eliminar a ${player.name}?`)) return;
+    if (!confirm(t('players.alerts.delete_confirm', { name: player.name }))) return;
 
     try {
       setIsLoading(true);
       await DatabaseService.deletePlayer(player.id);
       loadPlayers();
       addNotification({
-        message: 'Jugador eliminado exitosamente',
+        message: t('players.errors.delete_success'),
         type: 'success',
       });
     } catch (error) {
@@ -193,7 +197,7 @@ export default function Players() {
       const errorMessage =
         err.message?.includes('No se puede eliminar') || err.message?.includes('ha participado')
           ? err.message
-          : 'Error al eliminar el jugador';
+          : t('players.errors.delete');
 
       addNotification({
         message: errorMessage,
@@ -214,7 +218,7 @@ export default function Players() {
     } catch (error) {
       console.error('Error loading opponents:', error);
       addNotification({
-        message: 'Error al cargar los oponentes',
+        message: t('players.errors.load_opponents'),
         type: 'error',
       });
     } finally {
@@ -225,54 +229,54 @@ export default function Players() {
   const columns: Column<Player>[] = [
     {
       key: 'name',
-      header: 'Nombre',
+      header: t('players.columns.name'),
     },
     {
       key: 'bga_username',
-      header: 'BGA Username',
+      header: t('players.columns.bga_username'),
       render: (player) => player.bga_username || '-',
     },
     {
       key: 'phone',
-      header: 'Teléfono',
+      header: t('players.columns.phone'),
       render: (player) => player.phone || '-',
     },
     {
       key: 'email',
-      header: 'Correo',
+      header: t('players.columns.email'),
       render: (player) => player.email || '-',
     },
     {
       key: 'age',
-      header: 'Edad',
+      header: t('players.columns.age'),
       render: (player) => player.age || '-',
     },
     {
       key: 'actions',
-      header: 'Acciones',
+      header: t('players.columns.actions'),
       render: (player) => (
         <div className="flex space-x-2">
           <Button
             variant="secondary"
             size="sm"
             onClick={() => setSelectedPlayerForStats(player)}
-            title="Ver estadísticas"
+            title={t('players.actions.view_stats')}
           >
-            📊
+            {t('players.actions.view_stats_icon') || '📊'}
           </Button>
           <Button
             variant="secondary"
             size="sm"
             onClick={() => handleViewOpponents(player)}
-            title="Ver oponentes"
+            title={t('players.actions.view_opponents')}
           >
-            👥
+            {t('players.actions.view_opponents_icon') || '👥'}
           </Button>
           <Button variant="secondary" size="sm" onClick={() => handleOpenModal(player)}>
-            Editar
+            {t('players.actions.edit')}
           </Button>
           <Button variant="danger" size="sm" onClick={() => handleDelete(player)}>
-            Eliminar
+            {t('players.actions.delete')}
           </Button>
         </div>
       ),
@@ -283,27 +287,29 @@ export default function Players() {
     <div className="px-4 py-6">
       <div className="card">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Jugadores</h1>
-          <Button onClick={() => handleOpenModal()}>Nuevo Jugador</Button>
+          <h1 className="text-2xl font-bold">{t('players.title')}</h1>
+          <Button onClick={() => handleOpenModal()}>{t('players.new')}</Button>
         </div>
 
         <div className="mb-4">
           <Input
             type="text"
-            placeholder="Buscar por nombre o BGA username..."
+            placeholder={t('players.search_placeholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
         {isLoading && players.length === 0 ? (
-          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">
+            {t('players.loading')}
+          </p>
         ) : (
           <Table
             columns={columns}
             data={filteredPlayers}
             keyExtractor={(player) => player.id || Math.random()}
-            emptyMessage="No hay jugadores registrados"
+            emptyMessage={t('players.empty_msg')}
           />
         )}
       </div>
@@ -311,37 +317,37 @@ export default function Players() {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingPlayer ? 'Editar Jugador' : 'Nuevo Jugador'}
+        title={editingPlayer ? t('players.modal.edit') : t('players.modal.new')}
         footer={
           <>
             <Button variant="secondary" onClick={handleCloseModal}>
-              Cancelar
+              {t('players.modal.cancel_btn')}
             </Button>
             <Button onClick={handleSubmit} isLoading={isLoading}>
-              {editingPlayer ? 'Actualizar' : 'Crear'}
+              {editingPlayer ? t('players.modal.update_btn') : t('players.modal.create_btn')}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
-            label="Nombre *"
+            label={t('players.form.name')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             error={errors.name}
             required
           />
           <Input
-            label="BGA Username"
+            label={t('players.form.bga_username')}
             value={formData.bga_username}
             onChange={(e) => setFormData({ ...formData, bga_username: e.target.value })}
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Mostrar por defecto
+              {t('players.form.display_preference')}
             </label>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-              Cuando tengas nombre y username, cuál mostrar en torneos (si el torneo lo permite).
+              {t('players.form.display_preference_help')}
             </p>
             <div className="flex gap-4">
               <label className="inline-flex items-center">
@@ -352,7 +358,9 @@ export default function Players() {
                   onChange={() => setFormData({ ...formData, display_preference: 'name' })}
                   className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
                 />
-                <span className="ml-2 text-sm text-gray-900 dark:text-gray-200">Nombre</span>
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-200">
+                  {t('players.form.display_name')}
+                </span>
               </label>
               <label className="inline-flex items-center">
                 <input
@@ -362,25 +370,27 @@ export default function Players() {
                   onChange={() => setFormData({ ...formData, display_preference: 'username' })}
                   className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
                 />
-                <span className="ml-2 text-sm text-gray-900 dark:text-gray-200">Username BGA</span>
+                <span className="ml-2 text-sm text-gray-900 dark:text-gray-200">
+                  {t('players.form.display_username')}
+                </span>
               </label>
             </div>
           </div>
           <Input
-            label="Teléfono"
+            label={t('players.form.phone')}
             type="tel"
             value={formData.phone}
             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
           />
           <Input
-            label="Correo Electrónico"
+            label={t('players.form.email')}
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             error={errors.email}
           />
           <Input
-            label="Edad"
+            label={t('players.form.age')}
             type="number"
             value={formData.age}
             onChange={(e) => setFormData({ ...formData, age: e.target.value })}
@@ -396,7 +406,7 @@ export default function Players() {
         <Modal
           isOpen={!!selectedPlayerForStats}
           onClose={() => setSelectedPlayerForStats(null)}
-          title={`Estadísticas - ${selectedPlayerForStats.name}`}
+          title={t('players.stats_modal.title', { name: selectedPlayerForStats.name })}
           size="xl"
         >
           <PlayerStats
@@ -423,13 +433,13 @@ export default function Players() {
             setSelectedPlayerForOpponents(null);
             setOpponents([]);
           }}
-          title={`Oponentes - ${selectedPlayerForOpponents.name}`}
+          title={t('players.opponents_modal.title', { name: selectedPlayerForOpponents.name })}
           size="lg"
         >
           <div className="space-y-4">
             {opponents.length === 0 ? (
               <p className="text-center text-gray-500 dark:text-gray-400 py-8">
-                No hay oponentes registrados
+                {t('players.opponents_modal.empty_msg')}
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -437,19 +447,19 @@ export default function Players() {
                   <thead className="bg-gray-50 dark:bg-gray-800">
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
-                        Jugador
+                        {t('players.opponents_modal.cols.player')}
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
-                        Partidas
+                        {t('players.opponents_modal.cols.matches')}
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
-                        Victorias
+                        {t('players.opponents_modal.cols.wins')}
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
-                        Derrotas
+                        {t('players.opponents_modal.cols.losses')}
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
-                        Acciones
+                        {t('players.opponents_modal.cols.actions')}
                       </th>
                     </tr>
                   </thead>
@@ -472,7 +482,7 @@ export default function Players() {
                               setSelectedPlayerForOpponents(null);
                             }}
                           >
-                            Ver Historial
+                            {t('players.actions.view_history')}
                           </Button>
                         </td>
                       </tr>

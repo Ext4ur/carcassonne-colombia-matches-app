@@ -18,6 +18,7 @@ import { Column } from '../components/common/Table';
 import { Place } from '../types/place';
 import { formatDateForDisplay } from '../utils/dateUtils';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useTranslation } from 'react-i18next';
 
 type WizardStep = 'form' | 'config' | 'registration' | null;
 
@@ -28,6 +29,7 @@ type ConfigDraft = Partial<TournamentConfig> & {
 export default function Tournaments() {
   const navigate = useNavigate();
   const { addNotification } = useNotifications();
+  const { t } = useTranslation();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<WizardStep>(null);
@@ -48,11 +50,11 @@ export default function Tournaments() {
       setTournaments(data);
     } catch (error) {
       console.error('Error loading tournaments:', error);
-      addNotification({ message: 'Error al cargar los torneos', type: 'error' });
+      addNotification({ message: t('common.error_loading'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
-  }, [addNotification]);
+  }, [addNotification, t]);
 
   useEffect(() => {
     loadTournaments();
@@ -71,7 +73,7 @@ export default function Tournaments() {
   };
 
   const handleCancelWizard = () => {
-    if (confirm('¿Cancelar? No se creará el torneo y se perderán los datos del formulario.')) {
+    if (confirm(t('tournaments.wizard.cancel_confirm'))) {
       setIsModalOpen(false);
       setWizardStep(null);
       setTournamentDraft(null);
@@ -123,10 +125,9 @@ export default function Tournaments() {
     setWizardStep('registration');
   };
 
-  /** Registration complete: create tournament + config + register players (only DB writes here). */
   const handleRegistrationComplete = async (numberOfRounds: number) => {
     if (!tournamentDraft?.name || !tournamentDraft?.type || !tournamentDraft?.date) {
-      addNotification({ message: 'Faltan datos del torneo', type: 'error' });
+      addNotification({ message: t('tournaments.wizard.missing_data'), type: 'error' });
       return;
     }
     try {
@@ -165,7 +166,7 @@ export default function Tournaments() {
       loadTournaments();
     } catch (error) {
       console.error('Error al crear el torneo:', error);
-      addNotification({ message: 'Error al crear el torneo', type: 'error' });
+      addNotification({ message: t('tournaments.wizard.create_error'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -177,7 +178,7 @@ export default function Tournaments() {
 
   const handleDelete = async (tournament: Tournament) => {
     if (!tournament.id) return;
-    if (!confirm(`¿Estás seguro de eliminar el torneo "${tournament.name}"?`)) return;
+    if (!confirm(t('tournaments.wizard.delete_confirm', { name: tournament.name }))) return;
 
     try {
       setIsLoading(true);
@@ -185,7 +186,7 @@ export default function Tournaments() {
       loadTournaments();
     } catch (error) {
       console.error('Error deleting tournament:', error);
-      addNotification({ message: 'Error al eliminar el torneo', type: 'error' });
+      addNotification({ message: t('common.delete_error'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -194,46 +195,49 @@ export default function Tournaments() {
   const columns: Column<Tournament>[] = [
     {
       key: 'name',
-      header: 'Nombre',
+      header: t('common.name'),
       render: (tournament) => `${tournament.place_name ?? '?'} - ${tournament.name}`,
     },
     {
       key: 'type',
-      header: 'Tipo',
-      render: (tournament) => (tournament.type === 'circuit' ? 'Circuito' : 'Clasificatorio'),
+      header: t('common.type'),
+      render: (tournament) =>
+        tournament.type === 'circuit'
+          ? t('tournaments.types.circuit')
+          : t('tournaments.types.qualifier'),
     },
     {
       key: 'circuit_name',
-      header: 'Circuito',
+      header: t('common.circuit'),
       render: (tournament) => (tournament as any).circuit_name || '-',
     },
     {
       key: 'date',
-      header: 'Fecha',
+      header: t('common.date'),
       render: (tournament) => formatDateForDisplay(tournament.date),
     },
     {
       key: 'status',
-      header: 'Estado',
+      header: t('common.status'),
       render: (tournament) => {
         const statusMap: Record<string, string> = {
-          draft: 'Borrador',
-          in_progress: 'En Progreso',
-          completed: 'Completado',
+          draft: t('tournaments.statuses.draft'),
+          in_progress: t('tournaments.statuses.in_progress'),
+          completed: t('tournaments.statuses.completed'),
         };
         return statusMap[tournament.status] || tournament.status;
       },
     },
     {
       key: 'actions',
-      header: 'Acciones',
+      header: t('common.actions'),
       render: (tournament) => (
         <div className="flex space-x-2">
           <Button variant="primary" size="sm" onClick={() => handleViewTournament(tournament)}>
-            Ver
+            {t('common.view')}
           </Button>
           <Button variant="danger" size="sm" onClick={() => handleDelete(tournament)}>
-            Eliminar
+            {t('common.delete')}
           </Button>
         </div>
       ),
@@ -257,13 +261,15 @@ export default function Tournaments() {
   const getWizardTitle = () => {
     switch (wizardStep) {
       case 'form':
-        return mode === 'quick' ? 'Crear Torneo Rápido' : 'Crear Torneo - Paso 1: Información';
+        return mode === 'quick'
+          ? t('tournaments.wizard.quick_title')
+          : t('tournaments.wizard.step1');
       case 'config':
-        return 'Crear Torneo - Paso 2: Configuración';
+        return t('tournaments.wizard.step2');
       case 'registration':
-        return 'Crear Torneo - Paso 3: Inscripción';
+        return t('tournaments.wizard.step3');
       default:
-        return 'Crear Torneo';
+        return t('tournaments.new');
     }
   };
 
@@ -271,43 +277,45 @@ export default function Tournaments() {
     <div className="px-4 py-6">
       <div className="card">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Torneos</h1>
+          <h1 className="text-2xl font-bold">{t('tournaments.title')}</h1>
           <div className="flex space-x-2">
             <Button variant="secondary" onClick={() => handleCreateTournament('quick')}>
-              Torneo Rápido
+              {t('tournaments.quick_tournament')}
             </Button>
-            <Button onClick={() => handleCreateTournament('advanced')}>Nuevo Torneo</Button>
+            <Button onClick={() => handleCreateTournament('advanced')}>
+              {t('tournaments.new')}
+            </Button>
           </div>
         </div>
 
         <div className="mb-4 flex flex-wrap items-end gap-4">
           <div className="min-w-[200px]">
             <Input
-              placeholder="Buscar por nombre de torneo o lugar"
+              placeholder={t('tournaments.search_placeholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           {places.length > 0 && (
             <MultiSelect
-              label="Filtrar por lugar"
+              label={t('tournaments.filter_place')}
               options={places.map((p) => ({ value: p.id!, label: p.name }))}
               value={selectedPlaceIds}
               onChange={(v) => setSelectedPlaceIds(v as number[])}
-              placeholder="Todos los lugares"
+              placeholder={t('tournaments.all_places')}
               className="max-w-xs"
             />
           )}
         </div>
 
         {isLoading && tournaments.length === 0 ? (
-          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
         ) : (
           <Table
             columns={columns}
             data={filteredTournaments}
             keyExtractor={(tournament) => tournament.id || Math.random()}
-            emptyMessage="No hay torneos registrados"
+            emptyMessage={t('tournaments.empty_msg')}
           />
         )}
       </div>
@@ -321,13 +329,13 @@ export default function Tournaments() {
           wizardStep === 'form' ? (
             <>
               <Button variant="secondary" onClick={handleCancelWizard}>
-                Cancelar
+                {t('common.cancel')}
               </Button>
-              <Button onClick={() => formRef.current?.submit()}>Continuar</Button>
+              <Button onClick={() => formRef.current?.submit()}>{t('common.continue')}</Button>
             </>
           ) : wizardStep === 'config' ? (
             <Button variant="secondary" onClick={handleCancelWizard}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
           ) : undefined
         }

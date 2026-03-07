@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import SyncStatus from './SyncStatus';
 
@@ -9,18 +9,19 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { path: '/', label: 'Inicio', icon: '🏠' },
-    { path: '/tournaments', label: 'Torneos', icon: '🏆' },
-    { path: '/circuits', label: 'Circuitos', icon: '🔄' },
-    { path: '/players', label: 'Jugadores', icon: '👥' },
-    { path: '/places', label: 'Lugares', icon: '📍' },
-    { path: '/cities', label: 'Ciudades', icon: '🏙️' },
-    { path: '/settings', label: 'Configuración', icon: '⚙️' },
+    { path: '/', label: t('nav.home'), icon: '🏠' },
+    { path: '/tournaments', label: t('nav.tournaments'), icon: '🏆' },
+    { path: '/circuits', label: t('nav.circuits'), icon: '🔄' },
+    { path: '/players', label: t('nav.players'), icon: '👥' },
+    { path: '/places', label: t('nav.places'), icon: '📍' },
+    { path: '/cities', label: t('nav.cities'), icon: '🏙️' },
+    { path: '/settings', label: t('nav.settings'), icon: '⚙️' },
   ];
 
   return (
@@ -34,7 +35,7 @@ export default function Layout({ children }: LayoutProps) {
                 to="/"
                 className="text-xl font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
               >
-                Inicio
+                {t('nav.home')}
               </Link>
             </div>
 
@@ -66,7 +67,7 @@ export default function Layout({ children }: LayoutProps) {
               <button
                 onClick={toggleTheme}
                 className="ml-4 p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
-                title={theme === 'light' ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro'}
+                title={theme === 'light' ? t('theme.dark') : t('theme.light')}
               >
                 {theme === 'light' ? '🌙' : '☀️'}
               </button>
@@ -85,7 +86,7 @@ export default function Layout({ children }: LayoutProps) {
                 className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
                 aria-expanded="false"
               >
-                <span className="sr-only">Abrir menú principal</span>
+                <span className="sr-only">Menu</span>
                 {/* Icon when menu is closed */}
                 {!isMobileMenuOpen ? (
                   <svg

@@ -1,13 +1,12 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { DatabaseService } from './database';
-import { Round, PlayerStanding } from '../types/tournament';
+import { Round, PlayerStanding, Match, MatchResultWithPlayer } from '../types/tournament';
+import { Player } from '../types/player';
 
 /** Datos pre-cargados para calcular tiebreaks sin más queries */
 export interface TiebreakData {
   rounds: Round[];
-  roundMatches: any[][];
-  resultsByMatch: Record<number, any[]>;
+  roundMatches: Match[][];
+  resultsByMatch: Record<number, MatchResultWithPlayer[]>;
   playerTotalPoints: Record<number, number>;
 }
 
@@ -16,9 +15,9 @@ export class TiebreakService {
   static async calculate(
     criterionId: string,
     standings: PlayerStanding[],
-    roundMatches: any[],
-    resultsByMatch: Record<number, any[]>,
-    players: any[]
+    roundMatches: Match[],
+    resultsByMatch: Record<number, MatchResultWithPlayer[]>,
+    players: Player[]
   ): Promise<Record<number, number>> {
     const playerTotalPoints: Record<number, number> = {};
     const result: Record<number, number> = {};
@@ -94,10 +93,10 @@ export class TiebreakService {
     for (let r = 0; r < data.rounds.length; r++) {
       const matches = data.roundMatches[r] || [];
       for (const match of matches) {
-        const results = data.resultsByMatch[match.id] || [];
-        const playerResult = results.find((r: any) => r.player_id === playerId);
+        const results = data.resultsByMatch[match.id!] || [];
+        const playerResult = results.find((res) => res.player_id === playerId);
         if (playerResult) {
-          const opponents = results.filter((r: any) => r.player_id !== playerId);
+          const opponents = results.filter((res) => res.player_id !== playerId);
           for (const opp of opponents) {
             opponentPoints.push(data.playerTotalPoints[opp.player_id] ?? 0);
           }
@@ -126,9 +125,9 @@ export class TiebreakService {
     for (let r = 0; r < data.rounds.length; r++) {
       const matches = data.roundMatches[r] || [];
       for (const match of matches) {
-        const results = data.resultsByMatch[match.id] || [];
-        const r1 = results.find((r: any) => r.player_id === playerId1);
-        const r2 = results.find((r: any) => r.player_id === playerId2);
+        const results = data.resultsByMatch[match.id!] || [];
+        const r1 = results.find((res) => res.player_id === playerId1);
+        const r2 = results.find((res) => res.player_id === playerId2);
         if (r1 && r2) {
           if (r1.position < r2.position) return 1;
           if (r2.position < r1.position) return -1;
@@ -145,13 +144,13 @@ export class TiebreakService {
     for (let r = 0; r < data.rounds.length; r++) {
       const matches = data.roundMatches[r] || [];
       for (const match of matches) {
-        const results = data.resultsByMatch[match.id] || [];
-        const playerResult = results.find((r: any) => r.player_id === playerId);
+        const results = data.resultsByMatch[match.id!] || [];
+        const playerResult = results.find((res) => res.player_id === playerId);
         if (playerResult) {
           const myPoints = playerResult.points ?? 0;
           const oppPoints = results
-            .filter((r: any) => r.player_id !== playerId)
-            .reduce((sum, r: any) => sum + (r.points ?? 0), 0);
+            .filter((res) => res.player_id !== playerId)
+            .reduce((sum, res) => sum + (res.points ?? 0), 0);
           total += myPoints - oppPoints;
         }
       }
@@ -211,10 +210,11 @@ export class TiebreakService {
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);
 
     for (const round of rounds) {
-      const matches = await DatabaseService.getRoundMatches(round.id!);
-      for (const match of matches) {
+      const roundMatches = await DatabaseService.getRoundMatches(round.id!);
+
+      for (const match of roundMatches) {
         const results = await DatabaseService.getMatchResults(match.id!);
-        const player1Result = results.find((r) => r.player_id === playerId1);
+        const player1Result = results.find((res) => res.player_id === playerId1);
         const player2Result = results.find((r) => r.player_id === playerId2);
 
         if (player1Result && player2Result) {

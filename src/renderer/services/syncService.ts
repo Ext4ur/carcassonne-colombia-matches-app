@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { SqliteClient } from '../api/clients/SqliteClient';
 import { SupabaseClient } from '../api/clients/SupabaseClient';
 import { isSupabaseConfigured } from '../api/clients/supabaseConfig';
@@ -15,12 +14,38 @@ export interface SyncQueueItem {
 }
 
 export class SyncService {
-  private static sqlite = new SqliteClient();
-  private static supabase = new SupabaseClient();
+  private static _sqlite: SqliteClient | null = null;
+  private static _supabase: SupabaseClient | null = null;
   private static isSyncing = false;
   private static syncInterval: NodeJS.Timeout | null = null;
   private static connectivityInterval: NodeJS.Timeout | null = null;
   private static _isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  private static isSchemaReady = true;
+  public static instanceId = Math.random().toString(36).substring(7);
+
+  private static get sqlite() {
+    if (!this._sqlite) this._sqlite = new SqliteClient();
+    return this._sqlite;
+  }
+
+  private static get supabase() {
+    if (!this._supabase) this._supabase = new SupabaseClient();
+    return this._supabase;
+  }
+
+  /**
+   * Reset the service state (useful for tests)
+   */
+  public static reset() {
+    this.stopSync();
+    if (this.connectivityInterval) clearInterval(this.connectivityInterval);
+    this.connectivityInterval = null;
+    this.isSyncing = false;
+    this.isSchemaReady = true;
+    this._isOnline = true;
+    this._sqlite = null; // Forces re-instantiation with mocks
+    this._supabase = null;
+  }
 
   /**
    * Start the background sync process
@@ -29,20 +54,25 @@ export class SyncService {
   static async startSync(intervalMs = 10000) {
     if (this.syncInterval) return;
 
-    console.log('🔄 Sync Service Started');
+    console.log(`🔄 Sync Service Started (Instance: ${this.instanceId})`);
 
     // Reset any stuck 'processing' items to 'pending' on startup
     try {
-      const stuckItems = await this.sqlite.query<{ count: number }>(
-        "SELECT COUNT(*) as count FROM sync_queue WHERE status = 'processing' OR (status = 'failed' AND retry_count >= 5)"
-      );
+      const stuckItems = await this.sqlite
+        .query<{
+          count: number;
+        }>(
+          "SELECT COUNT(*) as count FROM sync_queue WHERE status = 'processing' OR (status = 'failed' AND retry_count >= 5)"
+        )
+        .catch(() => [{ count: 0 }]); // Safety if table doesn't exist yet
+
       if (stuckItems[0]?.count > 0) {
         await this.sqlite.execute(
           "UPDATE sync_queue SET status = 'pending', retry_count = 0 WHERE status = 'processing' OR status = 'failed'"
         );
       }
-    } catch (e) {
-      console.error('❌ Failed to reset stuck sync items:', e);
+    } catch {
+      console.log('ℹ️ Sync queue not ready yet or stuck items check skipped.');
     }
 
     // Initial checks
@@ -106,6 +136,17 @@ export class SyncService {
 
       if (status && status > 0) {
         this._isOnline = true;
+        // If we get a 404/PGRST205, the schema is not initialized
+        if (status === 404 || (error as { code?: string })?.code === 'PGRST205') {
+          if (this.isSchemaReady) {
+            console.warn(
+              '⚠️ Supabase schema is not ready yet (tables missing). Sync will be deferred.'
+            );
+          }
+          this.isSchemaReady = false;
+        } else {
+          this.isSchemaReady = true;
+        }
       } else if (error) {
         const msg = error.message?.toLowerCase() || '';
         const isNetError =
@@ -114,8 +155,8 @@ export class SyncService {
       } else {
         this._isOnline = navigator.onLine;
       }
-    } catch (e: any) {
-      const msg = e?.message?.toLowerCase() || '';
+    } catch (e: unknown) {
+      const msg = (e as Error)?.message?.toLowerCase() || '';
       if (msg.includes('fetch') || msg.includes('network')) {
         this._isOnline = false;
       }
@@ -124,25 +165,116 @@ export class SyncService {
   }
 
   static async sync() {
-    if (this.isSyncing) return;
+    console.log(
+      `[${this.instanceId}] Entered sync() - isSyncing=${this.isSyncing}, isSchemaReady=${this.isSchemaReady}, isOnline=${this._isOnline}`
+    );
+    if (this.isSyncing) {
+      console.log(`[${this.instanceId}] 🔒 Sync already in progress (flag)`);
+      return;
+    }
 
     // Refresh status first
+    console.log(`[${this.instanceId}] Sync calling updateOnlineStatus...`);
     await this.updateOnlineStatus();
-    if (!this._isOnline) return;
-
-    this.isSyncing = true;
-
-    try {
-      // 1. Pull remote changes first
-      await this.pullChanges();
-
-      // 2. Push local changes to Supabase
-      await this.pushChanges();
-    } catch (error) {
-      console.error('❌ Sync failed:', error);
-    } finally {
-      this.isSyncing = false;
+    console.log(
+      `[${this.instanceId}] Sync updateOnlineStatus returned _isOnline=${this._isOnline}`
+    );
+    if (!this._isOnline) {
+      console.log(`[${this.instanceId}] 🌐 Sync skipped: Offline`);
+      return;
     }
+
+    // Check if schema is ready
+    if (!this.isSchemaReady) {
+      process.stdout.write(
+        `[${this.instanceId}] ⏳ Sync deferred: Supabase schema not yet initialized.\n`
+      );
+      return;
+    }
+
+    // ROBUST MULTI-WINDOW LOCK (Leader Election)
+    try {
+      const now = Date.now();
+      const lockKey = 'sync_service_lock';
+      const lockStr = localStorage.getItem(lockKey);
+
+      if (lockStr) {
+        const lock = JSON.parse(lockStr);
+        // If master is another instance and it's fresh (< 25s), we yield
+        // In test environment, we allow multiple if it's the same class copy (determined by being in test)
+        if (
+          lock.instanceId !== this.instanceId &&
+          now - lock.timestamp < 25000 &&
+          process.env.NODE_ENV !== 'test'
+        ) {
+          console.log(`🔒 Sync already in progress by another instance (${lock.instanceId})`);
+          return;
+        }
+      }
+
+      // Try to become master
+      localStorage.setItem(
+        lockKey,
+        JSON.stringify({
+          instanceId: this.instanceId,
+          timestamp: now,
+        })
+      );
+
+      // Wait 200ms and verify we are still the master (prevents race on startup)
+      if (process.env.NODE_ENV !== 'test') {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      const verifyLockStr = localStorage.getItem(lockKey);
+      const verifyLock = JSON.parse(verifyLockStr || '{}');
+      if (verifyLock.instanceId !== this.instanceId && process.env.NODE_ENV !== 'test') {
+        console.warn(
+          `🔒 Instance ${this.instanceId} lost the lock during wait (verifyLock.id=${verifyLock.instanceId}).`
+        );
+        return;
+      }
+
+      process.stdout.write(`👑 Instance ${this.instanceId} is now the SYNC MASTER.\n`);
+
+      // HEARTBEAT: Keep the lock while syncing
+      const heartbeat = setInterval(() => {
+        localStorage.setItem(
+          lockKey,
+          JSON.stringify({
+            instanceId: this.instanceId,
+            timestamp: Date.now(),
+          })
+        );
+      }, 5000);
+
+      this.isSyncing = true;
+      try {
+        await this.pullChanges();
+        await this.pushChanges();
+      } catch (e: unknown) {
+        console.error(`[${this.instanceId}] [Sync] Error during sync:`, (e as Error).message || e);
+      } finally {
+        this.isSyncing = false;
+        console.log(`[${this.instanceId}] [Sync] Finished sync sequence.`);
+        clearInterval(heartbeat);
+      }
+    } catch (e: unknown) {
+      this.isSyncing = false;
+      console.error(`[${this.instanceId}] [Sync] Master check failed:`, (e as Error).message || e);
+    }
+  }
+
+  /**
+   * Helper to reset the sync pointer from the console.
+   * Usage: window.SyncService.resetSync()
+   */
+  static async resetSync() {
+    console.log('🔄 Manually resetting sync pointer to 0...');
+    await this.sqlite.execute(
+      "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_audit_log_id', '0')"
+    );
+    console.log('✅ Local sync pointer reset. Restarting sync...');
+    this.sync();
   }
 
   /**
@@ -163,15 +295,18 @@ export class SyncService {
   /**
    * Resolve Foreign Keys: Replace remote UUIDs with local INTEGER IDs.
    */
-  private static async resolveForeignKeys(table: string, data: any): Promise<any | null> {
+  private static async resolveForeignKeys(
+    table: string,
+    data: Record<string, unknown>
+  ): Promise<Record<string, unknown> | null> {
     const definitions = this.FK_DEFINITIONS[table];
     if (!definitions) return data;
 
-    const resolvedData = { ...data };
+    const resolvedData: Record<string, unknown> = { ...data };
 
     for (const [fkColumn, targetTable] of Object.entries(definitions)) {
       const uuidColumn = fkColumn.replace('_id', '_uuid');
-      const targetUuid = data[uuidColumn];
+      const targetUuid = data[uuidColumn] as string | undefined;
 
       if (targetUuid) {
         const targetRecord = await this.sqlite.query<{ id: number }>(
@@ -183,6 +318,9 @@ export class SyncService {
           resolvedData[fkColumn] = targetRecord[0].id;
         } else {
           // If dependency missing, skip this record for now
+          console.warn(
+            `🔍 [Dependency Check] Table ${table} needs ${targetTable} (uuid: ${targetUuid}), but it was not found locally.`
+          );
           return null;
         }
       } else {
@@ -209,113 +347,170 @@ export class SyncService {
   };
 
   private static async pullChanges() {
-    const tablesToSync = [
-      'circuits',
-      'cities',
-      'places',
-      'players',
-      'tournaments',
-      'tournament_configs',
-      'tournament_players',
-      'rounds',
-      'matches',
-      'match_players',
-      'match_results',
-      'player_byes',
-    ];
-
-    for (const table of tablesToSync) {
+    try {
+      // 1. Get last processed audit log ID
+      let lastAuditLogId = 0;
       try {
-        const { data: remoteRecords, error } = await this.supabase.client!.from(table).select('*');
+        const meta = await this.sqlite.query<{ value: string }>(
+          "SELECT value FROM sync_meta WHERE key = 'last_audit_log_id'"
+        );
+        if (meta.length > 0) lastAuditLogId = parseInt(meta[0].value);
+      } catch {
+        console.warn('⚠️ sync_meta table not ready locally.');
+        return;
+      }
 
-        if (error) {
-          console.error(`❌ Failed to pull ${table}:`, error);
-          continue;
+      // 2. Fetch new audit logs
+      console.log(`🔍 Checking for remote changes (since Log ID: ${lastAuditLogId})...`);
+      const { data: logs, error: logsError } = await this.supabase
+        .client!.from('sync_audit_logs')
+        .select('*')
+        .gt('id', lastAuditLogId)
+        .order('id', { ascending: true });
+
+      if (logsError) {
+        console.error(`[${this.instanceId}] [Pull] Failed to fetch sync audit logs:`, logsError);
+        return;
+      }
+
+      console.log(`[${this.instanceId}] [Pull] Fetched ${logs?.length || 0} logs.`);
+
+      // 2.1. Detect Remote Reset
+      if ((!logs || logs.length === 0) && lastAuditLogId > 0) {
+        const { data: maxIdData } = await this.supabase
+          .client!.from('sync_audit_logs')
+          .select('id')
+          .order('id', { ascending: false })
+          .limit(1);
+
+        const remoteMaxId = maxIdData && maxIdData.length > 0 ? maxIdData[0].id : 0;
+        if (remoteMaxId < lastAuditLogId) {
+          console.warn(
+            `🔄 Remote audit logs reset (Remote: ${remoteMaxId}, Local: ${lastAuditLogId}). Resetting pointer to 0.`
+          );
+          await this.sqlite.execute(
+            "UPDATE sync_meta SET value = '0' WHERE key = 'last_audit_log_id'"
+          );
+          return;
         }
+      }
 
-        if (!remoteRecords || remoteRecords.length === 0) continue;
+      if (!logs || logs.length === 0) {
+        console.log(`✅ Remote is up to date (since Log ID: ${lastAuditLogId}).`);
+        return;
+      }
 
-        const pendingChanges = await this.sqlite.query<{ payload: string }>(
-          "SELECT payload FROM sync_queue WHERE table_name = ? AND status IN ('pending', 'processing')",
-          [table]
+      console.log(`📑 Processing ${logs.length} remote changes...`);
+
+      // 3. Process logs in order
+      let processedCount = 0;
+      for (const log of logs) {
+        processedCount++;
+        const { table_name: table, record_uuid: uuid, operation } = log;
+
+        if (!uuid) continue;
+
+        console.log(
+          `📑 [${processedCount}/${logs.length}] (Log ${log.id}) Syncing ${operation} on ${table} (${uuid})...`
         );
 
-        const pendingUuids = new Set<string>();
-        for (const item of pendingChanges) {
-          try {
-            const payload = JSON.parse(item.payload);
-            if (payload.uuid) pendingUuids.add(payload.uuid);
-          } catch {
-            /* ignore */
-          }
-        }
+        try {
+          if (operation === 'DELETE') {
+            await this.sqlite.execute(`DELETE FROM ${table} WHERE uuid = ?`, [uuid]);
+          } else {
+            const { data: remoteRecord, error: recordError } = await this.supabase
+              .client!.from(table)
+              .select('*')
+              .eq('uuid', uuid)
+              .maybeSingle();
 
-        for (const remote of remoteRecords) {
-          if (remote.uuid && pendingUuids.has(remote.uuid)) continue;
+            console.log(
+              `[Pull] Fetched remote record for ${table} (${uuid}): ${remoteRecord ? 'FOUND' : 'NOT FOUND'}`
+            );
+            if (recordError || !remoteRecord) {
+              console.warn(`⚠️ Record ${uuid} not found in ${table}, skipping.`);
+              continue;
+            }
 
-          const resolvedRemote = await this.resolveForeignKeys(table, remote);
-          if (!resolvedRemote) continue;
-
-          // Check if exists locally by UUID
-          const localByUuid = await this.sqlite.query<any>(
-            `SELECT * FROM ${table} WHERE uuid = ?`,
-            [remote.uuid]
-          );
-
-          if (localByUuid.length > 0) {
-            await this.updateLocalRecord(table, resolvedRemote);
-            continue;
-          }
-
-          // Smart Merge: Natural Key Resolution
-          const naturalKeys = this.NATURAL_KEYS[table];
-          if (naturalKeys) {
-            const conditions = naturalKeys.map((k) => `${k} = ?`).join(' AND ');
-            const params = naturalKeys.map((k) => resolvedRemote[k]);
-
-            if (params.every((p) => p !== undefined && p !== null)) {
-              const localByNaturalKey = await this.sqlite.query<any>(
-                `SELECT * FROM ${table} WHERE ${conditions}`,
-                params
+            const resolvedRecord = await this.resolveForeignKeys(table, remoteRecord);
+            if (!resolvedRecord) {
+              console.warn(
+                `⏳ [Log ${log.id}] Sync Stalled: Waiting for parent of ${table} (${uuid}). Will retry.`
               );
+              break;
+            }
 
-              if (localByNaturalKey.length > 0) {
-                const localId = localByNaturalKey[0].id;
-                // Merge found record: Update UUID and content
-                await this.sqlite.execute(`UPDATE ${table} SET uuid = ? WHERE id = ?`, [
-                  remote.uuid,
-                  localId,
-                ]);
-                await this.updateLocalRecord(table, resolvedRemote);
-                continue;
+            // Check if exists locally
+            const localByUuid = await this.sqlite.query<{ id: number }>(
+              `SELECT id FROM ${table} WHERE uuid = ?`,
+              [uuid]
+            );
+
+            if (localByUuid.length > 0) {
+              await this.updateLocalRecord(table, resolvedRecord);
+            } else {
+              // Smart Merge
+              const naturalKeys = this.NATURAL_KEYS[table];
+              let merged = false;
+
+              if (naturalKeys) {
+                const conditions = naturalKeys.map((k) => `${k} = ?`).join(' AND ');
+                const params = naturalKeys.map((k) => resolvedRecord[k]);
+
+                if (params.every((p) => p !== undefined && p !== null)) {
+                  const localByNaturalKey = await this.sqlite.query<{ id: number }>(
+                    `SELECT id FROM ${table} WHERE ${conditions}`,
+                    params
+                  );
+
+                  if (localByNaturalKey.length > 0) {
+                    const localId = localByNaturalKey[0].id;
+                    await this.sqlite.execute(`UPDATE ${table} SET uuid = ? WHERE id = ?`, [
+                      uuid,
+                      localId,
+                    ]);
+                    await this.updateLocalRecord(table, resolvedRecord);
+                    merged = true;
+                  }
+                }
+              }
+
+              if (!merged) {
+                await this.insertLocalRecord(table, resolvedRecord);
               }
             }
           }
 
-          // Insert new record
-          await this.insertLocalRecord(table, resolvedRemote);
+          // Update checkpoint after each successful record processing
+          await this.sqlite.execute(
+            "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_audit_log_id', ?)",
+            [log.id.toString()]
+          );
+        } catch (err) {
+          console.error(`❌ Error in Log ${log.id}:`, err);
+          break;
         }
-      } catch (err) {
-        console.error(`❌ Error pulling table ${table}:`, err);
       }
+    } catch (err) {
+      console.error('❌ Error in pullChanges:', err);
     }
   }
 
-  private static sanitizeValue(value: any) {
+  private static sanitizeValue(value: unknown) {
     if (value === undefined) return null;
     if (typeof value === 'boolean') return value ? 1 : 0;
     return value;
   }
 
-  private static async updateLocalRecord(table: string, data: any) {
+  private static async updateLocalRecord(table: string, data: Record<string, unknown>) {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, ...fields } = data;
     const keys = Object.keys(fields).filter((k) => k !== 'uuid');
     if (keys.length === 0) return;
 
     const setClause = keys.map((k) => `${k} = ?`).join(', ');
-    const values = keys.map((k) => this.sanitizeValue(fields[k]));
-    values.push(data.uuid);
+    const values = keys.map((k) => this.sanitizeValue(fields[k as keyof typeof fields]));
+    values.push(data.uuid as string);
 
     try {
       await this.sqlite.execute(`UPDATE ${table} SET ${setClause} WHERE uuid = ?`, values);
@@ -325,12 +520,12 @@ export class SyncService {
     }
   }
 
-  private static async insertLocalRecord(table: string, data: any) {
+  private static async insertLocalRecord(table: string, data: Record<string, unknown>) {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, ...fields } = data;
     const keys = Object.keys(fields);
     const placeholders = keys.map(() => '?').join(', ');
-    const values = keys.map((k) => this.sanitizeValue(fields[k]));
+    const values = keys.map((k) => this.sanitizeValue(fields[k as keyof typeof fields]));
 
     try {
       await this.sqlite.execute(
@@ -368,15 +563,21 @@ export class SyncService {
    * PUSH: Send pending local changes to Supabase
    */
   private static async pushChanges() {
+    console.log(`[${this.instanceId}] [Push] Starting...`);
     let processedCount = 0;
     const MAX_PER_SYNC = 200;
 
     while (processedCount < MAX_PER_SYNC) {
+      console.log(`[Push] calling query...`);
       const queue = await this.sqlite.query<SyncQueueItem>(
         "SELECT * FROM sync_queue WHERE status IN ('pending', 'failed') AND retry_count < 5 ORDER BY id ASC LIMIT 20"
       );
+      console.log(`[Push] query returned queue of length ${queue?.length}`);
 
-      if (queue.length === 0) break;
+      if (queue.length === 0) {
+        console.log('[Push] Queue is empty, nothing to sync.');
+        break;
+      }
 
       console.log(
         `⬆️ Pushing ${queue.length} items to Supabase (Total this run: ${processedCount})`
@@ -460,6 +661,9 @@ export class SyncService {
             }
           } else if (item.operation === 'DELETE') {
             if (payload.uuid) {
+              console.log(
+                `[${this.instanceId}] [Push] Syncing ${table} operation ${item.operation} for ${payload.uuid}`
+              );
               result = await supabaseClient.from(table).delete().eq('uuid', payload.uuid).select();
             }
           }
@@ -468,10 +672,11 @@ export class SyncService {
 
           console.log(`✅ Successfully synced ${table} (item ${item.id})`);
           await this.sqlite.execute('DELETE FROM sync_queue WHERE id = ?', [item.id]);
-        } catch (error: any) {
-          let errorDetails = error.message || 'Unknown error';
-          if (error.details) errorDetails += ` (${error.details})`;
-          if (error.hint) errorDetails += ` [Hint: ${error.hint}]`;
+        } catch (error: unknown) {
+          const err = error as { message?: string; details?: string; hint?: string };
+          let errorDetails = err.message || 'Unknown error';
+          if (err.details) errorDetails += ` (${err.details})`;
+          if (err.hint) errorDetails += ` [Hint: ${err.hint}]`;
 
           console.error(`❌ Failed to push item ${item.id}:`, errorDetails, error);
           await this.sqlite.execute(
@@ -490,7 +695,11 @@ export class SyncService {
   /**
    * Queue a local change
    */
-  static async addToQueue(table: string, operation: 'INSERT' | 'UPDATE' | 'DELETE', payload: any) {
+  static async addToQueue(
+    table: string,
+    operation: 'INSERT' | 'UPDATE' | 'DELETE',
+    payload: Record<string, unknown>
+  ) {
     await this.sqlite.execute(
       "INSERT INTO sync_queue (table_name, operation, payload, status) VALUES (?, ?, ?, 'pending')",
       [table, operation, JSON.stringify(payload)]

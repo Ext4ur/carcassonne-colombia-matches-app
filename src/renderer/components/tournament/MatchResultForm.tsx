@@ -39,7 +39,10 @@ export default function MatchResultForm({
       const [matchPlayers, existingResults, matchData] = await Promise.all([
         DatabaseService.getMatchPlayers(match.id!) as Promise<Player[]>,
         DatabaseService.getMatchResults(match.id!),
-        DatabaseService.query('SELECT first_player_id FROM matches WHERE id = ?', [match.id!]),
+        DatabaseService.query<{ first_player_id: number | null }>(
+          'SELECT first_player_id FROM matches WHERE id = ?',
+          [match.id!]
+        ),
       ]);
 
       // Use match players if available, otherwise fallback to tournament players
@@ -63,7 +66,7 @@ export default function MatchResultForm({
         }));
         setResults(loadedResults);
         // Calculate positions with first player info
-        updatePositions(loadedResults, matchData[0]?.first_player_id);
+        updatePositions(loadedResults, matchData[0]?.first_player_id ?? undefined);
       } else {
         // Initialize with match players if available, otherwise keep the initial empty structure
         if (matchPlayers.length > 0) {

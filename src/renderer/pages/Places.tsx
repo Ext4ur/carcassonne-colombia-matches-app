@@ -10,8 +10,10 @@ import Select from '../components/common/Select';
 import { Column } from '../components/common/Table';
 import { useNotifications } from '../contexts/NotificationContext';
 import { DEFAULT_PLACE_NAME } from '../constants';
+import { useTranslation } from 'react-i18next';
 
 export default function Places() {
+  const { t } = useTranslation();
   const { addNotification } = useNotifications();
   const [places, setPlaces] = useState<Place[]>([]);
   const [cities, setCities] = useState<City[]>([]);
@@ -28,11 +30,11 @@ export default function Places() {
       setPlaces(data);
     } catch (error) {
       console.error('Error loading places:', error);
-      addNotification({ message: 'Error al cargar los lugares', type: 'error' });
+      addNotification({ message: t('places.errors.load'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
-  }, [addNotification]);
+  }, [addNotification, t]);
 
   useEffect(() => {
     loadPlaces();
@@ -69,10 +71,10 @@ export default function Places() {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) {
-      newErrors.name = 'El nombre es requerido';
+      newErrors.name = t('places.errors.name_required');
     }
     if (!formData.city_id) {
-      newErrors.city_id = 'Debes seleccionar una ciudad';
+      newErrors.city_id = t('places.errors.city_required');
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -88,21 +90,21 @@ export default function Places() {
           name: formData.name.trim(),
           city_id: cityId,
         });
-        addNotification({ message: 'Lugar actualizado', type: 'success' });
+        addNotification({ message: t('places.errors.save_success'), type: 'success' });
       } else {
         if (cityId == null) {
-          addNotification({ message: 'Debes seleccionar una ciudad', type: 'error' });
+          addNotification({ message: t('places.errors.city_required'), type: 'error' });
           return;
         }
         await DatabaseService.createPlace({ name: formData.name.trim(), city_id: cityId });
-        addNotification({ message: 'Lugar creado', type: 'success' });
+        addNotification({ message: t('places.errors.create_success'), type: 'success' });
       }
       handleCloseModal();
       loadPlaces();
     } catch (error) {
       console.error('Error saving place:', error);
       addNotification({
-        message: error instanceof Error ? error.message : 'Error al guardar el lugar',
+        message: error instanceof Error ? error.message : t('places.errors.save'),
         type: 'error',
       });
     } finally {
@@ -114,21 +116,21 @@ export default function Places() {
     if (!place.id) return;
     if (place.name === DEFAULT_PLACE_NAME) {
       addNotification({
-        message: `No se puede eliminar el lugar por defecto "${DEFAULT_PLACE_NAME}".`,
+        message: t('places.errors.delete_default', { name: DEFAULT_PLACE_NAME }),
         type: 'error',
       });
       return;
     }
-    if (!confirm(`¿Eliminar el lugar "${place.name}"?`)) return;
+    if (!confirm(t('places.alerts.delete_confirm', { name: place.name }))) return;
     try {
       setIsLoading(true);
       await DatabaseService.deletePlace(place.id);
-      addNotification({ message: 'Lugar eliminado', type: 'success' });
+      addNotification({ message: t('places.errors.delete_success'), type: 'success' });
       loadPlaces();
     } catch (error) {
       console.error('Error deleting place:', error);
       addNotification({
-        message: error instanceof Error ? error.message : 'Error al eliminar el lugar',
+        message: error instanceof Error ? error.message : t('places.errors.delete'),
         type: 'error',
       });
     } finally {
@@ -137,19 +139,19 @@ export default function Places() {
   };
 
   const columns: Column<Place>[] = [
-    { key: 'name', header: 'Nombre' },
+    { key: 'name', header: t('places.columns.name') },
     {
       key: 'city_name',
-      header: 'Ciudad',
+      header: t('places.columns.city'),
       render: (place) => (place as Place & { city_name?: string }).city_name ?? '-',
     },
     {
       key: 'actions',
-      header: 'Acciones',
+      header: t('places.columns.actions'),
       render: (place) => (
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => handleOpenModal(place)}>
-            Editar
+            {t('places.actions.edit')}
           </Button>
           <Button
             variant="danger"
@@ -158,11 +160,11 @@ export default function Places() {
             disabled={place.name === DEFAULT_PLACE_NAME}
             title={
               place.name === DEFAULT_PLACE_NAME
-                ? 'No se puede eliminar el lugar por defecto'
+                ? t('places.actions.delete_default_tooltip')
                 : undefined
             }
           >
-            Eliminar
+            {t('places.actions.delete')}
           </Button>
         </div>
       ),
@@ -173,18 +175,18 @@ export default function Places() {
     <div className="px-4 py-6">
       <div className="card">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Lugares</h1>
-          <Button onClick={() => handleOpenModal()}>Nuevo Lugar</Button>
+          <h1 className="text-2xl font-bold">{t('places.title')}</h1>
+          <Button onClick={() => handleOpenModal()}>{t('places.new')}</Button>
         </div>
 
         {isLoading && places.length === 0 ? (
-          <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400">{t('places.loading')}</p>
         ) : (
           <Table
             columns={columns}
             data={places}
             keyExtractor={(place) => place.id ?? Math.random()}
-            emptyMessage="No hay lugares registrados"
+            emptyMessage={t('places.empty_msg')}
           />
         )}
       </div>
@@ -192,32 +194,32 @@ export default function Places() {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingPlace ? 'Editar Lugar' : 'Nuevo Lugar'}
+        title={editingPlace ? t('places.modal.edit') : t('places.modal.new')}
         footer={
           <>
             <Button variant="secondary" onClick={handleCloseModal}>
-              Cancelar
+              {t('places.modal.cancel_btn')}
             </Button>
             <Button onClick={handleSubmit} isLoading={isLoading}>
-              {editingPlace ? 'Actualizar' : 'Crear'}
+              {editingPlace ? t('places.modal.update_btn') : t('places.modal.create_btn')}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
-            label="Nombre *"
+            label={t('places.form.name')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             error={errors.name}
             required
           />
           <Select
-            label="Ciudad *"
+            label={t('places.form.city')}
             value={formData.city_id}
             onChange={(e) => setFormData({ ...formData, city_id: e.target.value })}
             options={[
-              { value: '', label: 'Seleccionar ciudad...' },
+              { value: '', label: t('places.form.select_city') },
               ...cities.map((c) => ({ value: c.id!.toString(), label: c.name })),
             ]}
             error={errors.city_id}

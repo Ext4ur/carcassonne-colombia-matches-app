@@ -7,6 +7,7 @@ import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import { useTranslation } from 'react-i18next';
 
 interface TournamentConfigProps {
   tournamentId: number;
@@ -28,6 +29,7 @@ export default function TournamentConfigComponent({
   onSave,
   onCancel,
 }: TournamentConfigProps) {
+  const { t } = useTranslation();
   const [tiebreakCriteria, setTiebreakCriteria] = useState<TiebreakCriterion[]>(
     config?.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA
   );
@@ -93,28 +95,28 @@ export default function TournamentConfigComponent({
               className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
             />
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Evitar que un par de oponentes se enfrente 2 veces
+              {t('tournaments.config.avoid_rematches')}
             </span>
           </label>
         </div>
 
         <div>
           <Select
-            label="Selección de Bye (cuando hay número impar de jugadores)"
+            label={t('tournaments.config.bye_selection')}
             value={byeSelection}
             onChange={(e) => setByeSelection(e.target.value as 'worst' | 'random' | 'round_robin')}
             options={[
-              { value: 'worst', label: 'Peor jugador de la ronda (por defecto)' },
-              { value: 'random', label: 'Aleatorio' },
-              { value: 'round_robin', label: 'Round-robin (cada jugador máximo 1 bye)' },
+              { value: 'worst', label: t('tournaments.config.bye_worst') },
+              { value: 'random', label: t('tournaments.config.bye_random') },
+              { value: 'round_robin', label: t('tournaments.config.bye_round_robin') },
             ]}
-            helperText="El jugador que recibe el bye gana automáticamente la partida"
+            helperText={t('tournaments.config.bye_help')}
           />
         </div>
 
         <div>
           <Select
-            label="Visualización de jugadores"
+            label={t('tournaments.config.display_mode')}
             value={playerDisplayMode}
             onChange={(e) =>
               setPlayerDisplayMode(e.target.value as 'per_player' | 'names_only' | 'usernames_only')
@@ -122,20 +124,20 @@ export default function TournamentConfigComponent({
             options={[
               {
                 value: 'per_player',
-                label: 'Ver todos por defecto (según preferencia de cada jugador)',
+                label: t('tournaments.config.display_default'),
               },
-              { value: 'names_only', label: 'Ver solo nombres (primer nombre y primer apellido)' },
-              { value: 'usernames_only', label: 'Ver solo usernames' },
+              { value: 'names_only', label: t('tournaments.config.display_names') },
+              { value: 'usernames_only', label: t('tournaments.config.display_usernames') },
             ]}
-            helperText="Cómo se muestran los nombres en el leaderboard y resultados del torneo"
+            helperText={t('tournaments.config.display_help')}
           />
         </div>
       </div>
 
       <div>
-        <h3 className="text-lg font-medium mb-3">Criterios de Desempate</h3>
+        <h3 className="text-lg font-medium mb-3">{t('tournaments.config.tiebreaks_title')}</h3>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Arrastra para reordenar. Desmarca para desactivar un criterio.
+          {t('tournaments.config.tiebreaks_help')}
         </p>
         <DragDropContext onDragEnd={handleDragEnd}>
           <Droppable droppableId="tiebreak-criteria">
@@ -172,7 +174,9 @@ export default function TournamentConfigComponent({
                           onChange={() => toggleCriterion(criterion.id)}
                           className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
                         />
-                        <span className="flex-1 text-sm">{criterion.name}</span>
+                        <span className="flex-1 text-sm">
+                          {t(`tiebreaks.${criterion.id}`, { defaultValue: criterion.name })}
+                        </span>
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           #{criterion.order}
                         </span>
@@ -188,15 +192,15 @@ export default function TournamentConfigComponent({
       </div>
 
       <div>
-        <h3 className="text-lg font-medium mb-3">Sistema de Puntuación</h3>
+        <h3 className="text-lg font-medium mb-3">{t('tournaments.config.scoring_title')}</h3>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Puntos del torneo según la posición en cada partida
+          {t('tournaments.config.scoring_help')}
         </p>
         <div className="grid grid-cols-2 gap-4">
           {[1, 2, 3, 4].slice(0, playersPerMatch).map((position) => (
             <Input
               key={position}
-              label={`Posición ${position}`}
+              label={t('tournaments.config.position_n', { position })}
               type="number"
               value={scoringSystem[position]?.toString() || '0'}
               onChange={(e) => {
@@ -217,9 +221,9 @@ export default function TournamentConfigComponent({
 
       <div className="flex justify-end space-x-2 pt-4">
         <Button variant="secondary" onClick={onCancel}>
-          Cancelar
+          {t('common.cancel')}
         </Button>
-        <Button onClick={handleSubmit}>Guardar Configuración</Button>
+        <Button onClick={handleSubmit}>{t('tournaments.config.save_config')}</Button>
       </div>
     </div>
   );

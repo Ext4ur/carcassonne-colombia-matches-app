@@ -9,8 +9,11 @@ let db: Database.Database | null = null;
 
 export function getDatabase(): Database.Database {
   if (!db) {
+    const env = (process.env.APP_ENV || 'colombia').toLowerCase();
+    const dbName = env === 'international' ? 'tournament_int.db' : 'tournament_co.db';
     const userDataPath = app.getPath('userData');
-    const dbPath = path.join(userDataPath, 'tournament.db');
+    const dbPath = path.join(userDataPath, dbName);
+    console.log(`[DB] Using database: ${dbName} (Environment: ${env})`);
 
     // Ensure directory exists
     const dbDir = path.dirname(dbPath);
@@ -195,6 +198,15 @@ function initializeSchema(database: Database.Database) {
       UNIQUE(tournament_id, player_id, round_number),
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
       FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Sync Meta table (for tracking last sync position)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS sync_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import './i18n/config';
 import { SyncService } from './services/syncService';
 
 // Error boundary for React errors
@@ -93,6 +94,7 @@ if (!window.electronAPI) {
 
   // Start the background sync service
   console.log('🔄 Starting Background Sync Service...');
+  (window as unknown as { SyncService: typeof SyncService }).SyncService = SyncService;
   SyncService.startSync(30000); // 30s interval for heavy sync
 
   console.log('Starting React app...');

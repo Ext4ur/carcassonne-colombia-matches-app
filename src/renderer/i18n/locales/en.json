@@ -1,0 +1,482 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "create": "Create",
+    "sync": "Sync",
+    "loading": "Loading...",
+    "actions": "Actions",
+    "status": "Status",
+    "language": "Language",
+    "close": "Close",
+    "name": "Name",
+    "type": "Type",
+    "circuit": "Circuit",
+    "date": "Date",
+    "view": "View",
+    "update": "Update",
+    "delete_error": "Error deleting",
+    "error_loading": "Error loading",
+    "continue": "Continue",
+    "confirm": "Confirm",
+    "back": "Back",
+    "play": "Play"
+  },
+  "nav": {
+    "home": "Home",
+    "tournaments": "Tournaments",
+    "circuits": "Circuits",
+    "players": "Players",
+    "places": "Places",
+    "cities": "Cities",
+    "settings": "Settings"
+  },
+  "home": {
+    "welcome": "Welcome to Carcassonne Tournament Manager",
+    "description": "Manage your in-person Carcassonne tournaments professionally.",
+    "tournaments_desc": "Create and manage qualifying or circuit tournaments",
+    "players_desc": "Manage the player database",
+    "circuits_desc": "Manage circuits and their tournaments"
+  },
+  "circuits": {
+    "title": "Circuits",
+    "new_circuit": "New Circuit",
+    "search_placeholder": "Search by circuit name",
+    "empty_msg": "No circuits registered",
+    "loading": "Loading...",
+    "form": {
+      "name": "Name *",
+      "description": "Description",
+      "start_date": "Start Date",
+      "end_date": "End Date",
+      "status": "Status",
+      "status_active": "Active",
+      "status_finalized": "Finalized",
+      "status_help": "In \"Finalized\" no more tournaments can be added to the circuit."
+    },
+    "columns": {
+      "name": "Name",
+      "status": "Status",
+      "start_date": "Start Date",
+      "end_date": "End Date",
+      "actions": "Actions"
+    },
+    "actions": {
+      "view": "View",
+      "edit": "Edit",
+      "finalize": "Finalize",
+      "delete": "Delete"
+    },
+    "alerts": {
+      "finalize_confirm": "Finalize the circuit \"{{name}}\"? No more tournaments can be added.",
+      "delete_confirm": "Are you sure you want to delete the circuit \"{{name}}\"?",
+      "finalize_title": "No more tournaments can be added"
+    },
+    "errors": {
+      "load": "Error loading circuits",
+      "load_standings": "Error loading standings",
+      "finalize": "Error finalizing circuit",
+      "save": "Error saving circuit",
+      "delete": "Error deleting circuit",
+      "report": "Error generating report",
+      "report_success": "Report generated successfully",
+      "name_required": "Name is required",
+      "date_order": "End date must be after start date"
+    },
+    "modal": {
+      "edit": "Edit Circuit",
+      "new": "New Circuit",
+      "update_btn": "Update",
+      "create_btn": "Create",
+      "cancel_btn": "Cancel"
+    },
+    "standings": {
+      "title_final": "Final Statistics - {{name}}",
+      "title_active": "Standings - {{name}}",
+      "export_excel": "Export Excel",
+      "export_csv": "Export CSV",
+      "close": "Close",
+      "filters": "Filters",
+      "filter_place": "By place",
+      "all_places": "All places",
+      "filter_stop": "By stop",
+      "all_stops": "All stops",
+      "filter_player": "By player",
+      "all_players": "All players",
+      "final_podium": "Final Podium",
+      "pts": "pts",
+      "chart_pos_title": "Position in each circuit stop",
+      "chart_pos_y": "Position",
+      "chart_pos_x": "Stop",
+      "chart_pts_title": "Accumulated points by stop",
+      "chart_pts_y": "Accumulated points",
+      "chart_pts_x": "Stop",
+      "table_title": "Standings table",
+      "empty_data": "No standings data available",
+      "columns": {
+        "position": "Position",
+        "player": "Player",
+        "total_points": "Total Points",
+        "tournaments": "Tournaments",
+        "wins": "Wins",
+        "sos": "Opponent Wins",
+        "sos_title": "Sum of opponents' wins"
+      }
+    }
+  },
+  "theme": {
+    "dark": "Switch to dark mode",
+    "light": "Switch to light mode"
+  },
+  "tournaments": {
+    "title": "Tournament Management",
+    "new": "New Tournament",
+    "rounds": "Rounds",
+    "matches": "Matches",
+    "standings": "Standings",
+    "players": "Players",
+    "matrix": "Matrix",
+    "position_name": "Pos. Name",
+    "stats": "Statistics",
+    "buchholz_cut": "Buchholz Cut",
+    "median": "Median",
+    "quick_tournament": "Quick Tournament",
+    "search_placeholder": "Search by tournament name or place",
+    "filter_place": "Filter by place",
+    "all_places": "All places",
+    "empty_msg": "No tournaments registered",
+    "types": {
+      "qualifier": "Qualifier",
+      "circuit": "Circuit"
+    },
+    "statuses": {
+      "draft": "Draft",
+      "in_progress": "In Progress",
+      "completed": "Completed",
+      "pending": "Pending",
+      "active": "Active",
+      "dropped": "Dropped (Round {{round}})"
+    },
+    "wizard": {
+      "cancel_confirm": "Cancel? The tournament won't be created and form data will be lost.",
+      "missing_data": "Missing tournament data",
+      "created": "Tournament created successfully",
+      "create_error": "Error creating tournament",
+      "delete_confirm": "Are you sure you want to delete the tournament \\\"{{name}}\\\"?",
+      "quick_title": "Create Quick Tournament",
+      "step1": "Create Tournament - Step 1: Info",
+      "step2": "Create Tournament - Step 2: Config",
+      "step3": "Create Tournament - Step 3: Registration",
+      "cancel_confirm_edit": "Cancel editing? Changes will be lost."
+    },
+    "form": {
+      "name_req": "Name is required",
+      "circuit_req": "You must select a circuit",
+      "date_req": "Date is required",
+      "place_req": "You must select a place",
+      "players_range": "Must be between 2 and 4 players",
+      "name_label": "Tournament Name *",
+      "type_label": "Tournament Type *",
+      "circuit_label": "Circuit *",
+      "select_circuit": "Select circuit...",
+      "place_label": "Place *",
+      "select_place": "Select place...",
+      "date_label": "Date *",
+      "players_label": "Players per Match *",
+      "n_players": "{{count}} players",
+      "rounds_label": "Number of Rounds (optional, auto-calculated if left blank)",
+      "rounds_help": "Calculated as power of 2 based on player count if empty"
+    },
+    "config": {
+      "avoid_rematches": "Avoid opponents playing each other twice",
+      "bye_selection": "Bye Selection (when there is an odd number of players)",
+      "bye_worst": "Worst player of the round (default)",
+      "bye_random": "Random",
+      "bye_round_robin": "Round-robin (max 1 bye per player)",
+      "bye_help": "The player receiving the bye automatically wins the match",
+      "display_mode": "Player Display",
+      "display_default": "Show all by default (according to each player's preference)",
+      "display_names": "Show only names (first name and first surname)",
+      "display_usernames": "Show only usernames",
+      "display_help": "How names are shown on the leaderboard and tournament results",
+      "tiebreaks_title": "Tiebreak Criteria",
+      "tiebreaks_help": "Drag to reorder. Uncheck to disable a criterion.",
+      "scoring_title": "Scoring System",
+      "scoring_help": "Tournament points based on position in each match",
+      "position_n": "Position {{position}}",
+      "save_config": "Save Configuration"
+    },
+    "registration": {
+      "title": "Register Players",
+      "load_error": "Error loading players",
+      "already_in_list": "This player is already in the list",
+      "already_registered": "This player is already registered in the tournament",
+      "register_error": "Error registering player",
+      "remove_draft_confirm": "Remove {{name}} from the list?",
+      "remove_confirm": "Are you sure you want to remove {{name}} from the tournament?",
+      "remove_error": "Error removing player",
+      "create_error": "Error creating player",
+      "search_placeholder": "Search existing player...",
+      "new_player": "New Player",
+      "registered_count": "Registered Players ({{count}})",
+      "calculated_rounds": "Calculated rounds",
+      "empty_msg": "No players registered. Search or create one to register.",
+      "continue_with_count": "Continue ({{count}} players)",
+      "create_and_register": "Create and Register"
+    },
+    "rounds_modal": {
+      "title": "Confirm Number of Rounds",
+      "error_min": "The number of rounds must be at least 1",
+      "registered": "Registered players:",
+      "calculated": "Calculated rounds:",
+      "label": "Number of Rounds",
+      "help_quick": "In quick mode it's calculated automatically",
+      "help_advanced": "Adjust the number of rounds if you need to"
+    },
+    "detail": {
+      "matrix_btn": "Matrix",
+      "close_stats": "Close Stats",
+      "stats": "Stats",
+      "generate_report": "Generate Report",
+      "rounds": "Rounds",
+      "generate_first_round": "Generate First Round",
+      "manual_pairings": "Manual Pairings",
+      "tournament_finished": "Tournament Finished",
+      "finish_tournament": "Finish Tournament",
+      "view_results": "View Results",
+      "generate_next_round": "Generate Next Round",
+      "complete_current_round": "Complete current round to continue",
+      "matches": "Matches",
+      "matches_round": "Matches - Round {{round}}",
+      "select_round": "Select a round to view matches",
+      "unassigned": "Unassigned",
+      "winner": "Winner",
+      "second_place": "2nd Place",
+      "third_place": "3rd Place",
+      "fourth_place": "4th Place",
+      "fifth_place": "5th Place",
+      "bye_not_editable": "Bye - Not editable"
+    }
+  },
+  "tiebreaks": {
+    "wins": "Number of wins",
+    "opponent_points_drop_worst": "Sum of opponents' points (dropping the worst)",
+    "opponent_points_drop_best_worst": "Sum of opponents' points (dropping best and worst)",
+    "head_to_head": "Head-to-head victory",
+    "point_difference": "Sum of point difference"
+  },
+  "tiebreaks_short": {
+    "wins": "🏆 Wins",
+    "opponent_points_drop_worst": "📊 Opp Pts (-worst)",
+    "opponent_points_drop_best_worst": "📈 Opp Pts (-best/worst)",
+    "head_to_head": "⚔️ Direct",
+    "point_difference": "📉 Difference"
+  },
+  "stats": {
+    "title": "Statistics",
+    "podium": "Podium",
+    "wins_distribution": "Wins Distribution",
+    "opponent_points": "Opponent Points (-worst)",
+    "opponent_points_full": "Opponent Points (-best/worst)",
+    "h2h": "Head to Head",
+    "diff": "Point Difference"
+  },
+  "players": {
+    "title": "Players",
+    "new": "New Player",
+    "name": "Name",
+    "bga_username": "BGA Username",
+    "phone": "Phone",
+    "email": "Email",
+    "age": "Age",
+    "wins": "Wins",
+    "search_placeholder": "Search by name or BGA username...",
+    "empty_msg": "No players registered",
+    "loading": "Loading...",
+    "form": {
+      "name": "Name *",
+      "bga_username": "BGA Username",
+      "display_preference": "Display preference",
+      "display_preference_help": "When you have name and username, which one to show in tournaments (if allowed).",
+      "display_name": "Name",
+      "display_username": "BGA Username",
+      "phone": "Phone",
+      "email": "Email",
+      "age": "Age"
+    },
+    "errors": {
+      "load": "Error loading players",
+      "email_invalid": "Email is invalid",
+      "age_invalid": "Age must be a valid number",
+      "save": "Error saving player",
+      "save_success": "Player updated successfully",
+      "create_success": "Player created successfully",
+      "delete": "Error deleting player",
+      "delete_success": "Player deleted successfully",
+      "load_opponents": "Error loading opponents",
+      "name_required": "Name is required"
+    },
+    "columns": {
+      "name": "Name",
+      "bga_username": "BGA Username",
+      "phone": "Phone",
+      "email": "Email",
+      "age": "Age",
+      "actions": "Actions"
+    },
+    "actions": {
+      "view_stats": "View stats",
+      "view_stats_icon": "📊",
+      "view_opponents": "View opponents",
+      "view_opponents_icon": "👥",
+      "edit": "Edit",
+      "delete": "Delete",
+      "view_history": "View History"
+    },
+    "alerts": {
+      "delete_confirm": "Are you sure you want to delete {{name}}?"
+    },
+    "opponents_modal": {
+      "title": "Opponents - {{name}}",
+      "empty_msg": "No opponents registered",
+      "cols": {
+        "player": "Player",
+        "matches": "Matches",
+        "wins": "Wins",
+        "losses": "Losses",
+        "actions": "Actions"
+      }
+    },
+    "stats_modal": {
+      "title": "Statistics - {{name}}"
+    },
+    "modal": {
+      "edit": "Edit Player",
+      "new": "New Player",
+      "update_btn": "Update",
+      "create_btn": "Create",
+      "cancel_btn": "Cancel"
+    }
+  },
+  "places": {
+    "title": "Places",
+    "new": "New Place",
+    "empty_msg": "No places registered",
+    "loading": "Loading...",
+    "form": {
+      "name": "Name *",
+      "city": "City *",
+      "select_city": "Select city..."
+    },
+    "errors": {
+      "load": "Error loading places",
+      "save": "Error saving place",
+      "save_success": "Place updated",
+      "create_success": "Place created",
+      "delete": "Error deleting place",
+      "delete_success": "Place deleted",
+      "name_required": "Name is required",
+      "city_required": "You must select a city",
+      "delete_default": "You cannot delete the default place {{name}}."
+    },
+    "columns": {
+      "name": "Name",
+      "city": "City",
+      "actions": "Actions"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "delete_default_tooltip": "Default place cannot be deleted"
+    },
+    "alerts": {
+      "delete_confirm": "Delete the place \"{{name}}\"?"
+    },
+    "modal": {
+      "edit": "Edit Place",
+      "new": "New Place",
+      "update_btn": "Update",
+      "create_btn": "Create",
+      "cancel_btn": "Cancel"
+    }
+  },
+  "cities": {
+    "title": "Cities",
+    "new": "New City",
+    "empty_msg": "No cities registered",
+    "loading": "Loading...",
+    "form": {
+      "name": "Name *"
+    },
+    "errors": {
+      "load": "Error loading cities",
+      "save": "Error saving city",
+      "save_success": "City updated",
+      "create_success": "City created",
+      "delete": "Error deleting city",
+      "delete_success": "City deleted",
+      "name_required": "Name is required"
+    },
+    "columns": {
+      "name": "Name",
+      "actions": "Actions"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "alerts": {
+      "delete_confirm": "Delete the city \"{{name}}\"?"
+    },
+    "modal": {
+      "edit": "Edit City",
+      "new": "New City",
+      "update_btn": "Update",
+      "create_btn": "Create",
+      "cancel_btn": "Cancel"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "language": "Language",
+    "language_desc": "Select the application language",
+    "theme": "Theme",
+    "theme_desc": "Switch between light and dark theme",
+    "dark_mode": "🌙 Dark Mode",
+    "light_mode": "☀️ Light Mode",
+    "data": "Data",
+    "export_title": "Export Data",
+    "export_desc": "Export all data (tournaments, players, circuits) to a JSON file for backup.",
+    "export_btn": "Export Data",
+    "import_title": "Import Data",
+    "import_desc": "Import data from a JSON file. This will add the data to existing ones.",
+    "import_btn": "Import Data",
+    "about": "About",
+    "developed_by": "Developed by",
+    "app_name": "Carcassonne Tournament Manager v1.0",
+    "app_desc": "App to manage Carcassonne Colombia offline tournaments",
+    "errors": {
+      "export_success": "Data exported successfully",
+      "export_error": "Error exporting data",
+      "import_success": "Data imported successfully: {{summary}}",
+      "import_error": "Error importing data"
+    }
+  },
+  "database_status": {
+    "title": "Database Status",
+    "current_client": "Current client:",
+    "local": "SQLite (Local)",
+    "sync": "SQLite (Local) + Supabase (Sync)",
+    "queries_db": "Queries to Supabase/DB: ",
+    "queries_cache": "From cache: ",
+    "update_btn": "Refresh count",
+    "reset_btn": "Reset",
+    "help_text": "DB queries are those that reach the client; from cache are reads resolved without touching the DB.",
+    "test_btn": "Test Supabase Connection",
+    "testing_btn": "Testing...",
+    "test_error": "Error testing connection"
+  }
+}

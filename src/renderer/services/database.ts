@@ -5,6 +5,20 @@ import { DEFAULT_PLACE_NAME } from '../constants';
 import * as dbCache from './dbCache';
 import { getPlayerDisplayName } from '@utils/playerDisplayName';
 import { SyncService } from './syncService';
+import {
+  MatchWithResults,
+  TiebreakCriterion,
+  ScoringSystem,
+  Round,
+  TournamentConfig,
+  Tournament,
+  Match,
+  MatchResultWithPlayer,
+} from '../types/tournament';
+import { Player } from '../types/player';
+import { Circuit } from '../types/circuit';
+import { City } from '../types/city';
+import { Place } from '../types/place';
 
 export class DatabaseService {
   // Always use local SQLite client for read/write
@@ -19,40 +33,42 @@ export class DatabaseService {
     return res[0]?.uuid || null;
   }
 
-  static async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
+  static async query<T = unknown>(sql: string, params?: unknown[]): Promise<T[]> {
     return this.client.query<T>(sql, params);
   }
 
   static async execute(
     sql: string,
-    params?: any[]
+    params?: unknown[]
   ): Promise<{ lastInsertRowid: number; changes: number }> {
     return this.client.execute(sql, params);
   }
 
-  static async transaction(queries: Array<{ sql: string; params?: any[] }>): Promise<any[]> {
+  static async transaction(
+    queries: Array<{ sql: string; params?: unknown[] }>
+  ): Promise<unknown[]> {
     return this.client.transaction(queries);
   }
 
   // ==========================================
   // Player operations
   // ==========================================
-  static async getAllPlayers() {
+  static async getAllPlayers(): Promise<Player[]> {
     const cached = dbCache.get(dbCache.LIST_KEYS.players);
-    if (cached !== undefined) return cached;
-    const data = await this.query('SELECT * FROM players ORDER BY name');
+    if (cached !== undefined) return cached as Player[];
+    const data = await this.query<Player>('SELECT * FROM players ORDER BY name');
     dbCache.set(dbCache.LIST_KEYS.players, data);
     return data;
   }
 
-  static async getPlayerById(id: number) {
-    const results = await this.query('SELECT * FROM players WHERE id = ?', [id]);
+  static async getPlayerById(id: number): Promise<Player | null> {
+    const results = await this.query<Player>('SELECT * FROM players WHERE id = ?', [id]);
     return results[0] || null;
   }
 
-  static async searchPlayers(searchTerm: string) {
+  static async searchPlayers(searchTerm: string): Promise<Player[]> {
     const term = `%${searchTerm}%`;
-    return this.query(
+    return this.query<Player>(
       'SELECT * FROM players WHERE name LIKE ? OR bga_username LIKE ? ORDER BY name',
       [term, term]
     );
@@ -176,21 +192,21 @@ export class DatabaseService {
   // ==========================================
   // Circuit operations
   // ==========================================
-  static async getAllCircuits() {
+  static async getAllCircuits(): Promise<Circuit[]> {
     const cached = dbCache.get(dbCache.LIST_KEYS.circuits);
-    if (cached !== undefined) return cached;
-    const data = await this.query('SELECT * FROM circuits ORDER BY created_at DESC');
+    if (cached !== undefined) return cached as Circuit[];
+    const data = await this.query<Circuit>('SELECT * FROM circuits ORDER BY created_at DESC');
     dbCache.set(dbCache.LIST_KEYS.circuits, data);
     return data;
   }
 
-  static async getCircuitByName(name: string) {
-    const results = await this.query('SELECT * FROM circuits WHERE name = ?', [name]);
+  static async getCircuitByName(name: string): Promise<Circuit | null> {
+    const results = await this.query<Circuit>('SELECT * FROM circuits WHERE name = ?', [name]);
     return results[0] || null;
   }
 
-  static async getCircuitById(id: number) {
-    const results = await this.query('SELECT * FROM circuits WHERE id = ?', [id]);
+  static async getCircuitById(id: number): Promise<Circuit | null> {
+    const results = await this.query<Circuit>('SELECT * FROM circuits WHERE id = ?', [id]);
     return results[0] || null;
   }
 
@@ -262,8 +278,8 @@ export class DatabaseService {
   }
 
   /** Tournaments of a circuit (completed only), ordered by date. */
-  static async getCircuitTournaments(circuitId: number) {
-    return this.query(
+  static async getCircuitTournaments(circuitId: number): Promise<Tournament[]> {
+    return this.query<Tournament>(
       `SELECT t.*, p.name as place_name, c.name as city_name 
        FROM tournaments t 
        LEFT JOIN places p ON t.place_id = p.id 
@@ -288,16 +304,16 @@ export class DatabaseService {
   // ==========================================
   // City operations
   // ==========================================
-  static async getAllCities() {
+  static async getAllCities(): Promise<City[]> {
     const cached = dbCache.get(dbCache.LIST_KEYS.cities);
-    if (cached !== undefined) return cached;
-    const data = await this.query('SELECT * FROM cities ORDER BY name');
+    if (cached !== undefined) return cached as City[];
+    const data = await this.query<City>('SELECT * FROM cities ORDER BY name');
     dbCache.set(dbCache.LIST_KEYS.cities, data);
     return data;
   }
 
-  static async getCityById(id: number) {
-    const results = await this.query('SELECT * FROM cities WHERE id = ?', [id]);
+  static async getCityById(id: number): Promise<City | null> {
+    const results = await this.query<City>('SELECT * FROM cities WHERE id = ?', [id]);
     return results[0] || null;
   }
 
@@ -350,18 +366,18 @@ export class DatabaseService {
   // ==========================================
   // Place operations
   // ==========================================
-  static async getAllPlaces() {
+  static async getAllPlaces(): Promise<Place[]> {
     const cached = dbCache.get(dbCache.LIST_KEYS.places);
-    if (cached !== undefined) return cached;
-    const data = await this.query(
+    if (cached !== undefined) return cached as Place[];
+    const data = await this.query<Place>(
       'SELECT p.*, c.name as city_name FROM places p LEFT JOIN cities c ON p.city_id = c.id ORDER BY p.name'
     );
     dbCache.set(dbCache.LIST_KEYS.places, data);
     return data;
   }
 
-  static async getPlaceById(id: number) {
-    const results = await this.query(
+  static async getPlaceById(id: number): Promise<Place | null> {
+    const results = await this.query<Place>(
       'SELECT p.*, c.name as city_name FROM places p LEFT JOIN cities c ON p.city_id = c.id WHERE p.id = ?',
       [id]
     );
@@ -449,11 +465,11 @@ export class DatabaseService {
   // ==========================================
   // Tournament operations
   // ==========================================
-  static async getAllTournaments() {
+  static async getAllTournaments(): Promise<Tournament[]> {
     const cached = dbCache.get(dbCache.LIST_KEYS.tournaments);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) return cached as Tournament[];
 
-    const data = await this.query(`
+    const data = await this.query<Tournament>(`
         SELECT t.*, c.name as circuit_name, p.name as place_name 
         FROM tournaments t 
         LEFT JOIN circuits c ON t.circuit_id = c.id 
@@ -465,20 +481,23 @@ export class DatabaseService {
     return data;
   }
 
-  static async getTournamentByNameAndDate(name: string, date: string) {
-    return this.query('SELECT * FROM tournaments WHERE name = ? AND date = ?', [name, date]);
+  static async getTournamentByNameAndDate(name: string, date: string): Promise<Tournament[]> {
+    return this.query<Tournament>('SELECT * FROM tournaments WHERE name = ? AND date = ?', [
+      name,
+      date,
+    ]);
   }
 
-  static async getPlayerByBGAUsername(bgaUsername: string) {
+  static async getPlayerByBGAUsername(bgaUsername: string): Promise<Player[]> {
     if (!bgaUsername) return [];
-    return this.query('SELECT * FROM players WHERE bga_username = ?', [bgaUsername]);
+    return this.query<Player>('SELECT * FROM players WHERE bga_username = ?', [bgaUsername]);
   }
 
-  static async getTournamentById(id: number) {
+  static async getTournamentById(id: number): Promise<Tournament | null> {
     const cached = dbCache.get(`tournament:${id}`);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) return cached as Tournament;
 
-    const results = await this.query(
+    const results = await this.query<Tournament>(
       `
         SELECT t.*, c.name as circuit_name, p.name as place_name 
         FROM tournaments t 
@@ -488,9 +507,9 @@ export class DatabaseService {
       `,
       [id]
     );
-    const result = results[0] || null;
-    dbCache.set(`tournament:${id}`, result);
-    return result;
+    const tournament = results[0] || null;
+    dbCache.set(`tournament:${id}`, tournament);
+    return tournament;
   }
 
   static async createTournament(tournament: {
@@ -547,51 +566,45 @@ export class DatabaseService {
     return result.lastInsertRowid;
   }
 
-  static async updateTournament(
-    id: number,
-    tournament: {
-      name?: string;
-      date?: string;
-      status?: 'draft' | 'in_progress' | 'completed';
-      players_per_match?: number;
-      number_of_rounds?: number;
-      place_id?: number;
-    }
-  ) {
-    const uuid = await this.getUuid('tournaments', id);
+  static async updateTournament(id: number, updates: Partial<Tournament>) {
+    const row = await this.query<{ uuid: string }>('SELECT uuid FROM tournaments WHERE id = ?', [
+      id,
+    ]);
+    const uuid = row[0]?.uuid;
     if (!uuid) throw new Error(`Tournament ${id} has no UUID`);
 
-    const updates: string[] = [];
+    const updateStatements: string[] = [];
     const params: any[] = [];
     const payload: any = {};
 
-    Object.entries(tournament).forEach(([key, value]) => {
+    Object.entries(updates).forEach(([key, value]) => {
       if (value !== undefined) {
-        updates.push(`${key} = ?`);
+        updateStatements.push(`${key} = ?`);
         params.push(value);
       }
     });
 
-    if (updates.length === 0) return;
+    if (updateStatements.length === 0) return;
 
-    // Resolve updated FKs
-    if (tournament.place_id) {
-      payload.place_uuid = await this.getUuid('places', tournament.place_id);
+    // Resolve updated FKs for payload
+    if (updates.place_id) {
+      payload.place_uuid = await this.getUuid('places', updates.place_id);
     }
     // Build payload without IDs
-    if (tournament.name !== undefined) payload.name = tournament.name;
-    if (tournament.date !== undefined) payload.date = tournament.date;
-    if (tournament.status !== undefined) payload.status = tournament.status;
-    if (tournament.players_per_match !== undefined)
-      payload.players_per_match = tournament.players_per_match;
-    if (tournament.number_of_rounds !== undefined)
-      payload.number_of_rounds = tournament.number_of_rounds;
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.date !== undefined) payload.date = updates.date;
+    if (updates.status !== undefined) payload.status = updates.status;
+    if (updates.players_per_match !== undefined)
+      payload.players_per_match = updates.players_per_match;
+    if (updates.number_of_rounds !== undefined) payload.number_of_rounds = updates.number_of_rounds;
 
-    updates.push('updated_at = CURRENT_TIMESTAMP');
+    updateStatements.push('updated_at = CURRENT_TIMESTAMP');
     params.push(id);
 
-    await this.execute(`UPDATE tournaments SET ${updates.join(', ')} WHERE id = ?`, params);
-
+    await this.execute(
+      `UPDATE tournaments SET ${updateStatements.join(', ')} WHERE id = ?`,
+      params
+    );
     await SyncService.addToQueue('tournaments', 'UPDATE', { uuid, ...payload });
 
     dbCache.invalidateTournament(id);
@@ -613,13 +626,17 @@ export class DatabaseService {
   // ==========================================
   // Tournament config operations
   // ==========================================
-  static async getTournamentConfig(tournamentId: number) {
+  static async getTournamentConfig(
+    tournamentId: number
+  ): Promise<(TournamentConfig & { bye_selection?: string }) | null> {
     const cached = dbCache.get(`tournament:${tournamentId}:config`);
-    if (cached !== undefined) return cached;
-    const results = await this.query('SELECT * FROM tournament_configs WHERE tournament_id = ?', [
-      tournamentId,
-    ]);
-    let config: any = null;
+    if (cached !== undefined)
+      return cached as (TournamentConfig & { bye_selection?: string }) | null;
+    const results = await this.query<any>(
+      'SELECT * FROM tournament_configs WHERE tournament_id = ?',
+      [tournamentId]
+    );
+    let config: (TournamentConfig & { bye_selection?: string }) | null = null;
     if (results[0]) {
       config = {
         ...results[0],
@@ -637,8 +654,8 @@ export class DatabaseService {
   static async createTournamentConfig(config: {
     tournament_id: number;
     avoid_rematches: boolean;
-    tiebreak_criteria: any[];
-    scoring_system: any;
+    tiebreak_criteria: TiebreakCriterion[];
+    scoring_system: ScoringSystem;
     bye_selection?: 'worst' | 'random' | 'round_robin';
     player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
   }) {
@@ -676,8 +693,8 @@ export class DatabaseService {
     tournamentId: number,
     config: {
       avoid_rematches?: boolean;
-      tiebreak_criteria?: any[];
-      scoring_system?: any;
+      tiebreak_criteria?: TiebreakCriterion[];
+      scoring_system?: ScoringSystem;
       bye_selection?: 'worst' | 'random' | 'round_robin';
       player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
     }
@@ -685,10 +702,11 @@ export class DatabaseService {
     // Determine config UUID via tournament configs?
     // We added uuid to tournament_configs.
     // Query it first.
-    const res = await this.query('SELECT uuid FROM tournament_configs WHERE tournament_id=?', [
-      tournamentId,
-    ]);
-    const uuid = res[0]?.uuid;
+    const row = await this.query<{ uuid: string }>(
+      'SELECT uuid FROM tournament_configs WHERE tournament_id=?',
+      [tournamentId]
+    );
+    const uuid = row[0]?.uuid;
     // If not found, create? Should exist if tournament created offline mode.
     // If migration happened, it exists.
 
@@ -750,10 +768,10 @@ export class DatabaseService {
   // ==========================================
   // Round operations
   // ==========================================
-  static async getTournamentRounds(tournamentId: number) {
-    const cached = dbCache.get<any[]>(`tournament:${tournamentId}:rounds`);
+  static async getTournamentRounds(tournamentId: number): Promise<Round[]> {
+    const cached = dbCache.get<Round[]>(`tournament:${tournamentId}:rounds`);
     if (cached !== undefined) return cached;
-    const data = await this.query(
+    const data = await this.query<Round>(
       'SELECT * FROM rounds WHERE tournament_id = ? ORDER BY round_number',
       [tournamentId]
     );
@@ -821,8 +839,10 @@ export class DatabaseService {
   // ==========================================
   // Match operations
   // ==========================================
-  static async getRoundMatches(roundId: number) {
-    return this.query('SELECT * FROM matches WHERE round_id = ? ORDER BY match_number', [roundId]);
+  static async getRoundMatches(roundId: number): Promise<Match[]> {
+    return this.query<Match>('SELECT * FROM matches WHERE round_id = ? ORDER BY match_number', [
+      roundId,
+    ]);
   }
 
   static async createMatch(match: {
@@ -914,7 +934,7 @@ export class DatabaseService {
     const roundIds = rounds.map((r) => r.id!);
 
     const matchesPromises = roundIds.map((roundId) =>
-      this.query<{ first_player_id: number }>(
+      this.query<{ first_player_id: number | null }>(
         'SELECT first_player_id FROM matches WHERE round_id = ?',
         [roundId]
       )
@@ -945,14 +965,17 @@ export class DatabaseService {
   // ==========================================
   // Match Result operations
   // ==========================================
-  static async getMatchResults(matchId: number, tournamentId?: number) {
+  static async getMatchResults(
+    matchId: number,
+    tournamentId?: number
+  ): Promise<MatchResultWithPlayer[]> {
     const mode =
       tournamentId != null
         ? ((await this.getTournamentConfig(tournamentId))?.player_display_mode ?? 'per_player')
         : null;
 
     if (mode == null) {
-      return this.query(
+      return this.query<MatchResultWithPlayer>(
         `
           SELECT mr.*, p.name as player_name
           FROM match_results mr
@@ -963,7 +986,7 @@ export class DatabaseService {
         [matchId]
       );
     }
-    const rows = await this.query<Record<string, unknown>>(
+    const rows = await this.query<any>(
       `
         SELECT mr.*, p.name, p.bga_username, p.display_preference
         FROM match_results mr
@@ -974,16 +997,12 @@ export class DatabaseService {
       [matchId]
     );
     return rows.map((r) => ({
-      match_id: r.match_id,
-      player_id: r.player_id,
-      position: r.position,
-      points: r.points,
-      tournament_points: r.tournament_points,
+      ...r,
       player_name: getPlayerDisplayName(
         {
-          name: (r.name as string) ?? '',
-          bga_username: (r.bga_username as string | null) ?? null,
-          display_preference: (r.display_preference as 'name' | 'username' | null) ?? null,
+          name: r.name ?? '',
+          bga_username: r.bga_username ?? null,
+          display_preference: r.display_preference ?? null,
         },
         mode
       ),
@@ -1026,11 +1045,26 @@ export class DatabaseService {
     return res;
   }
 
+  static async deleteMatchResult(resultId: number) {
+    const row = await this.query<{ uuid: string }>('SELECT uuid FROM match_results WHERE id = ?', [
+      resultId,
+    ]);
+    const uuid = row[0]?.uuid;
+
+    const res = await this.execute('DELETE FROM match_results WHERE id = ?', [resultId]);
+
+    if (uuid) {
+      await SyncService.addToQueue('match_results', 'DELETE', { uuid });
+    }
+    return res;
+  }
+
   static async deleteMatchResults(matchId: number) {
     // We need UUIDs of deleted results to sync DELETE
-    const results = await this.query('SELECT uuid FROM match_results WHERE match_id = ?', [
-      matchId,
-    ]);
+    const results = await this.query<{ uuid: string }>(
+      'SELECT uuid FROM match_results WHERE match_id = ?',
+      [matchId]
+    );
 
     const res = await this.execute('DELETE FROM match_results WHERE match_id = ?', [matchId]);
 
@@ -1097,8 +1131,10 @@ export class DatabaseService {
   // ==========================================
   // Tournament Players
   // ==========================================
-  static async getTournamentPlayers(tournamentId: number) {
-    return this.query(
+  static async getTournamentPlayers(
+    tournamentId: number
+  ): Promise<(Player & { active: boolean; dropout_round: number | null })[]> {
+    return this.query<Player & { active: boolean; dropout_round: number | null }>(
       `
         SELECT p.*, tp.active, tp.dropout_round
         FROM tournament_players tp
@@ -1137,7 +1173,7 @@ export class DatabaseService {
   static async removePlayerFromTournament(tournamentId: number, playerId: number) {
     // Get UUID before delete to sync
     // BUT wait, unique key is (tournament_id, player_id)
-    const row = await this.query(
+    const row = await this.query<{ uuid: string }>(
       'SELECT uuid FROM tournament_players WHERE tournament_id=? AND player_id=?',
       [tournamentId, playerId]
     );
@@ -1159,7 +1195,7 @@ export class DatabaseService {
     playerId: number,
     updates: { active?: boolean; dropout_round?: number | null }
   ) {
-    const row = await this.query(
+    const row = await this.query<{ uuid: string }>(
       'SELECT uuid FROM tournament_players WHERE tournament_id=? AND player_id=?',
       [tournamentId, playerId]
     );
@@ -1197,8 +1233,8 @@ export class DatabaseService {
   // ==========================================
   // Match Players
   // ==========================================
-  static async getMatchPlayers(matchId: number) {
-    return this.query(
+  static async getMatchPlayers(matchId: number): Promise<Player[]> {
+    return this.query<Player>(
       `
         SELECT p.* 
         FROM match_players mp
@@ -1229,7 +1265,7 @@ export class DatabaseService {
   }
 
   static async removePlayerFromMatch(matchId: number, playerId: number) {
-    const row = await this.query(
+    const row = await this.query<{ uuid: string }>(
       'SELECT uuid FROM match_players WHERE match_id=? AND player_id=?',
       [matchId, playerId]
     );
@@ -1248,9 +1284,10 @@ export class DatabaseService {
 
   static async setMatchPlayers(matchId: number, playerIds: number[]) {
     // Get existing UUIDs for delete sync
-    const existing = await this.query<any>('SELECT uuid FROM match_players WHERE match_id = ?', [
-      matchId,
-    ]);
+    const existing = await this.query<{ uuid: string }>(
+      'SELECT uuid FROM match_players WHERE match_id = ?',
+      [matchId]
+    );
     for (const row of existing) {
       if (row.uuid) await SyncService.addToQueue('match_players', 'DELETE', { uuid: row.uuid });
     }
@@ -1264,9 +1301,22 @@ export class DatabaseService {
     }
   }
 
-  static async getMatchWithResults(matchId: number): Promise<any> {
-    const rows = await this.query(`SELECT * FROM matches WHERE id = ?`, [matchId]);
-    if (rows.length === 0) return null;
+  static async deleteMatch(matchId: number) {
+    const row = await this.query<{ uuid: string }>('SELECT uuid FROM matches WHERE id = ?', [
+      matchId,
+    ]);
+    const uuid = row[0]?.uuid;
+
+    await this.execute('DELETE FROM matches WHERE id = ?', [matchId]);
+
+    if (uuid) {
+      await SyncService.addToQueue('matches', 'DELETE', { uuid });
+    }
+  }
+
+  static async getMatchWithResults(matchId: number): Promise<MatchWithResults | null> {
+    const rows = await this.query<Match>(`SELECT * FROM matches WHERE id = ?`, [matchId]);
+    if (rows.length === 0 || !rows[0]) return null;
     const results = await this.getMatchResults(matchId);
     return { ...rows[0], results };
   }
@@ -1274,8 +1324,10 @@ export class DatabaseService {
   // ==========================================
   // Player Byes
   // ==========================================
-  static async getPlayerByes(tournamentId: number) {
-    return this.query(
+  static async getPlayerByes(
+    tournamentId: number
+  ): Promise<{ player_id: number; round_number: number }[]> {
+    return this.query<{ player_id: number; round_number: number }>(
       `
       SELECT player_id, round_number
       FROM player_byes
@@ -1305,10 +1357,18 @@ export class DatabaseService {
   }
 
   static async hasPlayerReceivedBye(tournamentId: number, playerId: number): Promise<boolean> {
-    const results = await this.query(
+    const results = await this.query<{ count: number }>(
       'SELECT COUNT(*) as count FROM player_byes WHERE tournament_id = ? AND player_id = ?',
       [tournamentId, playerId]
     );
     return results[0]?.count > 0;
+  }
+
+  static async getTournamentPlayerCount(tournamentId: number): Promise<number> {
+    const rows = await this.query<{ count: number }>(
+      'SELECT COUNT(*) as count FROM tournament_players WHERE tournament_id = ? AND active = 1',
+      [tournamentId]
+    );
+    return rows[0]?.count || 0;
   }
 }

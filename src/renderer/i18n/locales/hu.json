@@ -11,6 +11,7 @@
     "status": "Állapot",
     "language": "Nyelv",
     "close": "Bezárás",
+    "place": "Helyszín",
     "name": "Név",
     "type": "Típus",
     "circuit": "Sorozat",
@@ -248,16 +249,25 @@
       "view_results": "Eredmények Megtekintése",
       "generate_next_round": "Következő Forduló Generálása",
       "complete_current_round": "Fejezze be a jelenlegi fordulót a folytatáshoz",
+      "edit_tournament_title": "Versenyadatok szerkesztése",
+      "round_results_title": "Eredmények - {{number}}. Forduló",
       "matches": "Mérkőzések",
       "matches_round": "Mérkőzések - {{round}}. Forduló",
       "select_round": "Válasszon egy fordulót a mérkőzések megtekintéséhez",
       "unassigned": "Nincs kiosztva",
       "winner": "Győztes",
+      "matches_completed_count": "{{completed}} / {{total}} befejezve",
       "second_place": "2. Helyezett",
       "third_place": "3. Helyezett",
       "fourth_place": "4. Helyezett",
       "fifth_place": "5. Helyezett",
       "bye_not_editable": "Bye - Nem szerkeszthető"
+    },
+    "columns": {
+      "match": "Mérkőzés",
+      "players": "Játékosok",
+      "status": "Állapot",
+      "actions": "Műveletek"
     }
   },
   "tiebreaks": {

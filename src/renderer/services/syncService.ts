@@ -186,9 +186,7 @@ export class SyncService {
 
     // Check if schema is ready
     if (!this.isSchemaReady) {
-      process.stdout.write(
-        `[${this.instanceId}] ⏳ Sync deferred: Supabase schema not yet initialized.\n`
-      );
+      console.log(`[${this.instanceId}] ⏳ Sync deferred: Supabase schema not yet initialized.`);
       return;
     }
 
@@ -205,7 +203,7 @@ export class SyncService {
         if (
           lock.instanceId !== this.instanceId &&
           now - lock.timestamp < 25000 &&
-          process.env.NODE_ENV !== 'test'
+          import.meta.env?.MODE !== 'test'
         ) {
           console.log(`🔒 Sync already in progress by another instance (${lock.instanceId})`);
           return;
@@ -222,19 +220,19 @@ export class SyncService {
       );
 
       // Wait 200ms and verify we are still the master (prevents race on startup)
-      if (process.env.NODE_ENV !== 'test') {
+      if (import.meta.env?.MODE !== 'test') {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
       const verifyLockStr = localStorage.getItem(lockKey);
       const verifyLock = JSON.parse(verifyLockStr || '{}');
-      if (verifyLock.instanceId !== this.instanceId && process.env.NODE_ENV !== 'test') {
+      if (verifyLock.instanceId !== this.instanceId && import.meta.env?.MODE !== 'test') {
         console.warn(
           `🔒 Instance ${this.instanceId} lost the lock during wait (verifyLock.id=${verifyLock.instanceId}).`
         );
         return;
       }
 
-      process.stdout.write(`👑 Instance ${this.instanceId} is now the SYNC MASTER.\n`);
+      console.log(`👑 Instance ${this.instanceId} is now the SYNC MASTER.`);
 
       // HEARTBEAT: Keep the lock while syncing
       const heartbeat = setInterval(() => {

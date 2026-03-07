@@ -32,7 +32,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.main.json",
     "postinstall": "electron-builder install-app-deps",
     "rebuild-sqlite": "electron-rebuild -f -w better-sqlite3",
-    "db:fix": "electron scripts/fix-db.js"
+    "db:fix": "electron scripts/fix-db.js",
+    "check-translations": "node scripts/check-translations.js",
+    "check-translations:fix": "node scripts/check-translations.js --fix"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx}": [

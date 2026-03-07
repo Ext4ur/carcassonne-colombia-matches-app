@@ -113,18 +113,16 @@ describe('CircuitService', () => {
       ]);
 
       // Spy on standing to return a dummy player
-      const spy = vi
-        .spyOn(CircuitService, 'getCircuitStandings')
-        .mockResolvedValue([
-          {
-            player_id: 1,
-            player_name: 'P1',
-            total_points: 0,
-            tournaments_played: 0,
-            wins: 0,
-            sos: 0,
-          },
-        ]);
+      const spy = vi.spyOn(CircuitService, 'getCircuitStandings').mockResolvedValue([
+        {
+          player_id: 1,
+          player_name: 'P1',
+          total_points: 0,
+          tournaments_played: 0,
+          wins: 0,
+          sos: 0,
+        },
+      ]);
 
       const result = await CircuitService.getCircuitPositionEvolution(1);
 

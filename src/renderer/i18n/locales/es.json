@@ -11,6 +11,7 @@
     "status": "Estado",
     "language": "Idioma",
     "close": "Cerrar",
+    "place": "Lugar",
     "name": "Nombre",
     "type": "Tipo",
     "circuit": "Circuito",
@@ -248,16 +249,25 @@
       "view_results": "Ver Resultados",
       "generate_next_round": "Generar Siguiente Ronda",
       "complete_current_round": "Completa la ronda actual para continuar",
+      "edit_tournament_title": "Editar datos del torneo",
+      "round_results_title": "Resultados - Ronda {{number}}",
       "matches": "Partidas",
       "matches_round": "Partidas - Ronda {{round}}",
       "select_round": "Selecciona una ronda para ver las partidas",
       "unassigned": "Sin asignar",
       "winner": "Ganador",
+      "matches_completed_count": "{{completed}} / {{total}} completadas",
       "second_place": "2do Lugar",
       "third_place": "3er Lugar",
       "fourth_place": "4to Lugar",
       "fifth_place": "5to Lugar",
       "bye_not_editable": "Bye - No editable"
+    },
+    "columns": {
+      "match": "Partida",
+      "players": "Jugadores",
+      "status": "Estado",
+      "actions": "Acciones"
     }
   },
   "tiebreaks": {

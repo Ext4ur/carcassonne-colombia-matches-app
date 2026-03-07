@@ -1082,11 +1082,10 @@ export default function TournamentDetail() {
               {tournament.place_name ?? '?'} - {tournament.name}
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              {tournament.type === 'circuit' ? 'Circuito' : 'Clasificatorio'} •{' '}
-              {formatDateForDisplay(tournament.date)}
+              {t(`tournaments.types.${tournament.type}`)} • {formatDateForDisplay(tournament.date)}
               {tournament.status === 'completed' && (
                 <span className="ml-2 px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded text-sm font-medium">
-                  Finalizado
+                  {t('tournaments.statuses.completed')}
                 </span>
               )}
             </p>
@@ -1146,37 +1145,37 @@ export default function TournamentDetail() {
       <Modal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        title="Editar datos del torneo"
+        title={t('tournaments.detail.edit_tournament_title', 'Editar datos del torneo')}
         footer={
           <>
             <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleSaveEdit} isLoading={isLoading}>
-              Guardar
+              {t('common.save')}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
-            label="Nombre *"
+            label={t('tournaments.form.name_label')}
             value={editFormData.name}
             onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
             required
           />
           <Input
-            label="Fecha"
+            label={t('common.date')}
             type="date"
             value={editFormData.date}
             onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
           />
           <Select
-            label="Lugar"
+            label={t('common.place')}
             value={editFormData.place_id}
             onChange={(e) => setEditFormData({ ...editFormData, place_id: e.target.value })}
             options={[
-              { value: '', label: 'Seleccionar lugar...' },
+              { value: '', label: t('tournaments.form.select_place') },
               ...places.map((p) => ({ value: p.id!.toString(), label: p.name })),
             ]}
           />
@@ -1411,8 +1410,10 @@ export default function TournamentDetail() {
             </h2>
             {currentRound && (
               <span className="text-sm text-gray-600 dark:text-gray-400">
-                {filteredMatches.filter((m) => m.status === 'completed').length} /{' '}
-                {filteredMatches.length} completadas
+                {t('tournaments.detail.matches_completed_count', {
+                  completed: filteredMatches.filter((m) => m.status === 'completed').length,
+                  total: filteredMatches.length,
+                })}
                 {selectedPlayerIds.length > 0 && ' (filtrado por jugador)'}
               </span>
             )}
@@ -1488,7 +1489,9 @@ export default function TournamentDetail() {
         }}
         title={
           selectedRoundResults
-            ? `Resultados - Ronda ${selectedRoundResults.round.round_number}`
+            ? t('tournaments.detail.round_results_title', {
+                number: selectedRoundResults.round.round_number,
+              })
             : ''
         }
         size="xl"
@@ -1500,7 +1503,7 @@ export default function TournamentDetail() {
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Partida
+                      {t('tournaments.columns.match')}
                     </th>
                     {Array.from({ length: tournament.players_per_match }, (_, i) => {
                       const position = i + 1;
@@ -1508,18 +1511,20 @@ export default function TournamentDetail() {
                         position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
                       const label =
                         position === 1
-                          ? '1er'
+                          ? t('tournaments.detail.winner')
                           : position === 2
-                            ? '2do'
+                            ? t('tournaments.detail.second_place')
                             : position === 3
-                              ? '3er'
-                              : `${position}to`;
+                              ? t('tournaments.detail.third_place')
+                              : position === 4
+                                ? t('tournaments.detail.fourth_place')
+                                : t('tournaments.detail.fifth_place');
                       return (
                         <th
                           key={position}
                           className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                         >
-                          {emoji} {label} Lugar
+                          {emoji} {label}
                         </th>
                       );
                     })}

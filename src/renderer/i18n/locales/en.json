@@ -11,6 +11,7 @@
     "status": "Status",
     "language": "Language",
     "close": "Close",
+    "place": "Place",
     "name": "Name",
     "type": "Type",
     "circuit": "Circuit",
@@ -248,16 +249,25 @@
       "view_results": "View Results",
       "generate_next_round": "Generate Next Round",
       "complete_current_round": "Complete current round to continue",
+      "edit_tournament_title": "Edit Tournament Data",
+      "round_results_title": "Results - Round {{number}}",
       "matches": "Matches",
       "matches_round": "Matches - Round {{round}}",
       "select_round": "Select a round to view matches",
       "unassigned": "Unassigned",
       "winner": "Winner",
+      "matches_completed_count": "{{completed}} / {{total}} completed",
       "second_place": "2nd Place",
       "third_place": "3rd Place",
       "fourth_place": "4th Place",
       "fifth_place": "5th Place",
       "bye_not_editable": "Bye - Not editable"
+    },
+    "columns": {
+      "match": "MATCH",
+      "players": "PLAYERS",
+      "status": "STATUS",
+      "actions": "ACTIONS"
     }
   },
   "tiebreaks": {

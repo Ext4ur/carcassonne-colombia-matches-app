@@ -21,6 +21,12 @@ vi.mock('../services/swiss', () => ({
   },
 }));
 
+vi.mock('../i18n/config', () => ({
+  default: {
+    t: (key: string) => key,
+  },
+}));
+
 // Mock Date for deterministic PDF output if needed (though PDF includes current date)
 // For now, checks will be structural.
 
@@ -56,9 +62,9 @@ describe('ReportService', () => {
 
       expect(result.sheets).toHaveLength(3);
       expect(result.sheets.map((s: any) => s.name)).toEqual([
-        'Leaderboard',
-        'Resultados por Ronda',
-        'Estadísticas',
+        'tournaments.reports.sheet_standings',
+        'tournaments.reports.sheet_matches',
+        'tournaments.reports.sheet_stats',
       ]);
 
       // Check Leaderboard
@@ -69,27 +75,33 @@ describe('ReportService', () => {
       // Check detailed results
       const details = result.sheets[1];
       expect(details.rows).toHaveLength(1); // 1 result row mocked
-      expect(details.rows[0]).toEqual(['Ronda 1', 1, 'P1', 1, 100, 1]);
+      expect(details.rows[0]).toEqual(['tournaments.reports.round 1', 1, 'P1', 1, 100, 1]);
     });
   });
 
   describe('generateTournamentCSV', () => {
-    it('generates correct rows', async () => {
+    it('generates correct rows for standings', async () => {
       const tId = 1;
       (DatabaseService.getTournamentConfig as any).mockResolvedValue({});
+      (DatabaseService.getTournamentRounds as any).mockResolvedValue([]);
       (SwissPairingService.calculateStandings as any).mockResolvedValue([
         { player_name: 'Winner', total_points: 3.5, wins: 3 },
       ]);
 
-      const result = await ReportService.generateTournamentCSV(tId);
+      const result = await ReportService.generateTournamentCSV(tId, 'csv-standings');
 
-      expect(result.headers).toEqual(['Posición', 'Jugador', 'Puntos Totales', 'Victorias']);
+      expect(result.headers).toEqual([
+        'tournaments.reports.position',
+        'tournaments.reports.player',
+        'tournaments.reports.total_points',
+        'tournaments.reports.wins',
+      ]);
       expect(result.rows).toHaveLength(1);
       expect(result.rows[0]).toEqual({
-        Posición: 1,
-        Jugador: 'Winner',
-        'Puntos Totales': '3.50',
-        Victorias: 3,
+        'tournaments.reports.position': 1,
+        'tournaments.reports.player': 'Winner',
+        'tournaments.reports.total_points': '3.50',
+        'tournaments.reports.wins': 3,
       });
     });
   });

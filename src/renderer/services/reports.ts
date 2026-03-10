@@ -2,15 +2,20 @@
 import { DatabaseService } from './database';
 import { Tournament, PlayerStanding } from '../types/tournament';
 
+import i18n from '../i18n/config';
+
 export class ReportService {
   static async generateTournamentExcel(tournamentId: number): Promise<any> {
-    // const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const standings = await this.getStandings(tournamentId);
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-    // const config = await DatabaseService.getTournamentConfig(tournamentId);
 
     // Sheet 1: Leaderboard
-    const leaderboardHeaders = ['Posición', 'Jugador', 'Puntos Totales', 'Victorias'];
+    const leaderboardHeaders = [
+      i18n.t('tournaments.reports.position'),
+      i18n.t('tournaments.reports.player'),
+      i18n.t('tournaments.reports.total_points'),
+      i18n.t('tournaments.reports.wins'),
+    ];
     const leaderboardRows = standings.map((s, index) => [
       index + 1,
       s.player_name,
@@ -23,7 +28,7 @@ export class ReportService {
     for (const round of rounds) {
       const matches = await DatabaseService.getRoundMatches(round.id!);
       roundResults.push({
-        round: `Ronda ${round.round_number}`,
+        round: `${i18n.t('tournaments.reports.round')} ${round.round_number}`,
         matches: await Promise.all(
           matches.map(async (match) => {
             const results = await DatabaseService.getMatchResults(match.id!, tournamentId);
@@ -43,12 +48,12 @@ export class ReportService {
     }
 
     const roundHeaders = [
-      'Ronda',
-      'Partida',
-      'Jugador',
-      'Posición',
-      'Puntos Partida',
-      'Puntos Torneo',
+      i18n.t('tournaments.reports.round'),
+      i18n.t('tournaments.reports.match'),
+      i18n.t('tournaments.reports.player'),
+      i18n.t('tournaments.reports.position'),
+      i18n.t('tournaments.reports.match_points'),
+      i18n.t('tournaments.reports.tournament_points'),
     ];
     const roundRows: any[] = [];
     for (const roundData of roundResults) {
@@ -67,31 +72,39 @@ export class ReportService {
     }
 
     // Sheet 3: Statistics
-    const statsHeaders = ['Estadística', 'Valor'];
+    const statsHeaders = [
+      i18n.t('tournaments.reports.stat_name'),
+      i18n.t('tournaments.reports.stat_value'),
+    ];
     const statsRows = [
-      ['Total Jugadores', standings.length],
-      ['Total Rondas', rounds.length],
-      ['Total Partidas', rounds.reduce((sum, r) => sum + (r as any).match_count || 0, 0)],
+      [i18n.t('tournaments.reports.total_players'), standings.length],
+      [i18n.t('tournaments.reports.total_rounds'), rounds.length],
       [
-        'Puntos Promedio',
-        (standings.reduce((sum, s) => sum + s.total_points, 0) / standings.length).toFixed(2),
+        i18n.t('tournaments.reports.total_matches'),
+        rounds.reduce((sum, r) => sum + (r as any).match_count || 0, 0),
+      ],
+      [
+        i18n.t('tournaments.reports.avg_points'),
+        (standings.reduce((sum, s) => sum + s.total_points, 0) / (standings.length || 1)).toFixed(
+          2
+        ),
       ],
     ];
 
     return {
       sheets: [
         {
-          name: 'Leaderboard',
+          name: i18n.t('tournaments.reports.sheet_standings'),
           headers: leaderboardHeaders,
           rows: leaderboardRows,
         },
         {
-          name: 'Resultados por Ronda',
+          name: i18n.t('tournaments.reports.sheet_matches'),
           headers: roundHeaders,
           rows: roundRows,
         },
         {
-          name: 'Estadísticas',
+          name: i18n.t('tournaments.reports.sheet_stats'),
           headers: statsHeaders,
           rows: statsRows,
         },
@@ -99,18 +112,31 @@ export class ReportService {
     };
   }
 
-  static async generateTournamentCSV(tournamentId: number): Promise<any> {
-    const standings = await this.getStandings(tournamentId);
+  static async generateTournamentCSV(
+    tournamentId: number,
+    type: 'csv-standings' | 'csv-matches' | 'csv-stats'
+  ): Promise<any> {
+    const excelData = await this.generateTournamentExcel(tournamentId);
 
-    const headers = ['Posición', 'Jugador', 'Puntos Totales', 'Victorias'];
-    const rows = standings.map((s, index) => ({
-      Posición: index + 1,
-      Jugador: s.player_name,
-      'Puntos Totales': s.total_points.toFixed(2),
-      Victorias: s.wins,
-    }));
+    let sheet: { headers: string[]; rows: any[] };
+    if (type === 'csv-standings') {
+      sheet = excelData.sheets[0];
+    } else if (type === 'csv-matches') {
+      sheet = excelData.sheets[1];
+    } else {
+      sheet = excelData.sheets[2];
+    }
 
-    return { headers, rows };
+    // Convert arrays back to objects for CSV serialization using the headers as keys
+    const rows = sheet.rows.map((rowArr: any[]) => {
+      const obj: any = {};
+      sheet.headers.forEach((header: string, i: number) => {
+        obj[header] = rowArr[i];
+      });
+      return obj;
+    });
+
+    return { headers: sheet.headers, rows };
   }
 
   static async generateTournamentPDF(tournamentId: number): Promise<string> {

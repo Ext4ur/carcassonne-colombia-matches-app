@@ -1,492 +1,578 @@
 {
-  "common": {
-    "save": "Guardar",
-    "cancel": "Cancelar",
-    "edit": "Editar",
-    "delete": "Eliminar",
-    "create": "Crear",
-    "sync": "Sincronizar",
-    "loading": "Cargando...",
-    "actions": "Acciones",
-    "status": "Estado",
-    "language": "Idioma",
-    "close": "Cerrar",
-    "place": "Lugar",
-    "name": "Nombre",
-    "type": "Tipo",
-    "circuit": "Circuito",
-    "date": "Fecha",
-    "view": "Ver",
-    "update": "Actualizar",
-    "delete_error": "Error al eliminar",
-    "error_loading": "Error al cargar",
-    "continue": "Continuar",
-    "confirm": "Confirmar",
-    "back": "Volver",
-    "play": "Jugar"
-  },
-  "nav": {
-    "home": "Inicio",
-    "tournaments": "Torneos",
-    "circuits": "Circuitos",
-    "players": "Jugadores",
-    "places": "Lugares",
-    "cities": "Ciudades",
-    "settings": "Configuración"
-  },
-  "home": {
-    "welcome": "Bienvenido al Gestor de Torneos Carcassonne",
-    "description": "Gestiona tus torneos presenciales de Carcassonne de manera profesional.",
-    "tournaments_desc": "Crea y gestiona torneos clasificatorios o de circuito",
-    "players_desc": "Administra la base de datos de jugadores",
-    "circuits_desc": "Gestiona circuitos y sus torneos"
-  },
   "circuits": {
-    "title": "Circuitos",
-    "new_circuit": "Nuevo Circuito",
-    "search_placeholder": "Buscar por nombre de circuito",
+    "actions": {
+      "delete": "Eliminar",
+      "edit": "Editar",
+      "finalize": "Finalizar",
+      "view": "Ver"
+    },
+    "alerts": {
+      "delete_confirm": "¿Estás seguro de eliminar el circuito \"{{name}}\"?",
+      "finalize_confirm": "¿Finalizar el circuito \"{{name}}\"? No se podrán agregar más torneos.",
+      "finalize_title": "No se podrán agregar más torneos"
+    },
+    "columns": {
+      "actions": "Acciones",
+      "end_date": "Fecha Fin",
+      "name": "Nombre",
+      "start_date": "Fecha Inicio",
+      "status": "Estado"
+    },
     "empty_msg": "No hay circuitos registrados",
-    "loading": "Cargando...",
+    "errors": {
+      "date_order": "La fecha de fin debe ser posterior a la fecha de inicio",
+      "delete": "Error al eliminar el circuito",
+      "finalize": "Error al finalizar el circuito",
+      "load": "Error al cargar los circuitos",
+      "load_standings": "Error al cargar el acumulado",
+      "name_required": "El nombre es requerido",
+      "report": "Error al generar el reporte",
+      "report_success": "Reporte generado exitosamente",
+      "save": "Error al guardar el circuito"
+    },
     "form": {
-      "name": "Nombre *",
       "description": "Descripción",
-      "start_date": "Fecha de Inicio",
       "end_date": "Fecha de Fin",
+      "name": "Nombre *",
+      "start_date": "Fecha de Inicio",
       "status": "Estado",
       "status_active": "Activo",
       "status_finalized": "Finalizado",
       "status_help": "En \"Finalizado\" no se podrán agregar más torneos al circuito."
     },
-    "columns": {
-      "name": "Nombre",
-      "status": "Estado",
-      "start_date": "Fecha Inicio",
-      "end_date": "Fecha Fin",
-      "actions": "Acciones"
-    },
-    "actions": {
-      "view": "Ver",
-      "edit": "Editar",
-      "finalize": "Finalizar",
-      "delete": "Eliminar"
-    },
-    "alerts": {
-      "finalize_confirm": "¿Finalizar el circuito \"{{name}}\"? No se podrán agregar más torneos.",
-      "delete_confirm": "¿Estás seguro de eliminar el circuito \"{{name}}\"?",
-      "finalize_title": "No se podrán agregar más torneos"
-    },
-    "errors": {
-      "load": "Error al cargar los circuitos",
-      "load_standings": "Error al cargar el acumulado",
-      "finalize": "Error al finalizar el circuito",
-      "save": "Error al guardar el circuito",
-      "delete": "Error al eliminar el circuito",
-      "report": "Error al generar el reporte",
-      "report_success": "Reporte generado exitosamente",
-      "name_required": "El nombre es requerido",
-      "date_order": "La fecha de fin debe ser posterior a la fecha de inicio"
-    },
+    "loading": "Cargando...",
     "modal": {
+      "cancel_btn": "Cancelar",
+      "create_btn": "Crear",
       "edit": "Editar Circuito",
       "new": "Nuevo Circuito",
-      "update_btn": "Actualizar",
-      "create_btn": "Crear",
-      "cancel_btn": "Cancelar"
+      "update_btn": "Actualizar"
     },
+    "new_circuit": "Nuevo Circuito",
+    "search_placeholder": "Buscar por nombre de circuito",
     "standings": {
-      "title_final": "Estadísticas finales - {{name}}",
-      "title_active": "Acumulado - {{name}}",
-      "export_excel": "Exportar Excel",
-      "export_csv": "Exportar CSV",
-      "close": "Cerrar",
-      "filters": "Filtros",
-      "filter_place": "Por lugar",
       "all_places": "Todos los lugares",
-      "filter_stop": "Por parada",
-      "all_stops": "Todas las paradas",
-      "filter_player": "Por jugador",
       "all_players": "Todos los jugadores",
-      "final_podium": "Podio final",
-      "pts": "pts",
+      "all_stops": "Todas las paradas",
       "chart_pos_title": "Posición en cada parada del circuito",
-      "chart_pos_y": "Posición",
       "chart_pos_x": "Parada",
+      "chart_pos_y": "Posición",
       "chart_pts_title": "Puntos acumulados por parada",
-      "chart_pts_y": "Puntos acumulados",
       "chart_pts_x": "Parada",
-      "table_title": "Tabla de posiciones",
-      "empty_data": "No hay datos de acumulado disponibles",
+      "chart_pts_y": "Puntos acumulados",
+      "close": "Cerrar",
       "columns": {
-        "position": "Posición",
         "player": "Jugador",
+        "position": "Posición",
+        "sos": "Victorias Oponentes",
+        "sos_title": "Suma de victorias de los oponentes",
         "total_points": "Puntos Totales",
         "tournaments": "Torneos",
-        "wins": "Victorias",
-        "sos": "Victorias Oponentes",
-        "sos_title": "Suma de victorias de los oponentes"
-      }
-    }
+        "wins": "Victorias"
+      },
+      "empty_data": "No hay datos de acumulado disponibles",
+      "export_csv": "Exportar CSV",
+      "export_excel": "Exportar Excel",
+      "filter_place": "Por lugar",
+      "filter_player": "Por jugador",
+      "filter_stop": "Por parada",
+      "filters": "Filtros",
+      "final_podium": "Podio final",
+      "pts": "pts",
+      "table_title": "Tabla de posiciones",
+      "title_active": "Acumulado - {{name}}",
+      "title_final": "Estadísticas finales - {{name}}"
+    },
+    "title": "Circuitos"
+  },
+  "cities": {
+    "actions": {
+      "delete": "Eliminar",
+      "edit": "Editar"
+    },
+    "alerts": {
+      "delete_confirm": "¿Eliminar la ciudad \"{{name}}\"?"
+    },
+    "columns": {
+      "actions": "Acciones",
+      "name": "Nombre"
+    },
+    "empty_msg": "No hay ciudades registradas",
+    "errors": {
+      "create_success": "Ciudad creada",
+      "delete": "Error al eliminar la ciudad",
+      "delete_success": "Ciudad eliminada",
+      "load": "Error al cargar las ciudades",
+      "name_required": "El nombre es requerido",
+      "save": "Error al guardar la ciudad",
+      "save_success": "Ciudad actualizada"
+    },
+    "form": {
+      "name": "Nombre *"
+    },
+    "loading": "Cargando...",
+    "modal": {
+      "cancel_btn": "Cancelar",
+      "create_btn": "Crear",
+      "edit": "Editar Ciudad",
+      "new": "Nueva Ciudad",
+      "update_btn": "Actualizar"
+    },
+    "new": "Nueva Ciudad",
+    "title": "Ciudades"
+  },
+  "common": {
+    "actions": "Acciones",
+    "back": "Volver",
+    "cancel": "Cancelar",
+    "circuit": "Circuito",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "continue": "Continuar",
+    "create": "Crear",
+    "date": "Fecha",
+    "delete": "Eliminar",
+    "delete_error": "Error al eliminar",
+    "edit": "Editar",
+    "error_loading": "Error al cargar",
+    "language": "Idioma",
+    "loading": "Cargando...",
+    "name": "Nombre",
+    "place": "Lugar",
+    "play": "Jugar",
+    "save": "Guardar",
+    "status": "Estado",
+    "sync": "Sincronizar",
+    "type": "Tipo",
+    "update": "Actualizar",
+    "view": "Ver"
+  },
+  "database_status": {
+    "current_client": "Cliente actual:",
+    "help_text": "Las queries a BD son las que llegan al cliente; desde caché son lecturas resueltas sin tocar la BD.",
+    "local": "SQLite (Local)",
+    "queries_cache": "Desde caché: ",
+    "queries_db": "Queries a Supabase/BD: ",
+    "reset_btn": "Reset",
+    "sync": "SQLite (Local) + Supabase (Sync)",
+    "test_btn": "Probar Conexión Supabase",
+    "test_error": "Error al probar conexión",
+    "testing_btn": "Probando...",
+    "title": "Estado de Base de Datos",
+    "update_btn": "Actualizar conteo"
+  },
+  "home": {
+    "circuits_desc": "Gestiona circuitos y sus torneos",
+    "description": "Gestiona tus torneos presenciales de Carcassonne de manera profesional.",
+    "players_desc": "Administra la base de datos de jugadores",
+    "tournaments_desc": "Crea y gestiona torneos clasificatorios o de circuito",
+    "welcome": "Bienvenido al Gestor de Torneos Carcassonne"
+  },
+  "nav": {
+    "circuits": "Circuitos",
+    "cities": "Ciudades",
+    "home": "Inicio",
+    "places": "Lugares",
+    "players": "Jugadores",
+    "settings": "Configuración",
+    "tournaments": "Torneos"
+  },
+  "places": {
+    "actions": {
+      "delete": "Eliminar",
+      "delete_default_tooltip": "No se puede eliminar el lugar por defecto",
+      "edit": "Editar"
+    },
+    "alerts": {
+      "delete_confirm": "¿Eliminar el lugar \"{{name}}\"?"
+    },
+    "columns": {
+      "actions": "Acciones",
+      "city": "Ciudad",
+      "name": "Nombre"
+    },
+    "empty_msg": "No hay lugares registrados",
+    "errors": {
+      "city_required": "Debes seleccionar una ciudad",
+      "create_success": "Lugar creado",
+      "delete": "Error al eliminar el lugar",
+      "delete_default": "No se puede eliminar el lugar por defecto {{name}}.",
+      "delete_success": "Lugar eliminado",
+      "load": "Error al cargar los lugares",
+      "name_required": "El nombre es requerido",
+      "save": "Error al guardar el lugar",
+      "save_success": "Lugar actualizado"
+    },
+    "form": {
+      "city": "Ciudad *",
+      "name": "Nombre *",
+      "select_city": "Seleccionar ciudad..."
+    },
+    "loading": "Cargando...",
+    "modal": {
+      "cancel_btn": "Cancelar",
+      "create_btn": "Crear",
+      "edit": "Editar Lugar",
+      "new": "Nuevo Lugar",
+      "update_btn": "Actualizar"
+    },
+    "new": "Nuevo Lugar",
+    "title": "Lugares"
+  },
+  "players": {
+    "actions": {
+      "delete": "Eliminar",
+      "edit": "Editar",
+      "view_history": "Ver Historial",
+      "view_opponents": "Ver Oponentes",
+      "view_opponents_icon": "👥",
+      "view_stats": "Ver Estadísticas",
+      "view_stats_icon": "📊"
+    },
+    "age": "Edad",
+    "alerts": {
+      "delete_confirm": "¿Estás seguro de eliminar a {{name}}?"
+    },
+    "bga_username": "BGA Username",
+    "columns": {
+      "actions": "Acciones",
+      "age": "Edad",
+      "bga_username": "BGA Username",
+      "email": "Correo",
+      "name": "Nombre",
+      "phone": "Teléfono"
+    },
+    "email": "Correo",
+    "empty_msg": "No hay jugadores registrados",
+    "errors": {
+      "age_invalid": "La edad debe ser un número válido",
+      "create_success": "Jugador creado exitosamente",
+      "delete": "Error al eliminar el jugador",
+      "delete_success": "Jugador eliminado exitosamente",
+      "email_invalid": "El correo electrónico no es válido",
+      "load": "Error al cargar los jugadores",
+      "load_opponents": "Error al cargar los oponentes",
+      "name_required": "El nombre es requerido",
+      "save": "Error al guardar el jugador",
+      "save_success": "Jugador actualizado exitosamente"
+    },
+    "form": {
+      "age": "Edad",
+      "bga_username": "BGA Username",
+      "display_name": "Nombre",
+      "display_preference": "Mostrar por defecto",
+      "display_preference_help": "Cuando tengas nombre y username, cuál mostrar en torneos (si el torneo lo permite).",
+      "display_username": "Username BGA",
+      "email": "Correo Electrónico",
+      "name": "Nombre *",
+      "phone": "Teléfono"
+    },
+    "loading": "Cargando...",
+    "modal": {
+      "cancel_btn": "Cancelar",
+      "create_btn": "Crear",
+      "edit": "Editar Jugador",
+      "new": "Nuevo Jugador",
+      "update_btn": "Actualizar"
+    },
+    "name": "Nombre",
+    "new": "Nuevo Jugador",
+    "opponents_modal": {
+      "cols": {
+        "actions": "Acciones",
+        "losses": "Derrotas",
+        "matches": "Partidas",
+        "player": "Jugador",
+        "wins": "Victorias"
+      },
+      "empty_msg": "No hay oponentes registrados",
+      "title": "Oponentes - {{name}}"
+    },
+    "phone": "Teléfono",
+    "search_placeholder": "Buscar por nombre o BGA username...",
+    "stats_modal": {
+      "title": "Estadísticas - {{name}}"
+    },
+    "title": "Jugadores",
+    "wins": "Victorias"
+  },
+  "settings": {
+    "about": "Acerca de",
+    "app_desc": "Aplicación para gestionar torneos presenciales de Carcassonne Colombia",
+    "app_name": "Carcassonne Tournament Manager v1.0",
+    "appearance": "Apariencia",
+    "dark_mode": "🌙 Modo Oscuro",
+    "data": "Datos",
+    "developed_by": "Desarrollado por",
+    "errors": {
+      "export_error": "Error al exportar los datos",
+      "export_success": "Datos exportados exitosamente",
+      "import_error": "Error al importar los datos",
+      "import_success": "Datos importados exitosamente: {{summary}}"
+    },
+    "export_btn": "Exportar Datos",
+    "export_desc": "Exporta todos los datos (torneos, jugadores, circuitos) a un archivo JSON para respaldo.",
+    "export_title": "Exportar Datos",
+    "import_btn": "Importar Datos",
+    "import_desc": "Importa datos desde un archivo JSON. Esto agregará los datos a los existentes.",
+    "import_title": "Importar Datos",
+    "language": "Idioma",
+    "language_desc": "Selecciona el idioma de la aplicación",
+    "light_mode": "☀️ Modo Claro",
+    "theme": "Tema",
+    "theme_desc": "Cambiar entre tema claro y oscuro",
+    "title": "Configuración"
+  },
+  "stats": {
+    "diff": "Diferencia de Puntos",
+    "h2h": "Enfrentamiento Directo",
+    "opponent_points": "Puntos Oponentes (-peor)",
+    "opponent_points_full": "Puntos Oponentes (-mejor/peor)",
+    "podium": "Podio",
+    "title": "Estadísticas",
+    "wins_distribution": "Distribución de Victorias"
+  },
+  "sync_status": {
+    "browser": "Navegador",
+    "force_sync": "Forzar sincronización ahora",
+    "internet_connected": "Internet: Conectado",
+    "internet_disconnected": "Internet: Desconectado",
+    "last_check": "Última revisión",
+    "local_mode": "Modo Local",
+    "local_mode_title": "Modo Offline (Solo Local)",
+    "no_internet": "Sin conexión a internet",
+    "offline": "Offline",
+    "online": "Online",
+    "pending": "{{count}} cambios pendientes",
+    "pending_label": "Pendiente ({{count}})",
+    "push_now": "Subir ahora",
+    "supabase": "Supabase",
+    "sync_action": "Sincronizar",
+    "sync_ok": "Sync OK",
+    "synced": "Sincronizado",
+    "syncing": "Sincronizando cambios...",
+    "syncing_label": "Sincronizando..."
   },
   "theme": {
     "dark": "Cambiar a modo oscuro",
     "light": "Cambiar a modo claro"
   },
+  "tiebreaks": {
+    "head_to_head": "Victoria en enfrentamiento directo",
+    "opponent_points_drop_best_worst": "Suma de puntos de oponentes (quitando el mejor y el peor)",
+    "opponent_points_drop_worst": "Suma de puntos de oponentes (quitando el peor)",
+    "point_difference": "Suma de diferencia de puntos",
+    "wins": "Número de victorias"
+  },
+  "tiebreaks_short": {
+    "head_to_head": "⚔️ Directo",
+    "opponent_points_drop_best_worst": "📈 Pts Oponentes (-mejor/peor)",
+    "opponent_points_drop_worst": "📊 Pts Oponentes (-peor)",
+    "point_difference": "📉 Diferencia",
+    "wins": "🏆 Victorias"
+  },
   "tournaments": {
-    "title": "Gestión de Torneos",
-    "new": "Nuevo Torneo",
-    "rounds": "Rondas",
-    "matches": "Partidas",
-    "standings": "Clasificación",
-    "players": "Jugadores",
-    "matrix": "Matriz",
-    "position_name": "Pos. Nombre",
-    "stats": "Estadísticas",
-    "buchholz_cut": "Buchholz Cut",
-    "median": "Mediana",
-    "quick_tournament": "Torneo Rápido",
-    "search_placeholder": "Buscar por nombre de torneo o lugar",
-    "filter_place": "Filtrar por lugar",
     "all_places": "Todos los lugares",
-    "empty_msg": "No hay torneos registrados",
-    "types": {
-      "qualifier": "Clasificatorio",
-      "circuit": "Circuito"
-    },
-    "statuses": {
-      "draft": "Borrador",
-      "in_progress": "En Progreso",
-      "completed": "Completado",
-      "pending": "Pendiente",
-      "active": "Activo",
-      "dropped": "Retirado (Ronda {{round}})"
-    },
-    "wizard": {
-      "cancel_confirm": "¿Cancelar? No se creará el torneo y se perderán los datos del formulario.",
-      "missing_data": "Faltan datos del torneo",
-      "created": "Torneo creado exitosamente",
-      "create_error": "Error al crear el torneo",
-      "delete_confirm": "¿Estás seguro de eliminar el torneo \\\"{{name}}\\\"?",
-      "quick_title": "Crear Torneo Rápido",
-      "step1": "Crear Torneo - Paso 1: Información",
-      "step2": "Crear Torneo - Paso 2: Configuración",
-      "step3": "Crear Torneo - Paso 3: Inscripción",
-      "cancel_confirm_edit": "¿Cancelar edición? Se perderán los cambios."
-    },
-    "form": {
-      "name_req": "El nombre es requerido",
-      "circuit_req": "Debes seleccionar un circuito",
-      "date_req": "La fecha es requerida",
-      "place_req": "Debes seleccionar un lugar",
-      "players_range": "Debe ser entre 2 y 4 jugadores",
-      "name_label": "Nombre del Torneo *",
-      "type_label": "Tipo de Torneo *",
-      "circuit_label": "Circuito *",
-      "select_circuit": "Seleccionar circuito...",
-      "place_label": "Lugar *",
-      "select_place": "Seleccionar lugar...",
-      "date_label": "Fecha *",
-      "players_label": "Jugadores por Partida *",
-      "n_players": "{{count}} jugadores",
-      "rounds_label": "Número de Rondas (opcional, se calculará automáticamente si se deja vacío)",
-      "rounds_help": "Se calculará como potencia de 2 según el número de jugadores si se deja vacío"
+    "buchholz_cut": "Buchholz Cut",
+    "columns": {
+      "actions": "Acciones",
+      "match": "Partida",
+      "players": "Jugadores",
+      "status": "Estado"
     },
     "config": {
       "avoid_rematches": "Evitar que un par de oponentes se enfrente 2 veces",
-      "bye_selection": "Selección de Bye (cuando hay número impar de jugadores)",
-      "bye_worst": "Peor jugador de la ronda (por defecto)",
+      "bye_help": "El jugador que recibe el bye gana automáticamente la partida",
       "bye_random": "Aleatorio",
       "bye_round_robin": "Round-robin (cada jugador máximo 1 bye)",
-      "bye_help": "El jugador que recibe el bye gana automáticamente la partida",
-      "display_mode": "Visualización de jugadores",
+      "bye_selection": "Selección de Bye (cuando hay número impar de jugadores)",
+      "bye_worst": "Peor jugador de la ronda (por defecto)",
       "display_default": "Ver todos por defecto (según preferencia de cada jugador)",
+      "display_help": "Cómo se muestran los nombres en el leaderboard y resultados del torneo",
+      "display_mode": "Visualización de jugadores",
       "display_names": "Ver solo nombres (primer nombre y primer apellido)",
       "display_usernames": "Ver solo usernames",
-      "display_help": "Cómo se muestran los nombres en el leaderboard y resultados del torneo",
-      "tiebreaks_title": "Criterios de Desempate",
-      "tiebreaks_help": "Arrastra para reordenar. Desmarca para desactivar un criterio.",
-      "scoring_title": "Sistema de Puntuación",
-      "scoring_help": "Puntos del torneo según la posición en cada partida",
       "position_n": "Posición {{position}}",
-      "save_config": "Guardar Configuración"
-    },
-    "registration": {
-      "title": "Inscribir Jugadores",
-      "load_error": "Error al cargar los jugadores",
-      "already_in_list": "Este jugador ya está en la lista",
-      "already_registered": "Este jugador ya está inscrito en el torneo",
-      "register_error": "Error al inscribir el jugador",
-      "remove_draft_confirm": "¿Quitar a {{name}} de la lista?",
-      "remove_confirm": "¿Estás seguro de eliminar a {{name}} del torneo?",
-      "remove_error": "Error al eliminar el jugador",
-      "create_error": "Error al crear el jugador",
-      "search_placeholder": "Buscar jugador existente...",
-      "new_player": "Nuevo Jugador",
-      "registered_count": "Jugadores Inscritos ({{count}})",
-      "calculated_rounds": "Rondas calculadas",
-      "empty_msg": "No hay jugadores inscritos. Busca o crea uno para inscribirlo.",
-      "continue_with_count": "Continuar ({{count}} jugadores)",
-      "create_and_register": "Crear e Inscribir"
-    },
-    "rounds_modal": {
-      "title": "Confirmar Número de Rondas",
-      "error_min": "El número de rondas debe ser al menos 1",
-      "registered": "Jugadores inscritos:",
-      "calculated": "Rondas calculadas:",
-      "label": "Número de Rondas",
-      "help_quick": "En modo rápido se calcula automáticamente",
-      "help_advanced": "Ajusta el número de rondas si lo necesitas"
+      "save_config": "Guardar Configuración",
+      "scoring_help": "Puntos del torneo según la posición en cada partida",
+      "scoring_title": "Sistema de Puntuación",
+      "tiebreaks_help": "Arrastra para reordenar. Desmarca para desactivar un criterio.",
+      "tiebreaks_title": "Criterios de Desempate"
     },
     "detail": {
-      "matrix_btn": "Matriz",
+      "all_players": "Todos los jugadores",
+      "best_rival": "Mejor rival",
+      "bye_not_editable": "Bye - No editable",
       "close_stats": "Cerrar Stats",
-      "stats": "Stats",
-      "generate_report": "Generar Reporte",
-      "rounds": "Rondas",
-      "generate_first_round": "Generar Primera Ronda",
-      "manual_pairings": "Cruces Manuales",
-      "tournament_finished": "Torneo Finalizado",
-      "finish_tournament": "Finalizar Torneo",
-      "view_results": "Ver Resultados",
-      "generate_next_round": "Generar Siguiente Ronda",
       "complete_current_round": "Completa la ronda actual para continuar",
       "edit_tournament_title": "Editar datos del torneo",
-      "round_results_title": "Resultados - Ronda {{number}}",
-      "matches": "Partidas",
-      "matches_round": "Partidas - Ronda {{round}}",
-      "select_round": "Selecciona una ronda para ver las partidas",
-      "unassigned": "Sin asignar",
-      "winner": "Ganador",
-      "matches_completed_count": "{{completed}} / {{total}} completadas",
-      "second_place": "2do Lugar",
-      "third_place": "3er Lugar",
-      "fourth_place": "4to Lugar",
       "fifth_place": "5to Lugar",
-      "bye_not_editable": "Bye - No editable"
+      "filter_by_player": "Filtrar por jugador",
+      "filter_info": "El filtro aplica a distribuciones, leaderboard y partidas. El podio siempre muestra el resultado completo.",
+      "finalize_confirm": "¿Estás seguro de finalizar el torneo? Una vez finalizado, no se podrán hacer más cambios.",
+      "finalize_error": "Error al finalizar el torneo",
+      "finalize_success": "Torneo finalizado exitosamente. Ya no se pueden realizar más cambios.",
+      "finish_tournament": "Finalizar Torneo",
+      "fourth_place": "4to Lugar",
+      "generate_first_round": "Generar Primera Ronda",
+      "generate_next_round": "Generar Siguiente Ronda",
+      "generate_report": "Generar Reporte",
+      "last_round_completed": "Has completado la última ronda. Puedes finalizar el torneo cuando estés listo.",
+      "loading_stats": "Cargando estadísticas…",
+      "manual_pairings": "Cruces Manuales",
+      "matches": "Partidas",
+      "matches_completed_count": "{{completed}} / {{total}} completadas",
+      "matches_round": "Partidas - Ronda {{round}}",
+      "matrix_btn": "Matriz",
+      "matrix_title": "Matriz de Enfrentamientos",
+      "max_rounds_reached": "Se ha alcanzado el número máximo de rondas ({{max}}). El torneo está completo.",
+      "no_standings_yet": "No hay datos de posiciones aún. Completa al menos una ronda con resultados para ver estadísticas.",
+      "round_completed": "Ronda completada. Puedes generar la siguiente ronda cuando estés listo.",
+      "round_results_title": "Resultados - Ronda {{number}}",
+      "rounds": "Rondas",
+      "second_place": "2do Lugar",
+      "select_round": "Selecciona una ronda para ver las partidas",
+      "starts_count": "Inicios",
+      "stats": "Stats",
+      "third_place": "3er Lugar",
+      "tournament_finished": "Torneo Finalizado",
+      "unassigned": "Sin asignar",
+      "view_matrix_title": "Ver matriz de enfrentamientos",
+      "view_results": "Ver Resultados",
+      "winner": "Ganador",
+      "worst_rival": "Peor rival"
     },
-    "columns": {
+    "empty_msg": "No hay torneos registrados",
+    "filter_place": "Filtrar por lugar",
+    "form": {
+      "circuit_label": "Circuito *",
+      "circuit_req": "Debes seleccionar un circuito",
+      "date_label": "Fecha *",
+      "date_req": "La fecha es requerida",
+      "n_players": "{{count}} jugadores",
+      "name_label": "Nombre del Torneo *",
+      "name_req": "El nombre es requerido",
+      "place_label": "Lugar *",
+      "place_req": "Debes seleccionar un lugar",
+      "players_label": "Jugadores por Partida *",
+      "players_range": "Debe ser entre 2 y 4 jugadores",
+      "rounds_help": "Se calculará como potencia de 2 según el número de jugadores si se deja vacío",
+      "rounds_label": "Número de Rondas (opcional, se calculará automáticamente si se deja vacío)",
+      "select_circuit": "Seleccionar circuito...",
+      "select_place": "Seleccionar lugar...",
+      "type_label": "Tipo de Torneo *"
+    },
+    "match": {
+      "close": "Cerrar",
+      "first_player_btn": "Jugador Inicial",
+      "loading": "Cargando...",
+      "mark_first_btn": "Marcar Inicial",
+      "note_completed": "Este torneo está finalizado. Solo puedes ver los resultados, no puedes editarlos.",
+      "note_positions": "Las posiciones se calculan automáticamente según los puntos. En caso de empate, el jugador que empezó la partida pierde.",
+      "points_label": "Puntos",
+      "position_title": "Posición {{pos}}",
+      "pts": "PTS",
+      "results_title": "Resultados de Partida",
+      "save_btn": "Guardar Resultados"
+    },
+    "matches": "Partidas",
+    "matrix": "Matriz",
+    "median": "Mediana",
+    "new": "Nuevo Torneo",
+    "players": "Jugadores",
+    "position_name": "Pos. Nombre",
+    "preview": {
+      "description": "Estos son los emparejamientos propuestos para la siguiente ronda. El sistema ha calculado automáticamente quién debería iniciar la partida.",
+      "inits": "Inicia la partida",
+      "table_balance": "Equilibrio",
+      "table_bye": "(Bye)",
+      "table_encounter": "Enfrentamiento",
+      "table_random": "Azar",
+      "table_starts": "Inicios:",
+      "table_time": "Tiempo",
+      "title": "Previsualización de Ronda",
+      "warnings": "Advertencias:"
+    },
+    "quick_tournament": "Torneo Rápido",
+    "registration": {
+      "already_in_list": "Este jugador ya está en la lista",
+      "already_registered": "Este jugador ya está inscrito en el torneo",
+      "calculated_rounds": "Rondas calculadas",
+      "continue_with_count": "Continuar ({{count}} jugadores)",
+      "create_and_register": "Crear e Inscribir",
+      "create_error": "Error al crear el jugador",
+      "empty_msg": "No hay jugadores inscritos. Busca o crea uno para inscribirlo.",
+      "load_error": "Error al cargar los jugadores",
+      "new_player": "Nuevo Jugador",
+      "register_error": "Error al inscribir el jugador",
+      "registered_count": "Jugadores Inscritos ({{count}})",
+      "remove_confirm": "¿Estás seguro de eliminar a {{name}} del torneo?",
+      "remove_draft_confirm": "¿Quitar a {{name}} de la lista?",
+      "remove_error": "Error al eliminar el jugador",
+      "search_placeholder": "Buscar jugador existente...",
+      "title": "Inscribir Jugadores"
+    },
+    "reports": {
+      "avg_points": "Puntos Promedio",
+      "export_csv_matches": "CSV - Partidas",
+      "export_csv_standings": "CSV - Leaderboard",
+      "export_csv_stats": "CSV - Estadísticas",
+      "export_csv_title": "Exportar CSV",
+      "export_excel": "Excel",
       "match": "Partida",
-      "players": "Jugadores",
-      "status": "Estado",
-      "actions": "Acciones"
+      "match_points": "Puntos Partida",
+      "player": "Jugador",
+      "position": "Posición",
+      "round": "Ronda",
+      "sheet_matches": "Resultados por Ronda",
+      "sheet_standings": "Leaderboard",
+      "sheet_stats": "Estadísticas",
+      "stat_name": "Estadística",
+      "stat_value": "Valor",
+      "total_matches": "Total Partidas",
+      "total_players": "Total Jugadores",
+      "total_points": "Puntos Totales",
+      "total_rounds": "Total Rondas",
+      "tournament_points": "Puntos Torneo",
+      "wins": "Victorias"
+    },
+    "rounds": "Rondas",
+    "rounds_modal": {
+      "calculated": "Rondas calculadas:",
+      "error_min": "El número de rondas debe ser al menos 1",
+      "help_advanced": "Ajusta el número de rondas si lo necesitas",
+      "help_quick": "En modo rápido se calcula automáticamente",
+      "label": "Número de Rondas",
+      "registered": "Jugadores inscritos:",
+      "title": "Confirmar Número de Rondas"
+    },
+    "search_placeholder": "Buscar por nombre de torneo o lugar",
+    "standings": "Clasificación",
+    "stats": "Estadísticas",
+    "statuses": {
+      "active": "Activo",
+      "completed": "Completado",
+      "draft": "Borrador",
+      "dropped": "Retirado (Ronda {{round}})",
+      "in_progress": "En Progreso",
+      "pending": "Pendiente"
+    },
+    "title": "Gestión de Torneos",
+    "types": {
+      "circuit": "Circuito",
+      "qualifier": "Clasificatorio"
+    },
+    "wizard": {
+      "cancel_confirm": "¿Cancelar? No se creará el torneo y se perderán los datos del formulario.",
+      "cancel_confirm_edit": "¿Cancelar edición? Se perderán los cambios.",
+      "create_error": "Error al crear el torneo",
+      "created": "Torneo creado exitosamente",
+      "delete_confirm": "¿Estás seguro de eliminar el torneo \\\"{{name}}\\\"?",
+      "missing_data": "Faltan datos del torneo",
+      "quick_title": "Crear Torneo Rápido",
+      "step1": "Crear Torneo - Paso 1: Información",
+      "step2": "Crear Torneo - Paso 2: Configuración",
+      "step3": "Crear Torneo - Paso 3: Inscripción"
     }
-  },
-  "tiebreaks": {
-    "wins": "Número de victorias",
-    "opponent_points_drop_worst": "Suma de puntos de oponentes (quitando el peor)",
-    "opponent_points_drop_best_worst": "Suma de puntos de oponentes (quitando el mejor y el peor)",
-    "head_to_head": "Victoria en enfrentamiento directo",
-    "point_difference": "Suma de diferencia de puntos"
-  },
-  "tiebreaks_short": {
-    "wins": "🏆 Victorias",
-    "opponent_points_drop_worst": "📊 Pts Oponentes (-peor)",
-    "opponent_points_drop_best_worst": "📈 Pts Oponentes (-mejor/peor)",
-    "head_to_head": "⚔️ Directo",
-    "point_difference": "📉 Diferencia"
-  },
-  "stats": {
-    "title": "Estadísticas",
-    "podium": "Podio",
-    "wins_distribution": "Distribución de Victorias",
-    "opponent_points": "Puntos Oponentes (-peor)",
-    "opponent_points_full": "Puntos Oponentes (-mejor/peor)",
-    "h2h": "Enfrentamiento Directo",
-    "diff": "Diferencia de Puntos"
-  },
-  "players": {
-    "title": "Jugadores",
-    "new": "Nuevo Jugador",
-    "name": "Nombre",
-    "bga_username": "BGA Username",
-    "phone": "Teléfono",
-    "email": "Correo",
-    "age": "Edad",
-    "wins": "Victorias",
-    "search_placeholder": "Buscar por nombre o BGA username...",
-    "empty_msg": "No hay jugadores registrados",
-    "loading": "Cargando...",
-    "form": {
-      "name": "Nombre *",
-      "bga_username": "BGA Username",
-      "display_preference": "Mostrar por defecto",
-      "display_preference_help": "Cuando tengas nombre y username, cuál mostrar en torneos (si el torneo lo permite).",
-      "display_name": "Nombre",
-      "display_username": "Username BGA",
-      "phone": "Teléfono",
-      "email": "Correo Electrónico",
-      "age": "Edad"
-    },
-    "errors": {
-      "load": "Error al cargar los jugadores",
-      "email_invalid": "El correo electrónico no es válido",
-      "age_invalid": "La edad debe ser un número válido",
-      "save": "Error al guardar el jugador",
-      "save_success": "Jugador actualizado exitosamente",
-      "create_success": "Jugador creado exitosamente",
-      "delete": "Error al eliminar el jugador",
-      "delete_success": "Jugador eliminado exitosamente",
-      "load_opponents": "Error al cargar los oponentes",
-      "name_required": "El nombre es requerido"
-    },
-    "columns": {
-      "name": "Nombre",
-      "bga_username": "BGA Username",
-      "phone": "Teléfono",
-      "email": "Correo",
-      "age": "Edad",
-      "actions": "Acciones"
-    },
-    "actions": {
-      "view_stats": "Ver Estadísticas",
-      "view_stats_icon": "📊",
-      "view_opponents": "Ver Oponentes",
-      "view_opponents_icon": "👥",
-      "edit": "Editar",
-      "delete": "Eliminar",
-      "view_history": "Ver Historial"
-    },
-    "alerts": {
-      "delete_confirm": "¿Estás seguro de eliminar a {{name}}?"
-    },
-    "opponents_modal": {
-      "title": "Oponentes - {{name}}",
-      "empty_msg": "No hay oponentes registrados",
-      "cols": {
-        "player": "Jugador",
-        "matches": "Partidas",
-        "wins": "Victorias",
-        "losses": "Derrotas",
-        "actions": "Acciones"
-      }
-    },
-    "stats_modal": {
-      "title": "Estadísticas - {{name}}"
-    },
-    "modal": {
-      "edit": "Editar Jugador",
-      "new": "Nuevo Jugador",
-      "update_btn": "Actualizar",
-      "create_btn": "Crear",
-      "cancel_btn": "Cancelar"
-    }
-  },
-  "places": {
-    "title": "Lugares",
-    "new": "Nuevo Lugar",
-    "empty_msg": "No hay lugares registrados",
-    "loading": "Cargando...",
-    "form": {
-      "name": "Nombre *",
-      "city": "Ciudad *",
-      "select_city": "Seleccionar ciudad..."
-    },
-    "errors": {
-      "load": "Error al cargar los lugares",
-      "save": "Error al guardar el lugar",
-      "save_success": "Lugar actualizado",
-      "create_success": "Lugar creado",
-      "delete": "Error al eliminar el lugar",
-      "delete_success": "Lugar eliminado",
-      "name_required": "El nombre es requerido",
-      "city_required": "Debes seleccionar una ciudad",
-      "delete_default": "No se puede eliminar el lugar por defecto {{name}}."
-    },
-    "columns": {
-      "name": "Nombre",
-      "city": "Ciudad",
-      "actions": "Acciones"
-    },
-    "actions": {
-      "edit": "Editar",
-      "delete": "Eliminar",
-      "delete_default_tooltip": "No se puede eliminar el lugar por defecto"
-    },
-    "alerts": {
-      "delete_confirm": "¿Eliminar el lugar \"{{name}}\"?"
-    },
-    "modal": {
-      "edit": "Editar Lugar",
-      "new": "Nuevo Lugar",
-      "update_btn": "Actualizar",
-      "create_btn": "Crear",
-      "cancel_btn": "Cancelar"
-    }
-  },
-  "cities": {
-    "title": "Ciudades",
-    "new": "Nueva Ciudad",
-    "empty_msg": "No hay ciudades registradas",
-    "loading": "Cargando...",
-    "form": {
-      "name": "Nombre *"
-    },
-    "errors": {
-      "load": "Error al cargar las ciudades",
-      "save": "Error al guardar la ciudad",
-      "save_success": "Ciudad actualizada",
-      "create_success": "Ciudad creada",
-      "delete": "Error al eliminar la ciudad",
-      "delete_success": "Ciudad eliminada",
-      "name_required": "El nombre es requerido"
-    },
-    "columns": {
-      "name": "Nombre",
-      "actions": "Acciones"
-    },
-    "actions": {
-      "edit": "Editar",
-      "delete": "Eliminar"
-    },
-    "alerts": {
-      "delete_confirm": "¿Eliminar la ciudad \"{{name}}\"?"
-    },
-    "modal": {
-      "edit": "Editar Ciudad",
-      "new": "Nueva Ciudad",
-      "update_btn": "Actualizar",
-      "create_btn": "Crear",
-      "cancel_btn": "Cancelar"
-    }
-  },
-  "settings": {
-    "title": "Configuración",
-    "appearance": "Apariencia",
-    "language": "Idioma",
-    "language_desc": "Selecciona el idioma de la aplicación",
-    "theme": "Tema",
-    "theme_desc": "Cambiar entre tema claro y oscuro",
-    "dark_mode": "🌙 Modo Oscuro",
-    "light_mode": "☀️ Modo Claro",
-    "data": "Datos",
-    "export_title": "Exportar Datos",
-    "export_desc": "Exporta todos los datos (torneos, jugadores, circuitos) a un archivo JSON para respaldo.",
-    "export_btn": "Exportar Datos",
-    "import_title": "Importar Datos",
-    "import_desc": "Importa datos desde un archivo JSON. Esto agregará los datos a los existentes.",
-    "import_btn": "Importar Datos",
-    "about": "Acerca de",
-    "developed_by": "Desarrollado por",
-    "app_name": "Carcassonne Tournament Manager v1.0",
-    "app_desc": "Aplicación para gestionar torneos presenciales de Carcassonne Colombia",
-    "errors": {
-      "export_success": "Datos exportados exitosamente",
-      "export_error": "Error al exportar los datos",
-      "import_success": "Datos importados exitosamente: {{summary}}",
-      "import_error": "Error al importar los datos"
-    }
-  },
-  "database_status": {
-    "title": "Estado de Base de Datos",
-    "current_client": "Cliente actual:",
-    "local": "SQLite (Local)",
-    "sync": "SQLite (Local) + Supabase (Sync)",
-    "queries_db": "Queries a Supabase/BD: ",
-    "queries_cache": "Desde caché: ",
-    "update_btn": "Actualizar conteo",
-    "reset_btn": "Reset",
-    "help_text": "Las queries a BD son las que llegan al cliente; desde caché son lecturas resueltas sin tocar la BD.",
-    "test_btn": "Probar Conexión Supabase",
-    "testing_btn": "Probando...",
-    "test_error": "Error al probar conexión"
   }
 }

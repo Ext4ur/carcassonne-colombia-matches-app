@@ -256,11 +256,7 @@ export default function TournamentDetail() {
   const handleFinalizeTournament = async () => {
     if (!tournament?.id) return;
 
-    if (
-      !confirm(
-        '¿Estás seguro de finalizar el torneo? Una vez finalizado, no se podrán hacer más cambios.'
-      )
-    ) {
+    if (!confirm(t('tournaments.detail.finalize_confirm'))) {
       return;
     }
 
@@ -269,7 +265,7 @@ export default function TournamentDetail() {
       await DatabaseService.updateTournament(tournament.id, { status: 'completed' });
       await loadTournament(); // Reload tournament to get updated status
       addNotification({
-        message: 'Torneo finalizado exitosamente. Ya no se pueden realizar más cambios.',
+        message: t('tournaments.detail.finalize_success'),
         type: 'success',
         duration: 5000,
       });
@@ -277,7 +273,7 @@ export default function TournamentDetail() {
     } catch (error: any) {
       console.error('Error finalizing tournament:', error);
       addNotification({
-        message: 'Error al finalizar el torneo',
+        message: t('tournaments.detail.finalize_error'),
         type: 'error',
       });
     } finally {
@@ -294,7 +290,7 @@ export default function TournamentDetail() {
 
     if (currentRounds.length >= numberOfRounds) {
       addNotification({
-        message: `Se ha alcanzado el número máximo de rondas (${numberOfRounds}). El torneo está completo.`,
+        message: t('tournaments.detail.max_rounds_reached', { max: numberOfRounds }),
         type: 'info',
         duration: 5000,
       });
@@ -471,13 +467,13 @@ export default function TournamentDetail() {
 
     if (roundsAfter.length < effectiveMaxRounds) {
       addNotification({
-        message: 'Ronda completada. Puedes generar la siguiente ronda cuando estés listo.',
+        message: t('tournaments.detail.round_completed'),
         type: 'info',
         duration: 3000,
       });
     } else {
       addNotification({
-        message: 'Has completado la última ronda. Puedes finalizar el torneo cuando estés listo.',
+        message: t('tournaments.detail.last_round_completed'),
         type: 'success',
         duration: 5000,
       });
@@ -527,7 +523,9 @@ export default function TournamentDetail() {
     }
   };
 
-  const handleGenerateReport = async (type: 'excel' | 'csv') => {
+  const handleGenerateReport = async (
+    type: 'excel' | 'csv-standings' | 'csv-matches' | 'csv-stats'
+  ) => {
     if (!tournament?.id) return;
 
     try {
@@ -540,13 +538,19 @@ export default function TournamentDetail() {
           data = await ReportService.generateTournamentExcel(tournament.id);
           filename += '.xlsx';
           break;
-        case 'csv':
-          data = await ReportService.generateTournamentCSV(tournament.id);
-          filename += '.csv';
+        case 'csv-standings':
+        case 'csv-matches':
+        case 'csv-stats':
+          data = await ReportService.generateTournamentCSV(tournament.id, type);
+          filename += `_${type}.csv`;
           break;
       }
 
-      const result = await window.electronAPI.saveFile(data, filename, type);
+      const result = await window.electronAPI.saveFile(
+        data,
+        filename,
+        type.startsWith('csv') ? 'csv' : 'excel'
+      );
       if (result.success) {
         addNotification({
           message: 'Reporte generado exitosamente',
@@ -746,7 +750,7 @@ export default function TournamentDetail() {
       })),
     {
       key: 'starts_count',
-      header: '🎲 Inicios',
+      header: `🎲 ${t('tournaments.detail.starts_count', 'Inicios')}`,
       render: (standing) => standing.starts_count ?? 0,
     },
     {
@@ -946,6 +950,7 @@ export default function TournamentDetail() {
               return {
                 ...p,
                 position: result?.position || players.length, // Default to last position if no result
+                points: result?.points, // We get points here to show them
               };
             })
             .sort((a: any, b: any) => a.position - b.position);
@@ -964,9 +969,12 @@ export default function TournamentDetail() {
                     <span className="text-gray-300 dark:text-gray-600 font-normal mr-1">vs</span>
                   )}
                   {p.name}
+                  {p.points !== undefined && (
+                    <span className="text-xs font-semibold ml-0.5 opacity-80">({p.points})</span>
+                  )}
                   {match.first_player_id === p.id && (
                     <span
-                      className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
+                      className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700 cursor-help"
                       title="Jugador Inicial"
                     >
                       🎲
@@ -1110,31 +1118,46 @@ export default function TournamentDetail() {
             <Button
               variant={showMatrix ? 'primary' : 'secondary'}
               onClick={() => setShowMatrix(!showMatrix)}
-              title="Ver matriz de enfrentamientos"
+              title={t('tournaments.detail.view_matrix_title')}
             >
               📊 {t('tournaments.detail.matrix_btn')}
             </Button>
             <Button
               variant={showStats ? 'primary' : 'secondary'}
               onClick={() => setShowStats(!showStats)}
-              title="Cerrar panel de estadísticas"
+              title={t('tournaments.detail.close_stats')}
             >
               📊 {showStats ? t('tournaments.detail.close_stats') : t('tournaments.detail.stats')}
             </Button>
             <div className="relative group">
               <Button variant="primary">{t('tournaments.detail.generate_report')} ▼</Button>
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 overflow-hidden">
                 <button
                   onClick={() => handleGenerateReport('excel')}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg"
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 font-semibold"
                 >
-                  Excel
+                  {t('tournaments.reports.export_excel', 'Excel')}
+                </button>
+                <div className="px-4 py-2 text-xs text-gray-400 font-semibold uppercase tracking-wider border-t border-gray-200 dark:border-gray-700">
+                  {t('tournaments.reports.export_csv_title', 'Exportar CSV')}
+                </div>
+                <button
+                  onClick={() => handleGenerateReport('csv-standings')}
+                  className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  {t('tournaments.reports.export_csv_standings', 'CSV - Leaderboard')}
                 </button>
                 <button
-                  onClick={() => handleGenerateReport('csv')}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg"
+                  onClick={() => handleGenerateReport('csv-matches')}
+                  className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
-                  CSV
+                  {t('tournaments.reports.export_csv_matches', 'CSV - Partidas')}
+                </button>
+                <button
+                  onClick={() => handleGenerateReport('csv-stats')}
+                  className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  {t('tournaments.reports.export_csv_stats', 'CSV - Estadísticas')}
                 </button>
               </div>
             </div>
@@ -1186,20 +1209,19 @@ export default function TournamentDetail() {
       {standings.length > 0 && (
         <div className="card mb-6">
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Filtrar por jugador
+            {t('tournaments.detail.filter_by_player')}
           </h3>
           <MultiSelect
             label=""
             options={standings.map((s) => ({ value: s.player_id, label: s.player_name }))}
             value={selectedPlayerIds}
             onChange={(v) => setSelectedPlayerIds(v as number[])}
-            placeholder="Todos los jugadores"
+            placeholder={t('tournaments.detail.all_players')}
             className="max-w-xs"
           />
           {selectedPlayerIds.length > 0 && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              El filtro aplica a distribuciones, leaderboard y partidas. El podio siempre muestra el
-              resultado completo.
+              {t('tournaments.detail.filter_info')}
             </p>
           )}
         </div>
@@ -1208,9 +1230,9 @@ export default function TournamentDetail() {
       {showMatrix && (
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">Matriz de Enfrentamientos</h2>
+            <h2 className="text-2xl font-bold">{t('tournaments.detail.matrix_title')}</h2>
             <Button variant="secondary" size="sm" onClick={() => setShowMatrix(false)}>
-              Cerrar
+              {t('common.close')}
             </Button>
           </div>
           <div className="card">
@@ -1223,12 +1245,11 @@ export default function TournamentDetail() {
         <div className="mb-6">
           {isLoadingStandings ? (
             <div className="card p-8 text-center text-gray-600 dark:text-gray-400">
-              Cargando estadísticas…
+              {t('tournaments.detail.loading_stats')}
             </div>
           ) : standings.length === 0 ? (
             <div className="card p-8 text-center text-gray-600 dark:text-gray-400">
-              No hay datos de posiciones aún. Completa al menos una ronda con resultados para ver
-              estadísticas.
+              {t('tournaments.detail.no_standings_yet')}
             </div>
           ) : (
             <TournamentStats
@@ -1246,7 +1267,7 @@ export default function TournamentDetail() {
         <h2 className="text-xl font-bold mb-4">Leaderboard</h2>
         {isLoadingStandings && standings.length === 0 ? (
           <div className="p-6 text-center text-gray-600 dark:text-gray-400">
-            Cargando leaderboard…
+            {t('common.loading')}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -1254,7 +1275,7 @@ export default function TournamentDetail() {
               columns={standingsColumns}
               data={filteredStandings}
               keyExtractor={(standing) => standing.player_id}
-              emptyMessage="No hay datos disponibles. Completa al menos una ronda con resultados."
+              emptyMessage={t('tournaments.detail.no_standings_yet')}
             />
           </div>
         )}
@@ -1263,10 +1284,10 @@ export default function TournamentDetail() {
       {/* Rounds and Matches - Side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
         <div className="card lg:col-span-1">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex flex-col gap-3 mb-4">
             <h2 className="text-xl font-bold">{t('tournaments.detail.rounds')}</h2>
             {rounds.length === 0 ? (
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 <Button
                   onClick={handleGenerateFirstRound}
                   isLoading={isLoading}
@@ -1283,7 +1304,12 @@ export default function TournamentDetail() {
                 </Button>
               </div>
             ) : tournament.status === 'completed' ? (
-              <Button onClick={() => setShowStats(true)} variant="primary" disabled>
+              <Button
+                onClick={() => setShowStats(true)}
+                variant="primary"
+                className="w-full"
+                disabled
+              >
                 {t('tournaments.detail.tournament_finished')}
               </Button>
             ) : (
@@ -1297,6 +1323,7 @@ export default function TournamentDetail() {
                       onClick={handleFinalizeTournament}
                       variant="success"
                       isLoading={isLoading}
+                      className="w-full"
                     >
                       {t('tournaments.detail.finish_tournament')}
                     </Button>
@@ -1304,14 +1331,14 @@ export default function TournamentDetail() {
                 }
                 if (atLastRound && !allRoundsCompleted) {
                   return (
-                    <Button onClick={() => setShowStats(true)} variant="primary">
+                    <Button onClick={() => setShowStats(true)} variant="primary" className="w-full">
                       {t('tournaments.detail.view_results')}
                     </Button>
                   );
                 }
                 if (currentRound?.status === 'completed') {
                   return (
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2">
                       <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
                         {t('tournaments.detail.generate_next_round')}
                       </Button>

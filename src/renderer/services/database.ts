@@ -1033,6 +1033,15 @@ export class DatabaseService {
       ]
     );
 
+    // Auto-enroll if missing
+    const match = await this.query<{ tournament_id: number }>(
+      'SELECT r.tournament_id FROM matches m JOIN rounds r ON m.round_id = r.id WHERE m.id = ?',
+      [result.match_id]
+    );
+    if (match[0]?.tournament_id) {
+      await this.registerPlayerToTournament(match[0].tournament_id, result.player_id);
+    }
+
     await SyncService.addToQueue('match_results', 'INSERT', {
       uuid,
       match_uuid: matchUuid,
@@ -1134,6 +1143,8 @@ export class DatabaseService {
   static async getTournamentPlayers(
     tournamentId: number
   ): Promise<(Player & { active: boolean; dropout_round: number | null })[]> {
+    await this.ensureTournamentPlayersSync(tournamentId);
+
     return this.query<Player & { active: boolean; dropout_round: number | null }>(
       `
         SELECT p.*, tp.active, tp.dropout_round
@@ -1146,7 +1157,34 @@ export class DatabaseService {
     );
   }
 
+  static async ensureTournamentPlayersSync(tournamentId: number) {
+    const rows = await this.query<{ player_id: number }>(
+      `
+      SELECT DISTINCT mp.player_id
+      FROM match_players mp
+      JOIN matches m ON mp.match_id = m.id
+      JOIN rounds r ON m.round_id = r.id
+      WHERE r.tournament_id = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM tournament_players tp 
+          WHERE tp.tournament_id = ? AND tp.player_id = mp.player_id
+        )
+    `,
+      [tournamentId, tournamentId]
+    );
+
+    for (const row of rows) {
+      await this.registerPlayerToTournament(tournamentId, row.player_id);
+    }
+  }
+
   static async registerPlayerToTournament(tournamentId: number, playerId: number) {
+    const existing = await this.query<{ id: number }>(
+      'SELECT id FROM tournament_players WHERE tournament_id = ? AND player_id = ?',
+      [tournamentId, playerId]
+    );
+    if (existing.length > 0) return;
+
     const uuid = self.crypto.randomUUID();
     const tournamentUuid = await this.getUuid('tournaments', tournamentId);
     const playerUuid = await this.getUuid('players', playerId);
@@ -1255,6 +1293,15 @@ export class DatabaseService {
       'INSERT INTO match_players (uuid, match_id, player_id) VALUES (?, ?, ?)',
       [uuid, matchId, playerId]
     );
+
+    // Auto-enroll if missing
+    const match = await this.query<{ tournament_id: number }>(
+      'SELECT r.tournament_id FROM matches m JOIN rounds r ON m.round_id = r.id WHERE m.id = ?',
+      [matchId]
+    );
+    if (match[0]?.tournament_id) {
+      await this.registerPlayerToTournament(match[0].tournament_id, playerId);
+    }
 
     await SyncService.addToQueue('match_players', 'INSERT', {
       uuid,

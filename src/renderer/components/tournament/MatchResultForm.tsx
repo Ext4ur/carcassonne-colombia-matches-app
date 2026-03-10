@@ -3,6 +3,7 @@ import { DatabaseService } from '../../services/database';
 import { Match } from '../../types/tournament';
 import { Player } from '../../types/player';
 import { calculatePositions } from '../../utils/scoring';
+import { useTranslation } from 'react-i18next';
 import Input from '../common/Input';
 
 import Button from '../common/Button';
@@ -24,6 +25,7 @@ export default function MatchResultForm({
   onCancel,
   tournamentStatus = 'in_progress',
 }: MatchResultFormProps) {
+  const { t } = useTranslation();
   const [players, setPlayers] = useState<Player[]>([]);
   const [results, setResults] = useState<Array<{ player_id: number; points: number }>>([]);
   const [firstPlayerId, setFirstPlayerId] = useState<number | undefined>(undefined);
@@ -162,7 +164,7 @@ export default function MatchResultForm({
       onSave();
     } catch (error) {
       console.error('Error saving match results:', error);
-      alert('Error al guardar los resultados');
+      alert(t('tournaments.match.save_error', 'Error al guardar los resultados'));
     } finally {
       setIsLoading(false);
     }
@@ -193,8 +195,7 @@ export default function MatchResultForm({
     <div className="space-y-4">
       <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <strong>Nota:</strong> Las posiciones se calculan automáticamente según los puntos. En
-          caso de empate, el jugador que empezó la partida pierde.
+          <strong>{t('common.note', 'Nota')}:</strong> {t('tournaments.match.note_positions')}
         </p>
       </div>
 
@@ -216,7 +217,9 @@ export default function MatchResultForm({
               {/* Player Name & Start Button */}
               <div className="flex-1 min-w-[200px] flex items-center justify-between gap-2">
                 <span className="text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
-                  {isLoadingData ? 'Cargando...' : player?.name || 'Sin asignar'}
+                  {isLoadingData
+                    ? t('tournaments.match.loading', 'Cargando...')
+                    : player?.name || t('tournaments.detail.unassigned')}
                 </span>
 
                 <button
@@ -234,11 +237,11 @@ export default function MatchResultForm({
                 >
                   {isFirst ? (
                     <>
-                      <span>Jugador Inicial</span>
+                      <span>{t('tournaments.match.first_player_btn')}</span>
                       <span className="text-base">🎲</span>
                     </>
                   ) : (
-                    <span>Marcar Inicial</span>
+                    <span>{t('tournaments.match.mark_first_btn')}</span>
                   )}
                 </button>
               </div>
@@ -246,7 +249,7 @@ export default function MatchResultForm({
               {/* Points */}
               <div className="w-full md:w-32">
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 md:hidden">
-                  Puntos
+                  {t('tournaments.match.points_label', 'Puntos')}
                 </label>
                 <div className="relative">
                   <Input
@@ -281,7 +284,7 @@ export default function MatchResultForm({
                     required
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none">
-                    PTS
+                    {t('tournaments.match.pts', 'PTS')}
                   </span>
                 </div>
               </div>
@@ -312,7 +315,7 @@ export default function MatchResultForm({
                   return (
                     <div
                       className={`transition-all duration-300 ${colorClass}`}
-                      title={`Posición ${pos}`}
+                      title={t('tournaments.match.position_title', { pos })}
                     >
                       {content}
                     </div>
@@ -327,15 +330,16 @@ export default function MatchResultForm({
       {tournamentStatus === 'completed' && (
         <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
           <p className="text-sm text-yellow-800 dark:text-yellow-200">
-            <strong>Nota:</strong> Este torneo está finalizado. Solo puedes ver los resultados, no
-            puedes editarlos.
+            <strong>{t('common.note', 'Nota')}:</strong> {t('tournaments.match.note_completed')}
           </p>
         </div>
       )}
 
       <div className="flex justify-end space-x-2 pt-4">
         <Button variant="secondary" onClick={onCancel}>
-          {tournamentStatus === 'completed' ? 'Cerrar' : 'Cancelar'}
+          {tournamentStatus === 'completed'
+            ? t('tournaments.match.close', 'Cerrar')
+            : t('tournaments.preview.cancel', 'Cancelar')}
         </Button>
         {tournamentStatus !== 'completed' && (
           <Button
@@ -343,7 +347,7 @@ export default function MatchResultForm({
             isLoading={isLoading}
             disabled={firstPlayerId === undefined || firstPlayerId === null}
           >
-            Guardar Resultados
+            {t('tournaments.match.save_btn', 'Guardar Resultados')}
           </Button>
         )}
       </div>

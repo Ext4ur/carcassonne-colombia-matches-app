@@ -2,6 +2,7 @@
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Table, { Column } from '../common/Table';
+import { useTranslation } from 'react-i18next';
 
 interface RoundPreviewDialogProps {
   isOpen: boolean;
@@ -27,6 +28,8 @@ export default function RoundPreviewDialog({
   isLoading,
   previewData,
 }: RoundPreviewDialogProps) {
+  const { t } = useTranslation();
+
   if (!previewData) return null;
 
   const columns: Column<any>[] = [
@@ -37,13 +40,13 @@ export default function RoundPreviewDialog({
     },
     {
       key: 'players',
-      header: 'Enfrentamiento',
+      header: t('tournaments.preview.table_encounter'),
       render: (match) => {
         if (!match.player2) {
           return (
             <div className="flex items-center gap-2">
               <span className="font-bold text-orange-600">{match.player1.player_name}</span>
-              <span className="text-xs text-gray-500">(Bye)</span>
+              <span className="text-xs text-gray-500">{t('tournaments.preview.table_bye')}</span>
             </div>
           );
         }
@@ -64,11 +67,11 @@ export default function RoundPreviewDialog({
                 >
                   {player.player_name}
                 </span>
-                {isStarter && <span title="Inicia la partida">🎲</span>}
+                {isStarter && <span title={t('tournaments.preview.inits')}>🎲</span>}
               </div>
               {stats && (
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Inicios: {stats.totalStarts}
+                  {t('tournaments.preview.table_starts')} {stats.totalStarts}
                   {stats.lastStartRound > 0 && ` (R${stats.lastStartRound})`}
                 </div>
               )}
@@ -84,10 +87,10 @@ export default function RoundPreviewDialog({
               {match.reason && startPlayerId && (
                 <span className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">
                   {match.reason === 'balance'
-                    ? 'Equilibrio'
+                    ? t('tournaments.preview.table_balance')
                     : match.reason === 'recency'
-                      ? 'Tiempo'
-                      : 'Azar'}
+                      ? t('tournaments.preview.table_time')
+                      : t('tournaments.preview.table_random')}
                 </span>
               )}
             </div>
@@ -103,15 +106,15 @@ export default function RoundPreviewDialog({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Previsualización de Ronda"
+      title={t('tournaments.preview.title')}
       size="lg"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={isLoading}>
-            Cancelar
+            {t('tournaments.preview.cancel', 'Cancelar')}
           </Button>
           <Button onClick={onConfirm} isLoading={isLoading}>
-            Confirmar y Generar
+            {t('tournaments.preview.confirm', 'Confirmar y Generar')}
           </Button>
         </>
       }
@@ -119,15 +122,14 @@ export default function RoundPreviewDialog({
       <div className="space-y-4">
         <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            Estos son los emparejamientos propuestos para la siguiente ronda. El sistema ha
-            calculado automáticamente quién debería iniciar la partida.
+            {t('tournaments.preview.description')}
           </p>
         </div>
 
         {previewData.warnings.length > 0 && (
           <div className="bg-yellow-50 dark:bg-yellow-900/30 p-4 rounded-lg border border-yellow-100 dark:border-yellow-800">
             <h4 className="font-bold text-yellow-800 dark:text-yellow-200 text-sm mb-1">
-              Advertencias:
+              {t('tournaments.preview.warnings')}
             </h4>
             <ul className="list-disc list-inside text-sm text-yellow-700 dark:text-yellow-300">
               {previewData.warnings.map((w, i) => (

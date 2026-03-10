@@ -42,8 +42,9 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
 
             matchResults.forEach((res2) => {
               if (res1.player_id !== res2.player_id) {
-                // We just need to know they played to fetch opponent standings later
-                data[res1.player_id][res2.player_id] = 1;
+                // Increment occurrences
+                data[res1.player_id][res2.player_id] =
+                  (data[res1.player_id][res2.player_id] || 0) + 1;
               }
             });
           });
@@ -63,95 +64,141 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
   if (loading) return <div className="p-4">{t('common.loading')}</div>;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700 text-xs">
-        <thead className="bg-gray-100 dark:bg-gray-800">
-          <tr>
-            <th className="border border-gray-200 dark:border-gray-700 p-2 sticky left-0 bg-gray-100 dark:bg-gray-800 z-10">
-              {t('tournaments.position_name')}
-            </th>
-            {standings.map((s, index) => (
-              <th
-                key={s.player_id}
-                className="border border-gray-200 dark:border-gray-700 p-2 min-w-[40px] text-center"
-              >
-                {index + 1}
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-6 text-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800"></div>
+          <span>{t('tournaments.detail.best_rival', 'Mejor rival')}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800"></div>
+          <span>{t('tournaments.detail.worst_rival', 'Peor rival')}</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700 text-xs">
+          <thead className="bg-gray-100 dark:bg-gray-800">
+            <tr>
+              <th className="border border-gray-200 dark:border-gray-700 p-2 sticky left-0 bg-gray-100 dark:bg-gray-800 z-10">
+                {t('tournaments.position_name')}
               </th>
-            ))}
-            <th className="border border-gray-200 dark:border-gray-700 p-2 font-bold bg-blue-50 dark:bg-blue-900/20">
-              {t('tournaments.buchholz_cut')}
-            </th>
-            <th className="border border-gray-200 dark:border-gray-700 p-2 font-bold bg-blue-50 dark:bg-blue-900/20">
-              {t('tournaments.median')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {standings.map((rowPlayer, rowIndex) => {
-            const playedOpponentsPoints: number[] = [];
+              {standings.map((s, index) => (
+                <th
+                  key={s.player_id}
+                  className="border border-gray-200 dark:border-gray-700 p-2 min-w-[40px] text-center"
+                >
+                  {index + 1}
+                </th>
+              ))}
+              <th className="border border-gray-200 dark:border-gray-700 p-2 font-bold bg-blue-50 dark:bg-blue-900/20">
+                {t('tournaments.buchholz_cut')}
+              </th>
+              <th className="border border-gray-200 dark:border-gray-700 p-2 font-bold bg-blue-50 dark:bg-blue-900/20">
+                {t('tournaments.median')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {standings.map((rowPlayer, rowIndex) => {
+              const playedOpponentsPoints: number[] = [];
 
-            standings.forEach((colPlayer) => {
-              if (matrixData[rowPlayer.player_id]?.[colPlayer.player_id]) {
-                playedOpponentsPoints.push(colPlayer.total_points);
+              standings.forEach((colPlayer) => {
+                if (matrixData[rowPlayer.player_id]?.[colPlayer.player_id]) {
+                  playedOpponentsPoints.push(colPlayer.total_points);
+                }
+              });
+
+              const minPoints =
+                playedOpponentsPoints.length > 0 ? Math.min(...playedOpponentsPoints) : -1;
+              const maxPoints =
+                playedOpponentsPoints.length > 0 ? Math.max(...playedOpponentsPoints) : -1;
+
+              let firstMaxId = -1;
+              let lastMinId = -1;
+
+              if (playedOpponentsPoints.length > 1) {
+                // Find first max
+                for (const colPlayer of standings) {
+                  const timesPlayed = matrixData[rowPlayer.player_id]?.[colPlayer.player_id] || 0;
+                  if (timesPlayed > 0 && colPlayer.total_points === maxPoints) {
+                    firstMaxId = colPlayer.player_id;
+                    break;
+                  }
+                }
+
+                // Find last min
+                for (let i = standings.length - 1; i >= 0; i--) {
+                  const colPlayer = standings[i];
+                  const timesPlayed = matrixData[rowPlayer.player_id]?.[colPlayer.player_id] || 0;
+                  if (timesPlayed > 0 && colPlayer.total_points === minPoints) {
+                    lastMinId = colPlayer.player_id;
+                    break;
+                  }
+                }
               }
-            });
 
-            const minPoints =
-              playedOpponentsPoints.length > 0 ? Math.min(...playedOpponentsPoints) : -1;
-            const maxPoints =
-              playedOpponentsPoints.length > 0 ? Math.max(...playedOpponentsPoints) : -1;
+              return (
+                <tr
+                  key={rowPlayer.player_id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                >
+                  <td className="border border-gray-200 dark:border-gray-700 p-2 font-medium sticky left-0 bg-white dark:bg-gray-900 z-10 whitespace-nowrap">
+                    {rowIndex + 1}. {rowPlayer.player_name}
+                  </td>
+                  {standings.map((colPlayer) => {
+                    const timesPlayed = matrixData[rowPlayer.player_id]?.[colPlayer.player_id] || 0;
+                    const points = timesPlayed > 0 ? colPlayer.total_points : undefined;
 
-            return (
-              <tr key={rowPlayer.player_id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <td className="border border-gray-200 dark:border-gray-700 p-2 font-medium sticky left-0 bg-white dark:bg-gray-900 z-10 whitespace-nowrap">
-                  {rowIndex + 1}. {rowPlayer.player_name}
-                </td>
-                {standings.map((colPlayer) => {
-                  const played = matrixData[rowPlayer.player_id]?.[colPlayer.player_id];
-                  const points = played ? colPlayer.total_points : undefined;
+                    let isMin = false;
+                    let isMax = false;
 
-                  const isMin =
-                    points !== undefined &&
-                    points === minPoints &&
-                    playedOpponentsPoints.length > 1;
-                  const isMax =
-                    points !== undefined &&
-                    points === maxPoints &&
-                    playedOpponentsPoints.length > 1;
+                    if (points !== undefined && playedOpponentsPoints.length > 1) {
+                      if (points === maxPoints && colPlayer.player_id === firstMaxId) isMax = true;
+                      if (points === minPoints && colPlayer.player_id === lastMinId) isMin = true;
+                    }
 
-                  let bgColor = '';
-                  if (isMin)
-                    bgColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300';
-                  if (isMax)
-                    bgColor =
-                      'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300';
-                  if (rowPlayer.player_id === colPlayer.player_id)
-                    bgColor = 'bg-gray-100 dark:bg-gray-800';
+                    let bgColor = '';
+                    if (isMin)
+                      bgColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300';
+                    if (isMax)
+                      bgColor =
+                        'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300';
+                    if (rowPlayer.player_id === colPlayer.player_id)
+                      bgColor = 'bg-gray-100 dark:bg-gray-800';
 
-                  return (
-                    <td
-                      key={colPlayer.player_id}
-                      className={`border border-gray-200 dark:border-gray-700 p-2 text-center font-medium ${bgColor}`}
-                    >
-                      {points !== undefined
-                        ? points
-                        : rowPlayer.player_id === colPlayer.player_id
-                          ? '—'
-                          : ''}
-                    </td>
-                  );
-                })}
-                <td className="border border-gray-200 dark:border-gray-700 p-2 text-center font-bold bg-blue-50 dark:bg-blue-900/20">
-                  {rowPlayer.tiebreak_values['opponent_points_drop_worst']?.toFixed(0) || '-'}
-                </td>
-                <td className="border border-gray-200 dark:border-gray-700 p-2 text-center font-bold bg-blue-50 dark:bg-blue-900/20">
-                  {rowPlayer.tiebreak_values['opponent_points_drop_best_worst']?.toFixed(0) || '-'}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                    let content: React.ReactNode = '';
+                    if (timesPlayed > 0) {
+                      if (timesPlayed === 1) {
+                        content = points;
+                      } else {
+                        content = `(${Array(timesPlayed).fill(points).join(' + ')})`;
+                      }
+                    } else if (rowPlayer.player_id === colPlayer.player_id) {
+                      content = '—';
+                    }
+
+                    return (
+                      <td
+                        key={colPlayer.player_id}
+                        className={`border border-gray-200 dark:border-gray-700 p-2 text-center font-medium ${bgColor}`}
+                      >
+                        {content}
+                      </td>
+                    );
+                  })}
+                  <td className="border border-gray-200 dark:border-gray-700 p-2 text-center font-bold bg-blue-50 dark:bg-blue-900/20">
+                    {rowPlayer.tiebreak_values['opponent_points_drop_worst']?.toFixed(0) || '-'}
+                  </td>
+                  <td className="border border-gray-200 dark:border-gray-700 p-2 text-center font-bold bg-blue-50 dark:bg-blue-900/20">
+                    {rowPlayer.tiebreak_values['opponent_points_drop_best_worst']?.toFixed(0) ||
+                      '-'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

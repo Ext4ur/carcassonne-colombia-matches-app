@@ -122,6 +122,10 @@
     "title": "Ciudades"
   },
   "common": {
+    "app_error": "Error en la aplicación",
+    "render_error": "Error al renderizar la aplicación",
+    "check_executable": "Verifica que el ejecutable se generó correctamente",
+    "check_console": "Revisa la consola de desarrollador (F12) para más detalles",
     "actions": "Acciones",
     "back": "Volver",
     "cancel": "Cancelar",
@@ -138,11 +142,13 @@
     "language": "Idioma",
     "loading": "Cargando...",
     "name": "Nombre",
+    "note": "Nota",
     "place": "Lugar",
     "play": "Jugar",
     "save": "Guardar",
     "status": "Estado",
     "sync": "Sincronizar",
+    "warning": "Atención",
     "type": "Tipo",
     "update": "Actualizar",
     "view": "Ver"
@@ -276,6 +282,7 @@
       "update_btn": "Actualizar"
     },
     "name": "Nombre",
+    "no_players_found": "No se encontraron jugadores",
     "new": "Nuevo Jugador",
     "opponents_modal": {
       "cols": {
@@ -292,6 +299,31 @@
     "search_placeholder": "Buscar por nombre o BGA username...",
     "stats_modal": {
       "title": "Estadísticas - {{name}}"
+    },
+    "stats": {
+      "title": "Estadísticas de {{name}}",
+      "loading": "Cargando estadísticas...",
+      "no_data": "No hay estadísticas disponibles",
+      "filters_title": "Filtros",
+      "filter_tournament": "Por torneo",
+      "filter_circuit": "Por circuito",
+      "filter_place": "Por lugar",
+      "placeholder_all_tournaments": "Todos los torneos",
+      "placeholder_all_circuits": "Todos (clasificatorios y circuitos)",
+      "placeholder_all_places": "Todos los lugares",
+      "card_total_tournaments": "Torneos Totales",
+      "card_wins": "Victorias",
+      "card_avg_position": "Posición Promedio",
+      "card_total_matches": "Partidas Totales",
+      "card_best_position": "Mejor Posición",
+      "card_worst_position": "Peor Posición",
+      "type_stats_title": "Estadísticas por Tipo de Torneo",
+      "qualifiers": "Clasificatorios",
+      "circuits": "Circuitos",
+      "recent_title": "Últimos Torneos",
+      "chart_position": "Posición",
+      "chart_tournaments": "Torneos",
+      "history_item": "Posición #{{pos}} • {{pts}} pts"
     },
     "title": "Jugadores",
     "wins": "Victorias"
@@ -392,6 +424,10 @@
       "display_mode": "Visualización de jugadores",
       "display_names": "Ver solo nombres (primer nombre y primer apellido)",
       "display_usernames": "Ver solo usernames",
+      "pairing_algorithm": "Algoritmo de Emparejamiento",
+      "pairing_backtracking": "Avanzado (Evita revanchas)",
+      "pairing_greedy": "Básico (Rápido)",
+      "pairing_help": "El modo avanzado analiza todas las parejas para evitar revanchas al 100% siempre que sea posible.",
       "position_n": "Posición {{position}}",
       "save_config": "Guardar Configuración",
       "scoring_help": "Puntos del torneo según la posición en cada partida",
@@ -400,6 +436,16 @@
       "tiebreaks_title": "Criterios de Desempate"
     },
     "detail": {
+      "load_error": "Error al cargar el torneo",
+      "stats_error": "Error al cargar las estadísticas",
+      "round_gen_error": "Error al generar la ronda",
+      "preview_error": "Error al generar la previsualización",
+      "round_gen_success": "Ronda generada exitosamente",
+      "manual_round_success": "Ronda manual generada exitosamente",
+      "manual_round_error": "Error al generar la ronda manual",
+      "round_results_error": "Error al cargar los resultados de la ronda",
+      "update_success": "Torneo actualizado",
+      "update_error": "Error al actualizar el torneo",
       "all_players": "Todos los jugadores",
       "best_rival": "Mejor rival",
       "bye_not_editable": "Bye - No editable",
@@ -439,8 +485,17 @@
       "unassigned": "Sin asignar",
       "view_matrix_title": "Ver matriz de enfrentamientos",
       "view_results": "Ver Resultados",
+      "view_round_results": "Ver resultados de la ronda",
       "winner": "Ganador",
-      "worst_rival": "Peor rival"
+      "worst_rival": "Peor rival",
+      "first_player_tooltip": "Jugador Inicial",
+      "pts": "pts",
+      "close_btn": "Cerrar",
+      "dropout_btn": "Retirar jugador",
+      "restore_btn": "Reincorporar jugador",
+      "restore_btn_short": "Reinc.",
+      "unknown_player": "Jugador desconocido",
+      "position_n_short": "{{n}}° Lugar"
     },
     "empty_msg": "No hay torneos registrados",
     "filter_place": "Filtrar por lugar",
@@ -464,6 +519,8 @@
     },
     "match": {
       "close": "Cerrar",
+      "edit_completed_round_confirm": "¿Estás seguro de que deseas modificar este resultado? El Leaderboard se actualizará automáticamente con los nuevos datos.",
+      "edit_completed_round_warning": "Estás editando una ronda que ya estaba marcada como completada. Guardar los cambios recalculará el Leaderboard del torneo.",
       "first_player_btn": "Jugador Inicial",
       "loading": "Cargando...",
       "mark_first_btn": "Marcar Inicial",
@@ -473,7 +530,23 @@
       "position_title": "Posición {{pos}}",
       "pts": "PTS",
       "results_title": "Resultados de Partida",
-      "save_btn": "Guardar Resultados"
+      "save_btn": "Guardar Resultados",
+      "error_all_assigned": "Todos los jugadores deben estar asignados",
+      "error_all_points": "Todos los jugadores deben tener puntos ingresados",
+      "error_starter_required": "Debes marcar quién empezó la partida para poder guardar los resultados."
+    },
+    "manual_pairing": {
+      "title": "Cruces Manuales - Ronda {{round}}",
+      "instruction": "Arrastra los jugadores desde la Banca hacia cada Mesa. Cada mesa permite un máximo de 2 jugadores. El sistema elegirá al azar quién inicia la partida de cada mesa creada. Si hay número impar de jugadores, una mesa quedará solo con 1 jugador convirtiéndose en su \"Bye\".",
+      "bench": "Banca",
+      "bench_unassigned": "Banca (Sin Asignar)",
+      "tables": "Mesas",
+      "table_n": "Mesa {{n}}",
+      "drag_here": "Arrastra aquí",
+      "wins": "Vic",
+      "pts_op": "Pts OP",
+      "error_unassigned": "Debes asignar a todos los jugadores a una mesa antes de continuar.",
+      "confirm": "Confirmar Emparejamientos"
     },
     "matches": "Partidas",
     "matrix": "Matriz",
@@ -491,7 +564,11 @@
       "table_starts": "Inicios:",
       "table_time": "Tiempo",
       "title": "Previsualización de Ronda",
-      "warnings": "Advertencias:"
+      "warnings": "Advertencias:",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar y Generar",
+      "table_number": "Mesa",
+      "rematch_inevitable": "Revancha inevitable: {{p1}} vs {{p2}}"
     },
     "quick_tournament": "Torneo Rápido",
     "registration": {
@@ -507,10 +584,23 @@
       "register_error": "Error al inscribir el jugador",
       "registered_count": "Jugadores Inscritos ({{count}})",
       "remove_confirm": "¿Estás seguro de eliminar a {{name}} del torneo?",
+      "reincorporate_confirm": "¿Deseas reincorporar a {{name}} al torneo?",
+      "remove_reduces_rounds": "Alerta: Retirar a este jugador reducirá la cantidad de rondas del torneo de {{current}} a {{new}}. ¿Deseas continuar y eliminar al jugador?",
+      "remove_dropout": "¿Estás seguro de que deseas retirar a {{name}}? Ya no será emparejado en futuras rondas.",
+      "remove_success": "Jugador eliminado exitosamente",
+      "reactivate_success": "Jugador reincorporado exitosamente",
+      "reactivate_error": "Error al reincorporar al jugador",
       "remove_draft_confirm": "¿Quitar a {{name}} de la lista?",
       "remove_error": "Error al eliminar el jugador",
       "search_placeholder": "Buscar jugador existente...",
-      "title": "Inscribir Jugadores"
+      "title": "Inscribir Jugadores",
+      "add_player_title": "Agregar Jugador al Torneo",
+      "back_to_search": "Volver a Búsqueda",
+      "create_and_enroll": "Crear e Inscribir",
+      "search_existing": "Buscar jugador existente:",
+      "create_new": "Crear Nuevo Jugador",
+      "rounds_increase_confirm": "Alcanzaste un nivel superior de jugadores. Se agregará una nueva ronda al torneo (pasarán a ser {{rounds}}). ¿Aceptar?",
+      "rounds_bracket_warning": "Atención: Agregar este jugador superará el límite del bracket y forzará la generación de una ronda nueva recomendada al final (Serán {{rounds}} rondas). No se recomienda hacer esto, y de hacerlo, procura ingresar a otra persona más (2 en total) para evitar byes. ¿Deseas arriesgarte y continuar?"
     },
     "reports": {
       "avg_points": "Puntos Promedio",
@@ -534,8 +624,12 @@
       "total_points": "Puntos Totales",
       "total_rounds": "Total Rondas",
       "tournament_points": "Puntos Torneo",
-      "wins": "Victorias"
+      "wins": "Victorias",
+      "export_pdf_date": "Fecha",
+      "export_pdf_leaderboard": "Leaderboard Completo",
+      "total_points_short": "Puntos"
     },
+    "round_n": "Ronda {{n}}",
     "rounds": "Rondas",
     "rounds_modal": {
       "calculated": "Rondas calculadas:",

@@ -631,12 +631,15 @@ export class DatabaseService {
   ): Promise<(TournamentConfig & { bye_selection?: string }) | null> {
     const cached = dbCache.get(`tournament:${tournamentId}:config`);
     if (cached !== undefined)
-      return cached as (TournamentConfig & { bye_selection?: string }) | null;
+      return cached as
+        | (TournamentConfig & { bye_selection?: string; pairing_algorithm?: string })
+        | null;
     const results = await this.query<any>(
       'SELECT * FROM tournament_configs WHERE tournament_id = ?',
       [tournamentId]
     );
-    let config: (TournamentConfig & { bye_selection?: string }) | null = null;
+    let config: (TournamentConfig & { bye_selection?: string; pairing_algorithm?: string }) | null =
+      null;
     if (results[0]) {
       config = {
         ...results[0],
@@ -645,6 +648,7 @@ export class DatabaseService {
         avoid_rematches: Boolean(results[0].avoid_rematches),
         bye_selection: results[0].bye_selection || 'worst',
         player_display_mode: results[0].player_display_mode || 'per_player',
+        pairing_algorithm: results[0].pairing_algorithm || 'greedy',
       };
     }
     dbCache.set(`tournament:${tournamentId}:config`, config);
@@ -658,13 +662,14 @@ export class DatabaseService {
     scoring_system: ScoringSystem;
     bye_selection?: 'worst' | 'random' | 'round_robin';
     player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
+    pairing_algorithm?: 'greedy' | 'backtracking';
   }) {
     const uuid = self.crypto.randomUUID();
     const tournamentUuid = await this.getUuid('tournaments', config.tournament_id);
 
     await this.execute(
-      `INSERT INTO tournament_configs (uuid, tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection, player_display_mode) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tournament_configs (uuid, tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection, player_display_mode, pairing_algorithm) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         uuid,
         config.tournament_id,
@@ -673,6 +678,7 @@ export class DatabaseService {
         JSON.stringify(config.scoring_system),
         config.bye_selection || 'worst',
         config.player_display_mode || 'per_player',
+        config.pairing_algorithm || 'greedy',
       ]
     );
 
@@ -1369,46 +1375,37 @@ export class DatabaseService {
   }
 
   // ==========================================
-  // Player Byes
+  // Player Byes (Derived from match_results)
   // ==========================================
   static async getPlayerByes(
     tournamentId: number
   ): Promise<{ player_id: number; round_number: number }[]> {
     return this.query<{ player_id: number; round_number: number }>(
       `
-      SELECT player_id, round_number
-      FROM player_byes
-      WHERE tournament_id = ?
-    `,
+        SELECT mr.player_id, r.round_number
+        FROM match_results mr
+        JOIN matches m ON mr.match_id = m.id
+        JOIN rounds r ON m.round_id = r.id
+        WHERE r.tournament_id = ?
+          AND m.id IN (
+            SELECT match_id FROM match_results
+            GROUP BY match_id HAVING COUNT(*) = 1
+          )
+        ORDER BY r.round_number ASC
+      `,
       [tournamentId]
     );
   }
 
-  static async addPlayerBye(tournamentId: number, playerId: number, roundNumber: number) {
-    const uuid = self.crypto.randomUUID();
-    const tournamentUuid = await this.getUuid('tournaments', tournamentId);
-    const playerUuid = await this.getUuid('players', playerId);
-
-    const res = await this.execute(
-      'INSERT INTO player_byes (uuid, tournament_id, player_id, round_number) VALUES (?, ?, ?, ?)',
-      [uuid, tournamentId, playerId, roundNumber]
-    );
-
-    await SyncService.addToQueue('player_byes', 'INSERT', {
-      uuid,
-      tournament_uuid: tournamentUuid,
-      player_uuid: playerUuid,
-      round_number: roundNumber,
-    });
-    return res;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static async addPlayerBye(_tournamentId: number, _playerId: number, _roundNumber: number) {
+    // No-op: Bye is implicitly recorded via createMatchResult for a solo match.
+    return { lastInsertRowid: 0, changes: 0 };
   }
 
   static async hasPlayerReceivedBye(tournamentId: number, playerId: number): Promise<boolean> {
-    const results = await this.query<{ count: number }>(
-      'SELECT COUNT(*) as count FROM player_byes WHERE tournament_id = ? AND player_id = ?',
-      [tournamentId, playerId]
-    );
-    return results[0]?.count > 0;
+    const byes = await this.getPlayerByes(tournamentId);
+    return byes.some((b) => b.player_id === playerId);
   }
 
   static async getTournamentPlayerCount(tournamentId: number): Promise<number> {

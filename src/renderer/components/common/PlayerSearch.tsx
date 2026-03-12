@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { DatabaseService } from '../../services/database';
 import { Player } from '../../types/player';
 import Input from './Input';
+import { useTranslation } from 'react-i18next';
 
 interface PlayerSearchProps {
   onSelect: (player: Player) => void;
@@ -12,8 +13,9 @@ interface PlayerSearchProps {
 export default function PlayerSearch({
   onSelect,
   excludeIds = [],
-  placeholder = 'Buscar jugador...',
+  placeholder,
 }: PlayerSearchProps) {
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<Player[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -81,7 +83,7 @@ export default function PlayerSearch({
     <div ref={searchRef} className="relative w-full">
       <Input
         type="text"
-        placeholder={placeholder}
+        placeholder={placeholder || t('tournaments.registration.search_placeholder')}
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         onFocus={() => searchTerm.length >= 2 && setShowResults(true)}
@@ -109,7 +111,7 @@ export default function PlayerSearch({
       )}
       {showResults && searchTerm.length >= 2 && results.length === 0 && (
         <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4">
-          <p className="text-gray-500 dark:text-gray-400">No se encontraron jugadores</p>
+          <p className="text-gray-500 dark:text-gray-400">{t('players.no_players_found')}</p>
         </div>
       )}
     </div>

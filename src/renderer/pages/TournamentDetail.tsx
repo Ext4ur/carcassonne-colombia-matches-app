@@ -83,13 +83,13 @@ export default function TournamentDetail() {
     } catch (error) {
       console.error('Error loading tournament:', error);
       addNotification({
-        message: 'Error al cargar el torneo',
+        message: t('tournaments.detail.load_error'),
         type: 'error',
       });
     } finally {
       setIsLoading(false);
     }
-  }, [id, addNotification]);
+  }, [id, addNotification, t]);
 
   const loadMatchPlayersForMatches = useCallback(async (matchList: Match[]) => {
     if (matchList.length === 0) return;
@@ -173,7 +173,7 @@ export default function TournamentDetail() {
         if (isCancelled?.()) return;
         console.error('Error loading standings:', error);
         addNotification({
-          message: error?.message || 'Error al cargar las estadísticas',
+          message: error?.message || t('tournaments.detail.stats_error'),
           type: 'error',
         });
         setStandings([]);
@@ -181,7 +181,7 @@ export default function TournamentDetail() {
         if (!isCancelled?.()) setIsLoadingStandings(false);
       }
     },
-    [tournament?.id, addNotification]
+    [tournament?.id, addNotification, t]
   );
 
   const loadTiebreakCriteria = useCallback(async () => {
@@ -244,7 +244,7 @@ export default function TournamentDetail() {
     } catch (error: any) {
       console.error('Error generating round:', error);
       addNotification({
-        message: error.message || 'Error al generar la ronda',
+        message: error.message || t('tournaments.detail.round_gen_error'),
         type: 'error',
         duration: 5000,
       });
@@ -306,7 +306,7 @@ export default function TournamentDetail() {
     } catch (error: any) {
       console.error('Error generating preview:', error);
       addNotification({
-        message: error.message || 'Error al generar la previsualización',
+        message: error.message || t('tournaments.detail.preview_error'),
         type: 'error',
       });
     } finally {
@@ -339,13 +339,13 @@ export default function TournamentDetail() {
       setIsPreviewOpen(false);
       setPreviewData(null);
       addNotification({
-        message: 'Ronda generada exitosamente',
+        message: t('tournaments.detail.round_gen_success'),
         type: 'success',
       });
     } catch (error: any) {
       console.error('Error generating round:', error);
       addNotification({
-        message: error.message || 'Error al generar la ronda',
+        message: error.message || t('tournaments.detail.round_gen_error'),
         type: 'error',
       });
     } finally {
@@ -373,13 +373,13 @@ export default function TournamentDetail() {
 
       setIsManualPairingOpen(false);
       addNotification({
-        message: 'Ronda manual generada exitosamente',
+        message: t('tournaments.detail.manual_round_success'),
         type: 'success',
       });
     } catch (error: any) {
       console.error('Error generating manual round:', error);
       addNotification({
-        message: error.message || 'Error al generar la ronda manual',
+        message: error.message || t('tournaments.detail.manual_round_error'),
         type: 'error',
       });
     } finally {
@@ -431,7 +431,7 @@ export default function TournamentDetail() {
     } catch (error) {
       console.error('Error loading round results:', error);
       addNotification({
-        message: 'Error al cargar los resultados de la ronda',
+        message: t('tournaments.detail.round_results_error'),
         type: 'error',
       });
     } finally {
@@ -444,16 +444,24 @@ export default function TournamentDetail() {
     setSelectedMatch(null);
     if (!currentRound?.id || !tournament?.id) return;
 
-    // Una sola petición para obtener partidas actualizadas
-    const matches = await DatabaseService.getRoundMatches(currentRound.id);
-    setMatches(matches);
-    await loadMatchPlayersForMatches(matches);
-    await loadMatchResultsForMatches(matches, tournament?.id);
+    // Refresh current round's matches and results
+    const updatedMatches = await DatabaseService.getRoundMatches(currentRound.id);
+    setMatches(updatedMatches);
+    await loadMatchPlayersForMatches(updatedMatches);
+    await loadMatchResultsForMatches(updatedMatches, tournament?.id);
 
-    const allCompleted = matches.every((m) => m.status === 'completed');
-    if (!allCompleted || currentRound.status === 'completed') return;
+    const allCompleted = updatedMatches.every((m) => m.status === 'completed');
 
-    // Marcar ronda completada y refrescar lista de rondas
+    // If the round was already completed before the edit, just refresh standings and return
+    // (no need to mark the round as completed again or show round-completion notifications)
+    if (currentRound.status === 'completed') {
+      await loadStandings();
+      return;
+    }
+
+    if (!allCompleted) return;
+
+    // All matches just got completed — mark round as done and refresh everything
     await DatabaseService.updateRound(currentRound.id, {
       status: 'completed',
       completed_at: new Date().toISOString(),
@@ -512,12 +520,12 @@ export default function TournamentDetail() {
         date: editFormData.date || undefined,
         place_id: editFormData.place_id ? Number(editFormData.place_id) : undefined,
       });
-      addNotification({ message: 'Torneo actualizado', type: 'success' });
+      addNotification({ message: t('tournaments.detail.update_success'), type: 'success' });
       setIsEditModalOpen(false);
       await loadTournament();
     } catch (error) {
       console.error('Error updating tournament:', error);
-      addNotification({ message: 'Error al actualizar el torneo', type: 'error' });
+      addNotification({ message: t('tournaments.detail.update_error'), type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -553,19 +561,22 @@ export default function TournamentDetail() {
       );
       if (result.success) {
         addNotification({
-          message: 'Reporte generado exitosamente',
+          message: t('reports.export_success'),
           type: 'success',
         });
       } else if (!result.canceled) {
         addNotification({
-          message: 'Error al generar el reporte: ' + (result.error || 'Error desconocido'),
+          message:
+            t('reports.export_error') +
+            ': ' +
+            (result.error || t('common.error_unknown', 'Error desconocido')),
           type: 'error',
         });
       }
     } catch (error) {
       console.error('Error generating report:', error);
       addNotification({
-        message: 'Error al generar el reporte',
+        message: t('reports.export_error'),
         type: 'error',
       });
     } finally {
@@ -621,12 +632,19 @@ export default function TournamentDetail() {
       if (newCalculatedRounds < currentRoundsVal) {
         if (
           !confirm(
-            `Alerta: Retirar a este jugador reducirá la cantidad de rondas del torneo de ${currentRoundsVal} a ${newCalculatedRounds}. ¿Deseas continuar y eliminar al jugador?`
+            t('tournaments.registration.remove_reduces_rounds', {
+              current: currentRoundsVal,
+              new: newCalculatedRounds,
+            })
           )
         )
           return;
       } else {
-        if (!confirm(`¿Estás seguro de eliminar a ${playerStanding.player_name} del torneo?`))
+        if (
+          !confirm(
+            t('tournaments.registration.remove_confirm', { name: playerStanding.player_name })
+          )
+        )
           return;
       }
 
@@ -640,14 +658,14 @@ export default function TournamentDetail() {
           loadTournament();
         }
         addNotification({
-          message: 'Jugador eliminado exitosamente',
+          message: t('tournaments.registration.remove_success'),
           type: 'success',
         });
         await loadStandings();
       } catch (error) {
         console.error('Error removing player:', error);
         addNotification({
-          message: 'Error al eliminar al jugador',
+          message: t('tournaments.registration.remove_error'),
           type: 'error',
         });
       } finally {
@@ -656,9 +674,7 @@ export default function TournamentDetail() {
     } else {
       if (!currentRound) return;
       if (
-        !confirm(
-          `¿Estás seguro de que deseas retirar a ${playerStanding.player_name}? Ya no será emparejado en futuras rondas.`
-        )
+        !confirm(t('tournaments.registration.remove_dropout', { name: playerStanding.player_name }))
       )
         return;
 
@@ -691,7 +707,12 @@ export default function TournamentDetail() {
 
   const handleRestore = async (playerStanding: PlayerStanding) => {
     if (!tournament?.id) return;
-    if (!confirm(`¿Deseas reincorporar a ${playerStanding.player_name} al torneo?`)) return;
+    if (
+      !confirm(
+        t('tournaments.registration.reincorporate_confirm', { name: playerStanding.player_name })
+      )
+    )
+      return;
 
     try {
       setIsLoading(true);
@@ -700,14 +721,14 @@ export default function TournamentDetail() {
         dropout_round: null,
       });
       addNotification({
-        message: 'Jugador reincorporado exitosamente',
+        message: t('tournaments.registration.reactivate_success'),
         type: 'success',
       });
       await loadStandings();
     } catch (error) {
       console.error('Error restoring player:', error);
       addNotification({
-        message: 'Error al reincorporar al jugador',
+        message: t('tournaments.registration.reactivate_error'),
         type: 'error',
       });
     } finally {
@@ -786,7 +807,7 @@ export default function TournamentDetail() {
                 e.stopPropagation();
                 handleDropout(standing);
               }}
-              title="Retirar jugador"
+              title={t('tournaments.detail.dropout_btn')}
               disabled={tournament?.status === 'completed'}
             >
               x
@@ -810,9 +831,9 @@ export default function TournamentDetail() {
                 e.stopPropagation();
                 handleRestore(standing);
               }}
-              title="Reincorporar jugador"
+              title={t('tournaments.detail.restore_btn')}
             >
-              Reinc.
+              {t('tournaments.detail.restore_btn_short')}
             </Button>
           );
         }
@@ -899,7 +920,7 @@ export default function TournamentDetail() {
       }
       items.push({
         position: i,
-        label: labels[i - 1] || `${i}° Lugar`,
+        label: labels[i - 1] || t('tournaments.detail.position_n_short', { n: i }),
         color: colors[i - 1] || 'text-gray-600 dark:text-gray-400',
       });
     }
@@ -924,11 +945,11 @@ export default function TournamentDetail() {
         if (isBye) {
           // Bye match - show player in orange bold
           // Get player name from results (bye matches typically don't have players in match_players)
-          let playerName = 'Jugador desconocido';
+          let playerName = t('tournaments.detail.unknown_player');
           if (results.length > 0) {
             // Get player name from result
             const result = results[0];
-            playerName = result.player_name || 'Jugador desconocido';
+            playerName = result.player_name || t('tournaments.detail.unknown_player');
           } else if (players.length > 0) {
             // Fallback to match_players if results not loaded yet
             playerName = players[0].name;
@@ -1498,6 +1519,7 @@ export default function TournamentDetail() {
             tournamentId={tournament.id!}
             playersPerMatch={tournament.players_per_match}
             tournamentStatus={tournament.status}
+            roundStatus={currentRound?.status}
             onSave={handleMatchResultSaved}
             onCancel={() => {
               setIsMatchModalOpen(false);
@@ -1578,14 +1600,14 @@ export default function TournamentDetail() {
                                   {matchData.first_player_id === result.player_id && (
                                     <span
                                       className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
-                                      title="Jugador Inicial"
+                                      title={t('tournaments.detail.first_player_tooltip')}
                                     >
                                       🎲
                                     </span>
                                   )}
                                 </div>
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                                  {result.points} pts
+                                  {result.points} {t('tournaments.detail.pts')}
                                 </div>
                               </div>
                             ) : (
@@ -1607,7 +1629,7 @@ export default function TournamentDetail() {
                   setSelectedRoundResults(null);
                 }}
               >
-                Cerrar
+                {t('tournaments.detail.close_btn')}
               </Button>
             </div>
           </div>

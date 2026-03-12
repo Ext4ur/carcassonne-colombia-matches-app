@@ -122,6 +122,10 @@
     "title": "Cities"
   },
   "common": {
+    "app_error": "Application Error",
+    "render_error": "Error rendering the application",
+    "check_executable": "Verify that the executable was generated correctly",
+    "check_console": "Check the developer console (F12) for more details",
     "actions": "Actions",
     "back": "Back",
     "cancel": "Cancel",
@@ -138,11 +142,13 @@
     "language": "Language",
     "loading": "Loading...",
     "name": "Name",
+    "note": "Note",
     "place": "Place",
     "play": "Play",
     "save": "Save",
     "status": "Status",
     "sync": "Sync",
+    "warning": "Warning",
     "type": "Type",
     "update": "Update",
     "view": "View"
@@ -276,6 +282,7 @@
       "update_btn": "Update"
     },
     "name": "Name",
+    "no_players_found": "No players found",
     "new": "New Player",
     "opponents_modal": {
       "cols": {
@@ -292,6 +299,31 @@
     "search_placeholder": "Search by name or BGA username...",
     "stats_modal": {
       "title": "Statistics - {{name}}"
+    },
+    "stats": {
+      "title": "Stats for {{name}}",
+      "loading": "Loading statistics...",
+      "no_data": "No statistics available",
+      "filters_title": "Filters",
+      "filter_tournament": "By tournament",
+      "filter_circuit": "By circuit",
+      "filter_place": "By place",
+      "placeholder_all_tournaments": "All tournaments",
+      "placeholder_all_circuits": "All (qualifiers and circuits)",
+      "placeholder_all_places": "All places",
+      "card_total_tournaments": "Total Tournaments",
+      "card_wins": "Wins",
+      "card_avg_position": "Average Position",
+      "card_total_matches": "Total Matches",
+      "card_best_position": "Best Position",
+      "card_worst_position": "Worst Position",
+      "type_stats_title": "Stats by Tournament Type",
+      "qualifiers": "Qualifiers",
+      "circuits": "Circuits",
+      "recent_title": "Recent Tournaments",
+      "chart_position": "Position",
+      "chart_tournaments": "Tournaments",
+      "history_item": "Position #{{pos}} • {{pts}} pts"
     },
     "title": "Players",
     "wins": "Wins"
@@ -392,6 +424,10 @@
       "display_mode": "Player Display",
       "display_names": "Show only names (first name and first surname)",
       "display_usernames": "Show only usernames",
+      "pairing_algorithm": "Pairing Algorithm",
+      "pairing_backtracking": "Advanced (Avoid rematches)",
+      "pairing_greedy": "Basic (Fast)",
+      "pairing_help": "Advanced mode analyzes all pairings to avoid rematches 100% whenever possible.",
       "position_n": "Position {{position}}",
       "save_config": "Save Configuration",
       "scoring_help": "Tournament points based on position in each match",
@@ -400,6 +436,16 @@
       "tiebreaks_title": "Tiebreak Criteria"
     },
     "detail": {
+      "load_error": "Error loading tournament",
+      "stats_error": "Error loading statistics",
+      "round_gen_error": "Error generating round",
+      "preview_error": "Error generating preview",
+      "round_gen_success": "Round generated successfully",
+      "manual_round_success": "Manual round generated successfully",
+      "manual_round_error": "Error generating manual round",
+      "round_results_error": "Error loading round results",
+      "update_success": "Tournament updated",
+      "update_error": "Error updating tournament",
       "all_players": "All players",
       "best_rival": "Best rival",
       "bye_not_editable": "Bye - Not editable",
@@ -439,8 +485,17 @@
       "unassigned": "Unassigned",
       "view_matrix_title": "View matchup matrix",
       "view_results": "View Results",
+      "view_round_results": "View round results",
       "winner": "Winner",
-      "worst_rival": "Worst rival"
+      "worst_rival": "Worst rival",
+      "first_player_tooltip": "Starting Player",
+      "pts": "pts",
+      "close_btn": "Close",
+      "dropout_btn": "Drop player",
+      "restore_btn": "Restore player",
+      "restore_btn_short": "Rest.",
+      "unknown_player": "Unknown player",
+      "position_n_short": "Position #{{n}}"
     },
     "empty_msg": "No tournaments registered",
     "filter_place": "Filter by place",
@@ -464,6 +519,8 @@
     },
     "match": {
       "close": "Close",
+      "edit_completed_round_confirm": "Are you sure you want to modify this result? The Leaderboard will be automatically updated with the new data.",
+      "edit_completed_round_warning": "You are editing a round that was already marked as completed. Saving changes will recalculate the tournament Leaderboard.",
       "first_player_btn": "Starting Player",
       "loading": "Loading...",
       "mark_first_btn": "Mark Starter",
@@ -473,7 +530,23 @@
       "position_title": "Position {{pos}}",
       "pts": "PTS",
       "results_title": "Match Results",
-      "save_btn": "Save Results"
+      "save_btn": "Save Results",
+      "error_all_assigned": "All players must be assigned",
+      "error_all_points": "All players must have points entered",
+      "error_starter_required": "You must mark who started the match to save the results."
+    },
+    "manual_pairing": {
+      "title": "Manual Pairings - Round {{round}}",
+      "instruction": "Drag players from the Bench to each Table. Each table allows a maximum of 2 players. The system will randomly choose who starts the match at each created table. If there is an odd number of players, one table will remain with only 1 player, becoming their \"Bye\".",
+      "bench": "Bench",
+      "bench_unassigned": "Bench (Unassigned)",
+      "tables": "Tables",
+      "table_n": "Table {{n}}",
+      "drag_here": "Drag here",
+      "wins": "Wins",
+      "pts_op": "Opp Pts",
+      "error_unassigned": "You must assign all players to a table before continuing.",
+      "confirm": "Confirm Pairings"
     },
     "matches": "Matches",
     "matrix": "Matrix",
@@ -491,7 +564,11 @@
       "table_starts": "Starts:",
       "table_time": "Time",
       "title": "Round Preview",
-      "warnings": "Warnings:"
+      "warnings": "Warnings:",
+      "cancel": "Cancel",
+      "confirm": "Confirm and Generate",
+      "table_number": "Table",
+      "rematch_inevitable": "Rematch inevitable: {{p1}} vs {{p2}}"
     },
     "quick_tournament": "Quick Tournament",
     "registration": {
@@ -507,10 +584,23 @@
       "register_error": "Error registering player",
       "registered_count": "Registered Players ({{count}})",
       "remove_confirm": "Are you sure you want to remove {{name}} from the tournament?",
+      "reincorporate_confirm": "Do you want to reincorporate {{name}} into the tournament?",
+      "remove_reduces_rounds": "Warning: Removing this player will reduce the number of rounds from {{current}} to {{new}}. Do you wish to continue and remove the player?",
+      "remove_dropout": "Are you sure you want to drop out {{name}}? They will no longer be paired in future rounds.",
+      "remove_success": "Player successfully removed",
+      "reactivate_success": "Player successfully reincorporated",
+      "reactivate_error": "Error reincorporating player",
       "remove_draft_confirm": "Remove {{name}} from the list?",
       "remove_error": "Error removing player",
       "search_placeholder": "Search existing player...",
-      "title": "Register Players"
+      "title": "Register Players",
+      "add_player_title": "Add Player to Tournament",
+      "back_to_search": "Back to Search",
+      "create_and_enroll": "Create and Enroll",
+      "search_existing": "Search existing player:",
+      "create_new": "Create New Player",
+      "rounds_increase_confirm": "You reached a higher player pool. A new round will be added to the tournament (it will be {{rounds}}). Accept?",
+      "rounds_bracket_warning": "Warning: Adding this player will exceed the bracket limit and force the generation of a new round at the end ({{rounds}} rounds total). Doing this is not recommended. If you proceed, try to add one more person to avoid byes. Continue?"
     },
     "reports": {
       "avg_points": "Average Points",
@@ -534,8 +624,12 @@
       "total_points": "Total Points",
       "total_rounds": "Total Rounds",
       "tournament_points": "Tournament Pts",
-      "wins": "Wins"
+      "wins": "Wins",
+      "export_pdf_date": "Date",
+      "export_pdf_leaderboard": "Full Leaderboard",
+      "total_points_short": "Points"
     },
+    "round_n": "Round {{n}}",
     "rounds": "Rounds",
     "rounds_modal": {
       "calculated": "Calculated rounds:",

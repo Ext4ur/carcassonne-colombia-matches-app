@@ -35,7 +35,7 @@ export default function RoundPreviewDialog({
   const columns: Column<any>[] = [
     {
       key: 'table',
-      header: 'Mesa',
+      header: t('tournaments.preview.table_number', 'Mesa'),
       render: (_, index) => (index ?? 0) + 1,
     },
     {

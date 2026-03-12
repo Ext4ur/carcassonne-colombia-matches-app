@@ -15,6 +15,7 @@ interface MatchResultFormProps {
   onSave: () => void;
   onCancel: () => void;
   tournamentStatus?: 'draft' | 'in_progress' | 'completed';
+  roundStatus?: 'pending' | 'in_progress' | 'completed';
 }
 
 export default function MatchResultForm({
@@ -24,6 +25,7 @@ export default function MatchResultForm({
   onSave,
   onCancel,
   tournamentStatus = 'in_progress',
+  roundStatus,
 }: MatchResultFormProps) {
   const { t } = useTranslation();
   const [players, setPlayers] = useState<Player[]>([]);
@@ -116,24 +118,34 @@ export default function MatchResultForm({
   const handleSave = async () => {
     // Validate all players are assigned
     if (results.some((r) => !r.player_id)) {
-      alert('Todos los jugadores deben estar asignados');
+      alert(t('tournaments.match.error_all_assigned'));
       return;
     }
 
     // Validate all players have points entered
     if (results.some((r) => r.points === undefined || r.points === null)) {
-      alert('Todos los jugadores deben tener puntos ingresados');
+      alert(t('tournaments.match.error_all_points'));
       return;
     }
 
     // Validate who started the match is selected (AC-012)
     if (firstPlayerId === undefined || firstPlayerId === null) {
-      alert('Debes marcar quién empezó la partida para poder guardar los resultados.');
+      alert(t('tournaments.match.error_starter_required'));
       return;
     }
 
     try {
       setIsLoading(true);
+
+      // Warn before overwriting a completed round
+      if (roundStatus === 'completed') {
+        const confirmed = window.confirm(t('tournaments.match.edit_completed_round_confirm'));
+        if (!confirmed) {
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const config = await DatabaseService.getTournamentConfig(tournamentId);
       const scoringSystem = config?.scoring_system || { 1: 1, 2: 0 };
 
@@ -326,6 +338,15 @@ export default function MatchResultForm({
           </div>
         );
       })}
+
+      {roundStatus === 'completed' && tournamentStatus !== 'completed' && (
+        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-300 dark:border-amber-700">
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            <strong>⚠️ {t('common.warning', 'Atención')}:</strong>{' '}
+            {t('tournaments.match.edit_completed_round_warning')}
+          </p>
+        </div>
+      )}
 
       {tournamentStatus === 'completed' && (
         <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">

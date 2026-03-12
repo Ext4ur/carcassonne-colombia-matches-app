@@ -114,6 +114,9 @@ function initializeSchema(database: Database.Database) {
       avoid_rematches INTEGER NOT NULL DEFAULT 1,
       tiebreak_criteria TEXT NOT NULL,
       scoring_system TEXT NOT NULL,
+      bye_selection TEXT DEFAULT 'worst',
+      player_display_mode TEXT DEFAULT 'per_player',
+      pairing_algorithm TEXT DEFAULT 'greedy' CHECK(pairing_algorithm IN ('greedy', 'backtracking')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
@@ -466,6 +469,19 @@ function runMigrations(database: Database.Database) {
     console.log(`🎉 Migration 10 complete: Added ${addedColumns} missing UUID columns.`);
   } else {
     console.log('ℹ️ Migration 10: All columns already exist.');
+  }
+
+  // Migration 11: Add pairing_algorithm to tournament_configs
+  try {
+    database.exec(
+      `ALTER TABLE tournament_configs ADD COLUMN pairing_algorithm TEXT DEFAULT 'greedy' CHECK(pairing_algorithm IN ('greedy', 'backtracking'))`
+    );
+    console.log('✅ [Migration 11] Added pairing_algorithm to tournament_configs');
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('⚠️ [Migration 11] Warning:', errorMsg);
+    }
   }
 
   // Force wal checkpoint to ensure changes are written

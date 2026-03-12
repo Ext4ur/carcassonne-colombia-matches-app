@@ -4,6 +4,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautif
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { PlayerStanding } from '../../types/tournament';
+import { useTranslation } from 'react-i18next';
 
 // Helper for strict mode with r-b-dnd
 export const StrictModeDroppable = ({ children, ...props }: any) => {
@@ -42,20 +43,29 @@ export default function ManualPairingDialog({
   players,
   roundNumber,
 }: ManualPairingDialogProps) {
+  const { t } = useTranslation();
   const [columns, setColumns] = useState<Record<string, ColumnData>>({});
 
   useEffect(() => {
     if (isOpen) {
       const numTables = Math.ceil(players.length / 2);
       const initialColumns: Record<string, ColumnData> = {
-        unassigned: { id: 'unassigned', name: 'Banca (Sin Asignar)', items: [...players] },
+        unassigned: {
+          id: 'unassigned',
+          name: t('tournaments.manual_pairing.bench_unassigned'),
+          items: [...players],
+        },
       };
       for (let i = 1; i <= numTables; i++) {
-        initialColumns[`table-${i}`] = { id: `table-${i}`, name: `Mesa ${i}`, items: [] };
+        initialColumns[`table-${i}`] = {
+          id: `table-${i}`,
+          name: t('tournaments.manual_pairing.table_n', { n: i }),
+          items: [],
+        };
       }
       setColumns(initialColumns);
     }
-  }, [isOpen, players]);
+  }, [isOpen, players, t]);
 
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -95,7 +105,7 @@ export default function ManualPairingDialog({
 
   const handleConfirm = () => {
     if (columns['unassigned']?.items.length > 0) {
-      alert('Debes asignar a todos los jugadores a una mesa antes de continuar.');
+      alert(t('tournaments.manual_pairing.error_unassigned'));
       return;
     }
 
@@ -130,12 +140,12 @@ export default function ManualPairingDialog({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Cruces Manuales - Ronda ${roundNumber}`}
+      title={t('tournaments.manual_pairing.title', { round: roundNumber })}
       size="xl"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={isLoading}>
-            Cancelar
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleConfirm}
@@ -143,16 +153,13 @@ export default function ManualPairingDialog({
             disabled={!isComplete}
             variant={isComplete ? 'primary' : 'secondary'}
           >
-            Confirmar Emparejamientos
+            {t('tournaments.manual_pairing.confirm')}
           </Button>
         </>
       }
     >
       <div className="mb-4 text-sm text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-100 dark:border-blue-800">
-        Arrastra los jugadores desde la Banca hacia cada Mesa. Cada mesa permite un máximo de 2
-        jugadores. El sistema elegirá al azar quién inicia la partida de cada mesa creada. Si hay
-        número impar de jugadores, una mesa quedará solo con 1 jugador convirtiéndose en su
-        &quot;Bye&quot;.
+        {t('tournaments.manual_pairing.instruction')}
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -160,7 +167,7 @@ export default function ManualPairingDialog({
           {/* BANCA */}
           <div className="w-full md:w-1/3 flex flex-col pt-1">
             <h3 className="font-bold text-gray-800 dark:text-gray-200 mb-2">
-              Banca ({columns['unassigned']?.items.length || 0})
+              {t('tournaments.manual_pairing.bench')} ({columns['unassigned']?.items.length || 0})
             </h3>
             <div className="flex-1 min-h-[400px]">
               <StrictModeDroppable droppableId="unassigned">
@@ -196,7 +203,8 @@ export default function ManualPairingDialog({
                               {item.player_name}
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
-                              Vic: {item.wins} | Pts OP:{' '}
+                              {t('tournaments.manual_pairing.wins')}: {item.wins} |{' '}
+                              {t('tournaments.manual_pairing.pts_op')}:{' '}
                               {item.tiebreak_values['opponent_points_drop_worst']?.toFixed(1) || 0}
                             </div>
                           </div>
@@ -212,7 +220,9 @@ export default function ManualPairingDialog({
 
           {/* MESAS */}
           <div className="w-full md:w-2/3">
-            <h3 className="font-bold text-gray-800 dark:text-gray-200 mb-2">Mesas</h3>
+            <h3 className="font-bold text-gray-800 dark:text-gray-200 mb-2">
+              {t('tournaments.manual_pairing.tables')}
+            </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2 pb-2">
               {Object.entries(columns)
                 .filter(([id]) => id !== 'unassigned') // Solo mostrar mesas
@@ -275,7 +285,9 @@ export default function ManualPairingDialog({
 
                             {column.items.length === 0 && !snapshot.isDraggingOver && (
                               <div className="absolute inset-0 flex items-center justify-center opacity-40 pointer-events-none">
-                                <span className="text-sm text-gray-400">Arrastra aquí</span>
+                                <span className="text-sm text-gray-400">
+                                  {t('tournaments.manual_pairing.drag_here')}
+                                </span>
                               </div>
                             )}
                           </div>

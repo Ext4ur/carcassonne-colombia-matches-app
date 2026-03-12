@@ -33,3 +33,7 @@ exports/
 
 .env.colombia
 .env.international
+
+# Supabase Audit Results
+supabase/colombia/
+supabase/international/

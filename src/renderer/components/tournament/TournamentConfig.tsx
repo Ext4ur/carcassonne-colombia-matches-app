@@ -17,6 +17,7 @@ interface TournamentConfigProps {
     config: Partial<TournamentConfig> & {
       bye_selection?: 'worst' | 'random' | 'round_robin';
       player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
+      pairing_algorithm?: 'greedy' | 'backtracking';
     }
   ) => void;
   onCancel: () => void;
@@ -41,6 +42,9 @@ export default function TournamentConfigComponent({
   const [playerDisplayMode, setPlayerDisplayMode] = useState<
     'per_player' | 'names_only' | 'usernames_only'
   >(config?.player_display_mode ?? 'per_player');
+  const [pairingAlgorithm, setPairingAlgorithm] = useState<'greedy' | 'backtracking'>(
+    (config as any)?.pairing_algorithm ?? 'greedy'
+  );
 
   const handleDragEnd = (result: any) => {
     if (!result.destination) return;
@@ -80,6 +84,7 @@ export default function TournamentConfigComponent({
       scoring_system: scoringSystem,
       bye_selection: byeSelection,
       player_display_mode: playerDisplayMode,
+      pairing_algorithm: pairingAlgorithm,
     });
   };
 
@@ -130,6 +135,19 @@ export default function TournamentConfigComponent({
               { value: 'usernames_only', label: t('tournaments.config.display_usernames') },
             ]}
             helperText={t('tournaments.config.display_help')}
+          />
+        </div>
+
+        <div>
+          <Select
+            label={t('tournaments.config.pairing_algorithm')}
+            value={pairingAlgorithm}
+            onChange={(e) => setPairingAlgorithm(e.target.value as 'greedy' | 'backtracking')}
+            options={[
+              { value: 'greedy', label: t('tournaments.config.pairing_greedy') },
+              { value: 'backtracking', label: t('tournaments.config.pairing_backtracking') },
+            ]}
+            helperText={t('tournaments.config.pairing_help')}
           />
         </div>
       </div>

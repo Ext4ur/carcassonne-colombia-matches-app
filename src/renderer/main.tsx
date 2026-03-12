@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
-import './i18n/config';
+import i18n from './i18n/config';
 import { SyncService } from './services/syncService';
 
 // Error boundary for React errors
@@ -38,9 +38,10 @@ class ErrorBoundary extends React.Component<
             textAlign: 'center',
           }}
         >
-          <h1 style={{ color: '#dc2626', marginBottom: '20px' }}>Error en la aplicación</h1>
+          <h1 style={{ color: '#dc2626', marginBottom: '20px' }}>{i18n.t('common.app_error')}</h1>
           <p style={{ color: '#666', maxWidth: '600px', marginBottom: '10px' }}>
-            {this.state.error?.message || 'Ocurrió un error inesperado'}
+            {this.state.error?.message ||
+              i18n.t('common.errors.unknown', 'Ocurrió un error inesperado')}
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -54,7 +55,7 @@ class ErrorBoundary extends React.Component<
               borderRadius: '4px',
             }}
           >
-            Recargar aplicación
+            {i18n.t('common.reload', 'Recargar aplicación')}
           </button>
         </div>
       );
@@ -69,24 +70,11 @@ if (!window.electronAPI) {
   console.error('electronAPI is not available!');
   document.body.innerHTML = `
     <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; font-family: Arial, sans-serif; padding: 20px; text-align: center;">
-      <h1 style="color: #dc2626; margin-bottom: 20px;">Error: Electron API no disponible</h1>
-      <p style="color: #666; max-width: 600px; margin-bottom: 10px;">
-        La aplicación no puede comunicarse con el proceso principal de Electron.
-      </p>
-      <p style="color: #666; max-width: 600px; margin-bottom: 20px;">
-        Esto generalmente ocurre cuando el script preload no se carga correctamente.
-      </p>
-      <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; max-width: 600px; text-align: left;">
-        <p style="margin: 5px 0; font-weight: bold;">Posibles soluciones:</p>
-        <ul style="margin: 10px 0; padding-left: 20px;">
-          <li>Verifica que el ejecutable se generó correctamente</li>
-          <li>Revisa la consola de desarrollador (F12) para más detalles</li>
-          <li>Intenta regenerar el ejecutable con: npm run dist:win</li>
-        </ul>
-      </div>
-      <p style="color: #999; margin-top: 20px; font-size: 12px;">
-        Revisa la consola para más información de depuración.
-      </p>
+      <h1 style="color: #dc2626; margin-bottom: 20px;">${i18n.t('common.error_api', 'Error: Electron API no disponible')}</h1>
+      <ul style="margin: 10px 0; padding-left: 20px; text-align: left; max-width: 600px;">
+        <li>${i18n.t('common.check_executable')}</li>
+        <li>${i18n.t('common.check_console')}</li>
+      </ul>
     </div>
   `;
 } else {
@@ -117,15 +105,18 @@ if (!window.electronAPI) {
     console.error('Error rendering React app:', error);
     document.body.innerHTML = `
       <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; font-family: Arial, sans-serif; padding: 20px; text-align: center;">
-        <h1 style="color: #dc2626; margin-bottom: 20px;">Error al renderizar la aplicación</h1>
+        <h1 style="color: #dc2626; margin-bottom: 20px;">${i18n.t('common.render_error')}</h1>
         <p style="color: #666; max-width: 600px;">${error instanceof Error ? error.message : String(error)}</p>
         <button 
-          onClick={() => window.location.reload()} 
+          id="reload-btn"
           style="padding: 10px 20px; margin-top: 20px; cursor: pointer; background-color: #3b82f6; color: white; border: none; border-radius: 4px;"
         >
-          Recargar aplicación
+          ${i18n.t('common.reload', 'Recargar aplicación')}
         </button>
       </div>
+      <script>
+        document.getElementById('reload-btn').onclick = () => window.location.reload();
+      </script>
     `;
   }
 }

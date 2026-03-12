@@ -33,6 +33,9 @@
     "postinstall": "electron-builder install-app-deps",
     "rebuild-sqlite": "electron-rebuild -f -w better-sqlite3",
     "db:fix": "electron scripts/fix-db.js",
+    "db:audit": "electron scripts/audit-db.js",
+    "db:validate": "node scripts/validate-schemas.js",
+    "db:check": "npm run db:audit && npm run db:validate",
     "check-translations": "node scripts/check-translations.js",
     "check-translations:fix": "node scripts/check-translations.js --fix"
   },

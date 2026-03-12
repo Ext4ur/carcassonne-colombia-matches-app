@@ -199,3 +199,44 @@ describe('SwissPairingService.calculateStandings', () => {
     expect(p1?.tiebreak_values['opponent_points_drop_worst']).toBe(4);
   });
 });
+
+describe('SwissPairingService.selectByePlayer', () => {
+  const selectByePlayer = (SwissPairingService as any).selectByePlayer;
+
+  const standings = [
+    { player_id: 1, total_points: 3 },
+    { player_id: 2, total_points: 2 },
+    { player_id: 3, total_points: 1 },
+    { player_id: 4, total_points: 0 },
+  ] as any[];
+
+  it('selects the worst player when no one has a bye (worst mode)', () => {
+    const playersWithBye = new Set<number>();
+    const byePlayer = selectByePlayer(standings, playersWithBye, 'worst');
+    expect(byePlayer.player_id).toBe(4); // Worst player
+  });
+
+  it('avoids a player who already had a bye (worst mode)', () => {
+    const playersWithBye = new Set<number>([4]); // Worst player had a bye
+    const byePlayer = selectByePlayer(standings, playersWithBye, 'worst');
+    expect(byePlayer.player_id).toBe(3); // Second worst player
+  });
+
+  it('avoids a player who already had a bye (round_robin mode)', () => {
+    const playersWithBye = new Set<number>([4]);
+    const byePlayer = selectByePlayer(standings, playersWithBye, 'round_robin');
+    expect(byePlayer.player_id).toBe(3);
+  });
+
+  it('falls back to any player if ALL have had a bye (worst mode)', () => {
+    const playersWithBye = new Set<number>([1, 2, 3, 4]); // All had byes
+    const byePlayer = selectByePlayer(standings, playersWithBye, 'worst');
+    expect(byePlayer.player_id).toBe(4); // Fallback to absolute worst
+  });
+
+  it('avoids players who had a bye in random mode', () => {
+    const playersWithBye = new Set<number>([2, 3, 4]);
+    const byePlayer = selectByePlayer(standings, playersWithBye, 'random');
+    expect(byePlayer.player_id).toBe(1); // Only one without a bye
+  });
+});

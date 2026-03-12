@@ -165,7 +165,7 @@ export class ReportService {
         </head>
         <body>
           <h1>${tournament.name}</h1>
-          <p>Fecha: ${new Date(tournament.date).toLocaleDateString()}</p>
+          <p>${i18n.t('tournaments.reports.export_pdf_date')}: ${new Date(tournament.date).toLocaleDateString(i18n.language)}</p>
           
           <div class="podium">
             ${
@@ -196,15 +196,15 @@ export class ReportService {
                 : ''
             }
           </div>
-
-          <h2>Leaderboard Completo</h2>
+ 
+          <h2>${i18n.t('tournaments.reports.export_pdf_leaderboard')}</h2>
           <table>
             <thead>
               <tr>
-                <th>Posición</th>
-                <th>Jugador</th>
-                <th>Puntos</th>
-                <th>Victorias</th>
+                <th>${i18n.t('tournaments.reports.position')}</th>
+                <th>${i18n.t('tournaments.reports.player')}</th>
+                <th>${i18n.t('tournaments.reports.total_points_short')}</th>
+                <th>${i18n.t('tournaments.reports.wins')}</th>
               </tr>
             </thead>
             <tbody>
@@ -402,7 +402,7 @@ export class ReportService {
         <body>
           <div class="container">
             <h1>${tournament.name}</h1>
-            <div class="date">${new Date(tournament.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            <div class="date">${new Date(tournament.date).toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}</div>
             
             <div class="podium">
               ${

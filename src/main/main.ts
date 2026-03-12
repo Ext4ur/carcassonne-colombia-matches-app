@@ -54,7 +54,15 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    // Delay DevTools so the renderer gets keyboard focus first
+    setTimeout(() => {
+      if (mainWindow) {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+        // Re-focus main window after DevTools opens to prevent focus loss
+        mainWindow.focus();
+        mainWindow.webContents.focus();
+      }
+    }, 500);
   } else {
     mainWindow.loadFile(rendererPath);
   }

@@ -32,6 +32,8 @@ export interface TournamentConfig {
   bye_selection?: 'worst' | 'random' | 'round_robin';
   /** Default: 'per_player'. per_player = use each player's preference; names_only = first two words; usernames_only = BGA username. */
   player_display_mode?: PlayerDisplayMode;
+  /** 'greedy' (basic) or 'backtracking' (advanced). Default is 'greedy' for backwards compatibility. */
+  pairing_algorithm?: 'greedy' | 'backtracking';
   created_at?: string;
   updated_at?: string;
 }

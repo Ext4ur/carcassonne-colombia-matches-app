@@ -122,6 +122,10 @@
     "title": "Városok"
   },
   "common": {
+    "app_error": "Alkalmazáshiba",
+    "render_error": "Hiba az alkalmazás megjelenítésekor",
+    "check_executable": "Ellenőrizze, hogy a futtatható fájl megfelelően generálódott-e",
+    "check_console": "További részletekért ellenőrizze a fejlesztői konzolt (F12)",
     "actions": "Műveletek",
     "back": "Vissza",
     "cancel": "Mégse",
@@ -138,11 +142,13 @@
     "language": "Nyelv",
     "loading": "Betöltés...",
     "name": "Név",
+    "note": "Megjegyzés",
     "place": "Helyszín",
     "play": "Játék",
     "save": "Mentés",
     "status": "Állapot",
     "sync": "Szinkronizálás",
+    "warning": "Figyelem",
     "type": "Típus",
     "update": "Frissítés",
     "view": "Megtekintés"
@@ -276,6 +282,7 @@
       "update_btn": "Frissítés"
     },
     "name": "Név",
+    "no_players_found": "Nem található játékos",
     "new": "Új Játékos",
     "opponents_modal": {
       "cols": {
@@ -292,6 +299,31 @@
     "search_placeholder": "Keresés név vagy BGA username alapján...",
     "stats_modal": {
       "title": "Statisztika - {{name}}"
+    },
+    "stats": {
+      "title": "{{name}} statisztikái",
+      "loading": "Statisztikák betöltése...",
+      "no_data": "Nincsenek elérhető statisztikák",
+      "filters_title": "Szűrők",
+      "filter_tournament": "Verseny szerint",
+      "filter_circuit": "Sorozat szerint",
+      "filter_place": "Helyszín szerint",
+      "placeholder_all_tournaments": "Minden verseny",
+      "placeholder_all_circuits": "Mind (selejtezők és sorozatok)",
+      "placeholder_all_places": "Minden helyszín",
+      "card_total_tournaments": "Összes verseny",
+      "card_wins": "Győzelmek",
+      "card_avg_position": "Átlagos helyezés",
+      "card_total_matches": "Összes mérkőzés",
+      "card_best_position": "Legjobb helyezés",
+      "card_worst_position": "Legrosszabb helyezés",
+      "type_stats_title": "Statisztikák verseny típus szerint",
+      "qualifiers": "Selejtezők",
+      "circuits": "Sorozatok",
+      "recent_title": "Legutóbbi versenyek",
+      "chart_position": "Helyezés",
+      "chart_tournaments": "Versenyek",
+      "history_item": "{{pos}}. helyezés • {{pts}} p"
     },
     "title": "Játékosok",
     "wins": "Győzelmek"
@@ -392,6 +424,10 @@
       "display_mode": "Játékosok megjelenítése",
       "display_names": "Csak nevek megjelenítése (keresztnév és vezetéknév)",
       "display_usernames": "Csak felhasználónevek megjelenítése",
+      "pairing_algorithm": "Párosítási Algoritmus",
+      "pairing_backtracking": "Haladó (Visszavágók elkerülése)",
+      "pairing_greedy": "Alap (Gyors)",
+      "pairing_help": "A haladó mód minden párosítást elemez, hogy 100%-ban elkerülje a visszavágókat, ahol lehetséges.",
       "position_n": "{{position}}. helyezés",
       "save_config": "Beállítások Mentése",
       "scoring_help": "Verseny pontszámok a mérkőzésen elért helyezés alapján",
@@ -400,6 +436,16 @@
       "tiebreaks_title": "Holtverseny kritériumok"
     },
     "detail": {
+      "load_error": "Hiba a verseny betöltésekor",
+      "stats_error": "Hiba a statisztikák betöltésekor",
+      "round_gen_error": "Hiba a forduló generálásakor",
+      "preview_error": "Hiba az előnézet generálásakor",
+      "round_gen_success": "Forduló sikeresen generálva",
+      "manual_round_success": "Kézi forduló sikeresen generálva",
+      "manual_round_error": "Hiba a kézi forduló generálásakor",
+      "round_results_error": "Hiba a forduló eredményeinek betöltésekor",
+      "update_success": "Verseny frissítve",
+      "update_error": "Hiba a verseny frissítésekor",
       "all_players": "Minden játékos",
       "best_rival": "Legjobb rivális",
       "bye_not_editable": "Bye - Nem szerkeszthető",
@@ -433,14 +479,23 @@
       "second_place": "2. Helyezett",
       "select_round": "Válasszon egy fordulót a mérkőzések megtekintéséhez",
       "starts_count": "Kezdések",
-      "stats": "Stats",
+      "stats": "Statisztika / Stat.",
       "third_place": "3. Helyezett",
       "tournament_finished": "Verseny Befejeződött",
       "unassigned": "Nincs kiosztva",
       "view_matrix_title": "Mérkőzésmátrix megtekintése",
-      "view_results": "Eredmények Megtekintése",
+      "view_results": "Eredmény megtekintése",
+      "view_round_results": "Forduló eredményeinek megtekintése",
       "winner": "Győztes",
-      "worst_rival": "Legrosszabb rivális"
+      "worst_rival": "Legrosszabb rivális",
+      "first_player_tooltip": "Kezdő játékos",
+      "pts": "p",
+      "close_btn": "Bezár",
+      "dropout_btn": "Játékos vissza léptetése",
+      "restore_btn": "Játékos vissza vétele",
+      "restore_btn_short": "Vissza",
+      "unknown_player": "Ismeretlen játékos",
+      "position_n_short": "{{n}}. helyezés"
     },
     "empty_msg": "Nincsenek regisztrált versenyek",
     "filter_place": "Szűrés helyszín szerint",
@@ -464,6 +519,8 @@
     },
     "match": {
       "close": "Bezárás",
+      "edit_completed_round_confirm": "Biztosan módosítani szeretnéd ezt az eredményt? A ranglista frissülni fog az új adatokkal.",
+      "edit_completed_round_warning": "Egy már lezárt forduló eredményét szerkeszted. A mentés után a ranglista automatikusan újraszámításra kerül.",
       "first_player_btn": "Kezdő játékos",
       "loading": "Betöltés...",
       "mark_first_btn": "Kezdő jelölés",
@@ -472,8 +529,24 @@
       "points_label": "Pontok",
       "position_title": "Pozíció {{pos}}",
       "pts": "PNT",
-      "results_title": "Mérkőzés Eredményei",
-      "save_btn": "Eredmény Mentése"
+      "results_title": "Játszma eredménye",
+      "save_btn": "Eredmény Mentése",
+      "error_all_assigned": "Minden játékost hozzá kell rendelni",
+      "error_all_points": "Minden játékosnak meg kell adni a pontszámát",
+      "error_starter_required": "A kezdő játékost meg kell jelölni az eredmények mentéséhez."
+    },
+    "manual_pairing": {
+      "title": "Kézi Párosítások - {{round}}. Forduló",
+      "instruction": "Húzza a játékosokat a Kispadról az Asztalokra. Minden asztalon maximum 2 játékos lehet. A rendszer véletlenszerűen választja ki, hogy ki kezdi a mérkőzést az egyes létrehozott asztaloknál. Ha páratlan számú játékos van, az egyik asztalon csak 1 játékos marad, és övé lesz a \"Bye\".",
+      "bench": "Kispad",
+      "bench_unassigned": "Kispad (Nincs Kiosztva)",
+      "tables": "Asztalok",
+      "table_n": "{{n}}. Asztal",
+      "drag_here": "Húzza ide",
+      "wins": "Győz",
+      "pts_op": "Ellen.Pnt",
+      "error_unassigned": "Az összes játékost hozzá kell rendelnie egy asztalhoz a folytatás előtt.",
+      "confirm": "Párosítások Megerősítése"
     },
     "matches": "Mérkőzések",
     "matrix": "Mátrix",
@@ -491,7 +564,11 @@
       "table_starts": "Kezdések:",
       "table_time": "Idő",
       "title": "Forduló Előnézet",
-      "warnings": "Figyelmeztetések:"
+      "warnings": "Figyelmeztetések:",
+      "cancel": "Mégse",
+      "confirm": "Forduló létrehozása",
+      "table_number": "ASZTAL",
+      "rematch_inevitable": "Ismétlődő párosítás elkerülhetetlen: {{p1}} vs {{p2}}"
     },
     "quick_tournament": "Gyors Verseny",
     "registration": {
@@ -507,10 +584,23 @@
       "register_error": "Hiba a játékos regisztrálásakor",
       "registered_count": "Regisztrált játékosok ({{count}})",
       "remove_confirm": "Biztosan törölni szeretné {{name}} játékost a versenyből?",
+      "reincorporate_confirm": "Szeretné visszavenni {{name}} játékost a versenybe?",
+      "remove_reduces_rounds": "Figyelem: A játékos eltávolítása a fordulók számát {{current}}-ről {{new}}-re csökkenti. Kívánja folytatni és eltávolítani a játékost?",
+      "remove_dropout": "Biztosan vissza akarja léptetni {{name}} játékost? A további fordulókban nem lesz párosítva.",
+      "remove_success": "Játékos sikeresen eltávolítva",
+      "reactivate_success": "Játékos sikeresen visszaveve",
+      "reactivate_error": "Hiba a játékos visszavételekor",
       "remove_draft_confirm": "Eltávolítja {{name}} játékost a listáról?",
       "remove_error": "Hiba a játékos eltávolításakor",
       "search_placeholder": "Létező játékos keresése...",
-      "title": "Játékosok Regisztrálása"
+      "title": "Játékosok Regisztrálása",
+      "add_player_title": "Játékos Hozzáadása",
+      "back_to_search": "Vissza a Kereséshez",
+      "create_and_enroll": "Létrehozás és Beiratkozás",
+      "search_existing": "Létező játékos keresése:",
+      "create_new": "Új Játékos Hozzáadása",
+      "rounds_increase_confirm": "Elérte a játékosok magasabb szintjét. Új forduló kerül a versenyhez ({{rounds}} lesz). Elfogadja?",
+      "rounds_bracket_warning": "Figyelem: Ezen játékos hozzáadása meghaladja a konzol limitjét, és a rendszer egy új forduló generálását fogja ajánlani a végén ({{rounds}} forduló lesz). Ez nem javasolt, ha mégis megteszi, próbáljon meg még egy embert (összesen 2-t) beállítani a byek elkerülése érdekében. Folytatja?"
     },
     "reports": {
       "avg_points": "Átlagos Pontszám",
@@ -534,9 +624,13 @@
       "total_points": "Összes Pont",
       "total_rounds": "Összes Forduló",
       "tournament_points": "Verseny PNT",
-      "wins": "Győzelmek"
+      "wins": "Győzelmek",
+      "export_pdf_date": "Dátum",
+      "export_pdf_leaderboard": "Teljes Ranglista",
+      "total_points_short": "Pontok"
     },
     "rounds": "Fordulók",
+    "round_n": "{{n}}. forduló",
     "rounds_modal": {
       "calculated": "Számított fordulók:",
       "error_min": "A fordulók számának legalább 1-nek kell lennie",
@@ -547,7 +641,7 @@
       "title": "Fordulók számának megerősítése"
     },
     "search_placeholder": "Keresés verseny vagy helyszín alapján",
-    "standings": "Ranglista",
+    "standings": "Verseny állása",
     "stats": "Statisztika",
     "statuses": {
       "active": "Aktív",

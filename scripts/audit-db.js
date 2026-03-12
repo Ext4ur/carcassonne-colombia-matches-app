@@ -1,24 +1,21 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const { app } = require('electron');
 import Database from 'better-sqlite3';
 import * as path from 'path';
 import * as fs from 'fs';
 
-// This script MUST be run via electron to access better-sqlite3 and app paths:
-// npx electron scripts/audit-db.js
+// This script can be run via node or electron
+// We resolve paths manually to avoid ESM/Electron import issues
 
 async function runAudit() {
-  await app.whenReady();
-  
   const projectRoot = process.cwd();
   console.log(`[AUDIT] Project root: ${projectRoot}`);
   
-  // Explicitly set the path to match the real app's userData
-  const appDataPath = app.getPath('appData');
-  const userDataPath = path.join(appDataPath, 'carcassonne-tournament-manager');
-  app.setPath('userData', userDataPath);
+  // Resolve AppData path manually (like in fix-db.js)
+  const appData = process.env.APPDATA || 
+    (process.platform === 'darwin' ? 
+      path.join(process.env.HOME || '', 'Library/Application Support') : 
+      path.join(process.env.HOME || '', '.config'));
   
+  const userDataPath = path.join(appData, 'carcassonne-tournament-manager');
   console.log(`[AUDIT] Using userData path: ${userDataPath}`);
   
   const envs = [
@@ -98,7 +95,7 @@ async function runAudit() {
   }
 
   console.log('--- AUDIT COMPLETE ---');
-  app.quit();
+  process.exit(0);
 }
 
 runAudit().catch(err => {

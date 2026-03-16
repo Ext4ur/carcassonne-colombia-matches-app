@@ -1,7 +1,7 @@
 {
   "name": "carcassonne-tournament-manager",
   "type": "module",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "description": "Aplicación de gestión de torneos presenciales de Carcassonne Colombia",
   "main": "dist/main/main.js",
   "scripts": {

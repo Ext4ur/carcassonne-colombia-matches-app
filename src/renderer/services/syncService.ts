@@ -56,6 +56,11 @@ export class SyncService {
 
     console.log(`🔄 Sync Service Started (Instance: ${this.instanceId})`);
 
+    if (!isSupabaseConfigured()) {
+      console.log('ℹ️ Sync Service is disabled by configuration or user setting.');
+      return;
+    }
+
     // Reset any stuck 'processing' items to 'pending' on startup
     try {
       const stuckItems = await this.sqlite
@@ -698,6 +703,11 @@ export class SyncService {
     operation: 'INSERT' | 'UPDATE' | 'DELETE',
     payload: Record<string, unknown>
   ) {
+    if (!isSupabaseConfigured()) {
+      console.debug('ℹ️ Skipping Sync Queue: Sync is disabled.');
+      return;
+    }
+
     await this.sqlite.execute(
       "INSERT INTO sync_queue (table_name, operation, payload, status) VALUES (?, ?, ?, 'pending')",
       [table, operation, JSON.stringify(payload)]

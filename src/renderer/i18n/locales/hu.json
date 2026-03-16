@@ -340,7 +340,9 @@
       "export_error": "Hiba az adatok exportálásakor",
       "export_success": "Adatok sikeresen exportálva",
       "import_error": "Hiba az adatok importálásakor",
-      "import_success": "Adatok sikeresen importálva: {{summary}}"
+      "import_success": "Adatok sikeresen importálva: {{summary}}",
+      "sync_enabled_msg": "Felhőalapú szinkronizálás engedélyezve",
+      "sync_disabled_msg": "Felhőalapú szinkronizálás letiltva"
     },
     "export_btn": "Adatok Exportálása",
     "export_desc": "Minden adat (versenyek, játékosok, áramkörök) exportálása JSON-fájlba biztonsági mentés céljából.",
@@ -353,6 +355,9 @@
     "light_mode": "☀️ Világos Mód",
     "theme": "Téma",
     "theme_desc": "Váltás világos és sötét téma között",
+    "sync": "Szinkronizálás",
+    "sync_enabled": "Felhőalapú Szinkronizálás",
+    "sync_desc": "Szinkronizálja adatait a Supabase-szel a biztonsági mentéshez és a több eszközről való eléréshez.",
     "title": "Beállítások"
   },
   "stats": {
@@ -568,7 +573,8 @@
       "cancel": "Mégse",
       "confirm": "Forduló létrehozása",
       "table_number": "ASZTAL",
-      "rematch_inevitable": "Ismétlődő párosítás elkerülhetetlen: {{p1}} vs {{p2}}"
+      "rematch_inevitable": "Ismétlődő párosítás elkerülhetetlen: {{p1}} vs {{p2}}",
+      "rematch_detected": "Ismétlődő mérkőzés"
     },
     "quick_tournament": "Gyors Verseny",
     "registration": {

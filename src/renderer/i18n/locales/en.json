@@ -340,7 +340,9 @@
       "export_error": "Error exporting data",
       "export_success": "Data exported successfully",
       "import_error": "Error importing data",
-      "import_success": "Data imported successfully: {{summary}}"
+      "import_success": "Data imported successfully: {{summary}}",
+      "sync_enabled_msg": "Cloud synchronization enabled",
+      "sync_disabled_msg": "Cloud synchronization disabled"
     },
     "export_btn": "Export Data",
     "export_desc": "Export all data (tournaments, players, circuits) to a JSON file for backup.",
@@ -353,6 +355,9 @@
     "light_mode": "☀️ Light Mode",
     "theme": "Theme",
     "theme_desc": "Switch between light and dark theme",
+    "sync": "Synchronization",
+    "sync_enabled": "Cloud Synchronization",
+    "sync_desc": "Sync your data with Supabase for backup and multi-device access.",
     "title": "Settings"
   },
   "stats": {
@@ -568,7 +573,8 @@
       "cancel": "Cancel",
       "confirm": "Confirm and Generate",
       "table_number": "Table",
-      "rematch_inevitable": "Rematch inevitable: {{p1}} vs {{p2}}"
+      "rematch_inevitable": "Rematch inevitable: {{p1}} vs {{p2}}",
+      "rematch_detected": "Repeated match"
     },
     "quick_tournament": "Quick Tournament",
     "registration": {

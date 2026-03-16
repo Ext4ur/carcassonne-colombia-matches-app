@@ -340,7 +340,9 @@
       "export_error": "Error al exportar los datos",
       "export_success": "Datos exportados exitosamente",
       "import_error": "Error al importar los datos",
-      "import_success": "Datos importados exitosamente: {{summary}}"
+      "import_success": "Datos importados exitosamente: {{summary}}",
+      "sync_enabled_msg": "Sincronización activada",
+      "sync_disabled_msg": "Sincronización desactivada"
     },
     "export_btn": "Exportar Datos",
     "export_desc": "Exporta todos los datos (torneos, jugadores, circuitos) a un archivo JSON para respaldo.",
@@ -353,6 +355,9 @@
     "light_mode": "☀️ Modo Claro",
     "theme": "Tema",
     "theme_desc": "Cambiar entre tema claro y oscuro",
+    "sync": "Sincronización",
+    "sync_enabled": "Sincronización en la Nube",
+    "sync_desc": "Permite sincronizar tus datos con Supabase para respaldo y acceso multidispositivo.",
     "title": "Configuración"
   },
   "stats": {
@@ -568,7 +573,8 @@
       "cancel": "Cancelar",
       "confirm": "Confirmar y Generar",
       "table_number": "Mesa",
-      "rematch_inevitable": "Revancha inevitable: {{p1}} vs {{p2}}"
+      "rematch_inevitable": "Revancha inevitable: {{p1}} vs {{p2}}",
+      "rematch_detected": "Partida repetida"
     },
     "quick_tournament": "Torneo Rápido",
     "registration": {

@@ -15,6 +15,14 @@ export default function Settings() {
   const { addNotification } = useNotifications();
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(() => {
+    const saved = localStorage.getItem('cloud_sync_enabled');
+    if (saved === null) {
+      // Default to true for Colombia, false for International
+      return import.meta.env.VITE_APP_ENV !== 'international';
+    }
+    return saved === 'true';
+  });
 
   const handleExport = async () => {
     try {
@@ -106,6 +114,41 @@ export default function Settings() {
                 />
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Synchronization Settings */}
+        <div className="card">
+          <h2 className="text-xl font-bold mb-4">{t('settings.sync')}</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex-1 mr-4">
+              <p className="font-medium">{t('settings.sync_enabled')}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('settings.sync_desc')}</p>
+            </div>
+            <button
+              onClick={() => {
+                const newValue = !cloudSyncEnabled;
+                setCloudSyncEnabled(newValue);
+                localStorage.setItem('cloud_sync_enabled', String(newValue));
+                addNotification({
+                  message: newValue
+                    ? t('settings.errors.sync_enabled_msg')
+                    : t('settings.errors.sync_disabled_msg'),
+                  type: 'info',
+                });
+                // Reload or notify sync service? Reload is safest to restart background processes
+                setTimeout(() => window.location.reload(), 1000);
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                cloudSyncEnabled ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  cloudSyncEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
           </div>
         </div>
 

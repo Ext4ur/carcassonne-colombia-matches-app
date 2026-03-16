@@ -28,10 +28,19 @@ export const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABL
  */
 
 /**
- * Verificar si Supabase está configurado
+ * Verificar si Supabase está configurado y habilitado por el usuario
  */
 export function isSupabaseConfigured(): boolean {
-  return !!(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+  const hasConfig = !!(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+  if (!hasConfig) return false;
+
+  const syncEnabled = localStorage.getItem('cloud_sync_enabled');
+  if (syncEnabled === null) {
+    // Si no hay valor previo, deshabilitar por defecto en internacional
+    return import.meta.env.VITE_APP_ENV !== 'international';
+  }
+
+  return syncEnabled === 'true';
 }
 
 /**

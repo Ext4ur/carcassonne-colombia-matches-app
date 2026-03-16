@@ -53,6 +53,7 @@ export default function TournamentDetail() {
     }>;
     warnings: string[];
     startStats?: Record<number, { totalStarts: number; lastStartRound: number }>;
+    previousOpponents?: Record<number, number[]>;
   } | null>(null);
 
   const [isRoundResultsModalOpen, setIsRoundResultsModalOpen] = useState(false);
@@ -93,27 +94,16 @@ export default function TournamentDetail() {
 
   const loadMatchPlayersForMatches = useCallback(async (matchList: Match[]) => {
     if (matchList.length === 0) return;
-    const list = matchList.filter((m) => m.id);
-    const results = await Promise.all(list.map((m) => DatabaseService.getMatchPlayers(m.id!)));
-    const map: { [matchId: number]: any[] } = {};
-    list.forEach((m, i) => {
-      map[m.id!] = results[i] || [];
-    });
+    const ids = matchList.filter((m) => m.id).map((m) => m.id!);
+    if (ids.length === 0) return;
+    const map = await DatabaseService.getMatchPlayersBatch(ids);
     setMatchPlayersMap(map);
   }, []);
-
   const loadMatchResultsForMatches = useCallback(
     async (matchList: Match[], tournamentId?: number) => {
-      if (matchList.length === 0) return;
-      const list = matchList.filter((m) => m.id);
-      const results = await Promise.all(
-        list.map((m) => DatabaseService.getMatchResults(m.id!, tournamentId))
-      );
-      const map: { [matchId: number]: any[] } = {};
-      list.forEach((m, i) => {
-        const r = results[i] || [];
-        if (r.length > 0) map[m.id!] = r;
-      });
+      const ids = matchList.filter((m) => m.id).map((m) => m.id!);
+      if (ids.length === 0) return;
+      const map = await DatabaseService.getMatchResultsBatch(ids, tournamentId);
       setMatchResultsMap(map);
     },
     []
@@ -1641,6 +1631,10 @@ export default function TournamentDetail() {
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
         onConfirm={handleConfirmNextRound}
+        onManualPairing={() => {
+          setIsPreviewOpen(false);
+          setIsManualPairingOpen(true);
+        }}
         isLoading={isLoading}
         previewData={previewData}
       />
@@ -1664,8 +1658,9 @@ export default function TournamentDetail() {
           onClose={() => setIsManualPairingOpen(false)}
           onConfirm={handleConfirmManualPairing}
           isLoading={isLoading}
-          players={standings.filter((s) => s.active !== false)}
+          players={standings.filter((p) => p.active)}
           roundNumber={rounds.length + 1}
+          previousOpponents={previewData?.previousOpponents}
         />
       )}
     </div>

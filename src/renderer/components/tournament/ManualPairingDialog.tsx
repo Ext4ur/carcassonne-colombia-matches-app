@@ -27,6 +27,7 @@ interface ManualPairingDialogProps {
   isLoading?: boolean;
   players: PlayerStanding[];
   roundNumber: number;
+  previousOpponents?: Record<number, number[]>;
 }
 
 interface ColumnData {
@@ -42,6 +43,7 @@ export default function ManualPairingDialog({
   isLoading,
   players,
   roundNumber,
+  previousOpponents = {},
 }: ManualPairingDialogProps) {
   const { t } = useTranslation();
   const [columns, setColumns] = useState<Record<string, ColumnData>>({});
@@ -255,31 +257,57 @@ export default function ManualPairingDialog({
                             </div>
 
                             <div className="space-y-2">
-                              {column.items.map((item, index) => (
-                                <Draggable
-                                  key={item.player_id.toString()}
-                                  draggableId={item.player_id.toString()}
-                                  index={index}
-                                >
-                                  {(provided: any, snapshot: any) => (
-                                    <div
-                                      ref={provided.innerRef}
-                                      {...provided.draggableProps}
-                                      {...provided.dragHandleProps}
-                                      className={`p-2 rounded-lg border shadow-sm ${
-                                        snapshot.isDragging
-                                          ? 'bg-blue-50 border-blue-400 z-50 dark:bg-blue-900'
-                                          : 'bg-white border-gray-200 dark:bg-gray-700 dark:border-gray-600'
-                                      }`}
-                                      style={{ ...provided.draggableProps.style }}
-                                    >
-                                      <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
-                                        {item.player_name}
+                              {column.items.map((item, index) => {
+                                let hasRematch = false;
+                                if (columnId.startsWith('table-') && column.items.length === 2) {
+                                  const otherPlayer = column.items[index === 0 ? 1 : 0];
+                                  if (
+                                    previousOpponents[item.player_id]?.includes(
+                                      otherPlayer.player_id
+                                    )
+                                  ) {
+                                    hasRematch = true;
+                                  }
+                                }
+
+                                return (
+                                  <Draggable
+                                    key={item.player_id.toString()}
+                                    draggableId={item.player_id.toString()}
+                                    index={index}
+                                  >
+                                    {(provided: any, snapshot: any) => (
+                                      <div
+                                        ref={provided.innerRef}
+                                        {...provided.draggableProps}
+                                        {...provided.dragHandleProps}
+                                        className={`p-2 rounded-lg border shadow-sm transition-all ${
+                                          snapshot.isDragging
+                                            ? 'bg-blue-50 border-blue-400 z-50 dark:bg-blue-900'
+                                            : hasRematch
+                                              ? 'bg-orange-50 border-orange-300 dark:bg-orange-900/20 dark:border-orange-800'
+                                              : 'bg-white border-gray-200 dark:bg-gray-700 dark:border-gray-600'
+                                        }`}
+                                        style={{ ...provided.draggableProps.style }}
+                                      >
+                                        <div className="flex justify-between items-center">
+                                          <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                            {item.player_name}
+                                          </div>
+                                          {hasRematch && (
+                                            <span
+                                              className="text-xs text-orange-600 dark:text-orange-400 font-bold flex items-center gap-1"
+                                              title={t('tournaments.preview.rematch_detected')}
+                                            >
+                                              🔄
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
-                                </Draggable>
-                              ))}
+                                    )}
+                                  </Draggable>
+                                );
+                              })}
                             </div>
                             {provided.placeholder}
 

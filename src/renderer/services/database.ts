@@ -14,6 +14,8 @@ import {
   Tournament,
   Match,
   MatchResultWithPlayer,
+  MatchResult,
+  PlayerDisplayMode,
 } from '../types/tournament';
 import { Player } from '../types/player';
 import { Circuit } from '../types/circuit';
@@ -690,6 +692,7 @@ export class DatabaseService {
       scoring_system: config.scoring_system,
       bye_selection: config.bye_selection,
       player_display_mode: config.player_display_mode,
+      pairing_algorithm: config.pairing_algorithm || 'greedy',
     });
 
     dbCache.invalidateTournament(config.tournament_id);
@@ -703,6 +706,7 @@ export class DatabaseService {
       scoring_system?: ScoringSystem;
       bye_selection?: 'worst' | 'random' | 'round_robin';
       player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
+      pairing_algorithm?: 'greedy' | 'backtracking';
     }
   ) {
     // Determine config UUID via tournament configs?
@@ -744,6 +748,11 @@ export class DatabaseService {
       updates.push('player_display_mode = ?');
       params.push(config.player_display_mode);
       payload.player_display_mode = config.player_display_mode;
+    }
+    if (config.pairing_algorithm !== undefined) {
+      updates.push('pairing_algorithm = ?');
+      params.push(config.pairing_algorithm);
+      payload.pairing_algorithm = config.pairing_algorithm;
     }
 
     if (updates.length === 0) return;
@@ -968,6 +977,31 @@ export class DatabaseService {
     return stats;
   }
 
+  static async getMatchPlayersBatch(matchIds: number[]): Promise<Record<number, Player[]>> {
+    if (matchIds.length === 0) return {};
+
+    const placeholders = matchIds.map(() => '?').join(',');
+    const rows = await this.query<any>(
+      `
+        SELECT mp.match_id, p.*
+        FROM match_players mp
+        JOIN players p ON mp.player_id = p.id
+        WHERE mp.match_id IN (${placeholders})
+      `,
+      matchIds
+    );
+
+    const map: Record<number, Player[]> = {};
+    rows.forEach((r) => {
+      const matchId = r.match_id;
+      if (!map[matchId]) map[matchId] = [];
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { match_id, ...player } = r;
+      map[matchId].push(player as Player);
+    });
+    return map;
+  }
+
   // ==========================================
   // Match Result operations
   // ==========================================
@@ -1013,6 +1047,50 @@ export class DatabaseService {
         mode
       ),
     }));
+  }
+
+  static async getMatchResultsBatch(
+    matchIds: number[],
+    tournamentId?: number,
+    mode?: PlayerDisplayMode
+  ): Promise<Record<number, MatchResult[]>> {
+    if (matchIds.length === 0) return {};
+
+    const resolvedMode =
+      mode ??
+      (tournamentId != null
+        ? ((await this.getTournamentConfig(tournamentId))?.player_display_mode ?? 'per_player')
+        : 'per_player');
+
+    const placeholders = matchIds.map(() => '?').join(',');
+    const rows = await this.query<any>(
+      `
+        SELECT mr.*, p.name, p.bga_username, p.display_preference
+        FROM match_results mr
+        JOIN players p ON mr.player_id = p.id
+        WHERE mr.match_id IN (${placeholders})
+        ORDER BY mr.match_id, mr.position
+      `,
+      matchIds
+    );
+
+    const map: Record<number, MatchResult[]> = {};
+    rows.forEach((r) => {
+      const matchId = r.match_id;
+      if (!map[matchId]) map[matchId] = [];
+      map[matchId].push({
+        ...r,
+        player_name: getPlayerDisplayName(
+          {
+            name: r.name ?? '',
+            bga_username: r.bga_username ?? null,
+            display_preference: r.display_preference ?? null,
+          },
+          resolvedMode
+        ),
+      });
+    });
+    return map;
   }
 
   static async createMatchResult(result: {

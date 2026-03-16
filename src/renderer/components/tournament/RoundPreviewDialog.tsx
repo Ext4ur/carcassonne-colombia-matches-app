@@ -9,6 +9,7 @@ interface RoundPreviewDialogProps {
   onClose: () => void;
   onConfirm: () => void;
   isLoading?: boolean;
+  onManualPairing?: () => void;
   previewData: {
     matches: Array<{
       player1: any;
@@ -18,6 +19,7 @@ interface RoundPreviewDialogProps {
     }>;
     warnings: string[];
     startStats?: Record<number, { totalStarts: number; lastStartRound: number }>;
+    previousOpponents?: Record<number, number[]>;
   } | null;
 }
 
@@ -26,6 +28,7 @@ export default function RoundPreviewDialog({
   onClose,
   onConfirm,
   isLoading,
+  onManualPairing,
   previewData,
 }: RoundPreviewDialogProps) {
   const { t } = useTranslation();
@@ -109,14 +112,23 @@ export default function RoundPreviewDialog({
       title={t('tournaments.preview.title')}
       size="lg"
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={isLoading}>
-            {t('tournaments.preview.cancel', 'Cancelar')}
-          </Button>
-          <Button onClick={onConfirm} isLoading={isLoading}>
-            {t('tournaments.preview.confirm', 'Confirmar y Generar')}
-          </Button>
-        </>
+        <div className="flex justify-between items-center w-full">
+          <div>
+            {onManualPairing && (
+              <Button variant="secondary" onClick={onManualPairing} disabled={isLoading}>
+                {t('tournaments.detail.manual_pairings')}
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose} disabled={isLoading}>
+              {t('tournaments.preview.cancel', 'Cancelar')}
+            </Button>
+            <Button onClick={onConfirm} isLoading={isLoading}>
+              {t('tournaments.preview.confirm', 'Confirmar y Generar')}
+            </Button>
+          </div>
+        </div>
       }
     >
       <div className="space-y-4">

@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
-import { TournamentConfig, TiebreakCriterion, ScoringSystem } from '../../types/tournament';
+import {
+  TournamentConfig,
+  TiebreakCriterion,
+  ScoringSystem,
+  BuchholzByeMode,
+} from '../../types/tournament';
 import { getDefaultScoringSystem } from '../../utils/scoring';
 import { DEFAULT_TIEBREAK_CRITERIA } from '../../utils/tiebreak';
 import Input from '../common/Input';
@@ -18,6 +23,7 @@ interface TournamentConfigProps {
       bye_selection?: 'worst' | 'random' | 'round_robin';
       player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
       pairing_algorithm?: 'greedy' | 'backtracking';
+      buchholz_bye_mode?: BuchholzByeMode;
     }
   ) => void;
   onCancel: () => void;
@@ -38,12 +44,17 @@ export default function TournamentConfigComponent({
     config?.scoring_system || getDefaultScoringSystem(playersPerMatch)
   );
   const [avoidRematches, setAvoidRematches] = useState(config?.avoid_rematches ?? true);
-  const [byeSelection, setByeSelection] = useState<'worst' | 'random' | 'round_robin'>('worst');
+  const [byeSelection, setByeSelection] = useState<'worst' | 'random' | 'round_robin'>(
+    config?.bye_selection ?? 'worst'
+  );
   const [playerDisplayMode, setPlayerDisplayMode] = useState<
     'per_player' | 'names_only' | 'usernames_only'
   >(config?.player_display_mode ?? 'per_player');
   const [pairingAlgorithm, setPairingAlgorithm] = useState<'greedy' | 'backtracking'>(
     (config as any)?.pairing_algorithm ?? 'greedy'
+  );
+  const [buchholzByeMode, setBuchholzByeMode] = useState<BuchholzByeMode>(
+    (config as TournamentConfig)?.buchholz_bye_mode ?? 'legacy'
   );
 
   const handleDragEnd = (result: any) => {
@@ -85,6 +96,7 @@ export default function TournamentConfigComponent({
       bye_selection: byeSelection,
       player_display_mode: playerDisplayMode,
       pairing_algorithm: pairingAlgorithm,
+      buchholz_bye_mode: buchholzByeMode,
     });
   };
 
@@ -148,6 +160,27 @@ export default function TournamentConfigComponent({
               { value: 'backtracking', label: t('tournaments.config.pairing_backtracking') },
             ]}
             helperText={t('tournaments.config.pairing_help')}
+          />
+        </div>
+
+        <div>
+          <Select
+            label={t('tournaments.config.buchholz_bye_mode')}
+            value={buchholzByeMode}
+            onChange={(e) => setBuchholzByeMode(e.target.value as BuchholzByeMode)}
+            options={[
+              { value: 'legacy', label: t('tournaments.config.buchholz_bye_legacy') },
+              { value: 'n_minus_1', label: t('tournaments.config.buchholz_bye_n_minus_1') },
+              {
+                value: 'legacy_virtual_avg',
+                label: t('tournaments.config.buchholz_bye_legacy_virtual'),
+              },
+              {
+                value: 'n_minus_1_virtual_avg',
+                label: t('tournaments.config.buchholz_bye_n_minus_1_virtual'),
+              },
+            ]}
+            helperText={t('tournaments.config.buchholz_bye_help')}
           />
         </div>
       </div>

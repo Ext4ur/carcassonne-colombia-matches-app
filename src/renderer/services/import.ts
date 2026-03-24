@@ -117,6 +117,7 @@ export class ImportService {
                 tiebreak_criteria: tournament.config.tiebreak_criteria,
                 scoring_system: tournament.config.scoring_system,
                 bye_selection: tournament.config.bye_selection,
+                buchholz_bye_mode: tournament.config.buchholz_bye_mode,
               });
             }
 

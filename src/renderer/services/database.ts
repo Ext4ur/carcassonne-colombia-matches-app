@@ -2,6 +2,7 @@
 // Database service for interacting with local SQLite database and syncing with Supabase
 import { SqliteClient } from '../api/clients/SqliteClient';
 import { DEFAULT_PLACE_NAME } from '../constants';
+import { DELETE_BLOCKED_BY_TOURNAMENTS_MESSAGE } from '../constants/deleteGuards';
 import * as dbCache from './dbCache';
 import { getPlayerDisplayName } from '@utils/playerDisplayName';
 import { SyncService } from './syncService';
@@ -9,6 +10,8 @@ import {
   MatchWithResults,
   TiebreakCriterion,
   ScoringSystem,
+  BuchholzByeMode,
+  normalizeBuchholzByeMode,
   Round,
   TournamentConfig,
   Tournament,
@@ -176,9 +179,12 @@ export class DatabaseService {
       [id, id, id, id, id]
     );
 
-    if (references[0] && (references[0].tournamentsCount > 0 || references[0].matchesCount > 0)) {
+    if (references[0] && references[0].tournamentsCount > 0) {
+      throw new Error(DELETE_BLOCKED_BY_TOURNAMENTS_MESSAGE);
+    }
+    if (references[0] && references[0].matchesCount > 0) {
       throw new Error(
-        'No se puede eliminar el jugador porque tiene registros asociados (torneos, partidas, inicios o resultados). Considera cambiar su estado a inactivo en su lugar.'
+        'No se puede eliminar el jugador porque tiene registros asociados (partidas, inicios o resultados). Considera cambiar su estado a inactivo en su lugar.'
       );
     }
 
@@ -296,6 +302,14 @@ export class DatabaseService {
     const uuid = await this.getUuid('circuits', id);
     if (!uuid) throw new Error(`Circuit ${id} has no UUID`);
 
+    const tourUse = await this.query<{ count: number }>(
+      'SELECT COUNT(*) as count FROM tournaments WHERE circuit_id = ?',
+      [id]
+    );
+    if (tourUse[0]?.count && tourUse[0].count > 0) {
+      throw new Error(DELETE_BLOCKED_BY_TOURNAMENTS_MESSAGE);
+    }
+
     const result = await this.execute('DELETE FROM circuits WHERE id = ?', [id]);
 
     await SyncService.addToQueue('circuits', 'DELETE', { uuid });
@@ -350,6 +364,16 @@ export class DatabaseService {
   static async deleteCity(id: number) {
     const uuid = await this.getUuid('cities', id);
     if (!uuid) throw new Error(`City ${id} has no UUID`);
+
+    const tourUse = await this.query<{ count: number }>(
+      `SELECT COUNT(*) as count FROM tournaments t
+       INNER JOIN places p ON t.place_id = p.id
+       WHERE p.city_id = ?`,
+      [id]
+    );
+    if (tourUse[0]?.count && tourUse[0].count > 0) {
+      throw new Error(DELETE_BLOCKED_BY_TOURNAMENTS_MESSAGE);
+    }
 
     const inUse = await this.query<{ count: number }>(
       'SELECT COUNT(*) as count FROM places WHERE city_id = ?',
@@ -456,7 +480,7 @@ export class DatabaseService {
       [id]
     );
     if (inUse[0]?.count && inUse[0].count > 0) {
-      throw new Error('No se puede eliminar el lugar: hay torneos que lo usan.');
+      throw new Error(DELETE_BLOCKED_BY_TOURNAMENTS_MESSAGE);
     }
     await this.execute('DELETE FROM places WHERE id = ?', [id]);
 
@@ -651,6 +675,7 @@ export class DatabaseService {
         bye_selection: results[0].bye_selection || 'worst',
         player_display_mode: results[0].player_display_mode || 'per_player',
         pairing_algorithm: results[0].pairing_algorithm || 'greedy',
+        buchholz_bye_mode: normalizeBuchholzByeMode(results[0].buchholz_bye_mode),
       };
     }
     dbCache.set(`tournament:${tournamentId}:config`, config);
@@ -665,13 +690,15 @@ export class DatabaseService {
     bye_selection?: 'worst' | 'random' | 'round_robin';
     player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
     pairing_algorithm?: 'greedy' | 'backtracking';
+    buchholz_bye_mode?: BuchholzByeMode;
   }) {
     const uuid = self.crypto.randomUUID();
     const tournamentUuid = await this.getUuid('tournaments', config.tournament_id);
+    const buchholzMode = normalizeBuchholzByeMode(config.buchholz_bye_mode);
 
     await this.execute(
-      `INSERT INTO tournament_configs (uuid, tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection, player_display_mode, pairing_algorithm) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tournament_configs (uuid, tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection, player_display_mode, pairing_algorithm, buchholz_bye_mode) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         uuid,
         config.tournament_id,
@@ -681,6 +708,7 @@ export class DatabaseService {
         config.bye_selection || 'worst',
         config.player_display_mode || 'per_player',
         config.pairing_algorithm || 'greedy',
+        buchholzMode,
       ]
     );
 
@@ -693,6 +721,7 @@ export class DatabaseService {
       bye_selection: config.bye_selection,
       player_display_mode: config.player_display_mode,
       pairing_algorithm: config.pairing_algorithm || 'greedy',
+      buchholz_bye_mode: buchholzMode,
     });
 
     dbCache.invalidateTournament(config.tournament_id);
@@ -707,6 +736,7 @@ export class DatabaseService {
       bye_selection?: 'worst' | 'random' | 'round_robin';
       player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
       pairing_algorithm?: 'greedy' | 'backtracking';
+      buchholz_bye_mode?: BuchholzByeMode;
     }
   ) {
     // Determine config UUID via tournament configs?
@@ -753,6 +783,12 @@ export class DatabaseService {
       updates.push('pairing_algorithm = ?');
       params.push(config.pairing_algorithm);
       payload.pairing_algorithm = config.pairing_algorithm;
+    }
+    if (config.buchholz_bye_mode !== undefined) {
+      const m = normalizeBuchholzByeMode(config.buchholz_bye_mode);
+      updates.push('buchholz_bye_mode = ?');
+      params.push(m);
+      payload.buchholz_bye_mode = m;
     }
 
     if (updates.length === 0) return;
@@ -1450,6 +1486,46 @@ export class DatabaseService {
     if (rows.length === 0 || !rows[0]) return null;
     const results = await this.getMatchResults(matchId);
     return { ...rows[0], results };
+  }
+
+  /**
+   * Returns a map of player IDs to a set of their historical opponents in the tournament.
+   * This is more robust as it uses the match_players table (which is populated on generation)
+   * rather than match_results (which is populated on completion).
+   */
+  static async getTournamentOpponents(tournamentId: number): Promise<Record<number, number[]>> {
+    const rows = await this.query<{ match_id: number; player_id: number }>(
+      `
+      SELECT mp.match_id, mp.player_id
+      FROM match_players mp
+      JOIN matches m ON mp.match_id = m.id
+      JOIN rounds r ON m.round_id = r.id
+      WHERE r.tournament_id = ?
+      `,
+      [tournamentId]
+    );
+
+    const matchGroups: Record<number, number[]> = {};
+    rows.forEach((row) => {
+      if (!matchGroups[row.match_id]) matchGroups[row.match_id] = [];
+      matchGroups[row.match_id].push(row.player_id);
+    });
+
+    const opponents: Record<number, number[]> = {};
+    Object.values(matchGroups).forEach((playerIds) => {
+      if (playerIds.length < 2) return; // Bye or single player match
+
+      playerIds.forEach((pid) => {
+        if (!opponents[pid]) opponents[pid] = [];
+        playerIds.forEach((oppId) => {
+          if (pid !== oppId && !opponents[pid].includes(oppId)) {
+            opponents[pid].push(oppId);
+          }
+        });
+      });
+    });
+
+    return opponents;
   }
 
   // ==========================================

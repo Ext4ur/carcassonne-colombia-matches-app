@@ -3,7 +3,6 @@ import { SwissPairingService } from './swiss';
 import { CircuitStandings } from '../types/circuit';
 
 import { getCircuitPointsByRank } from '../utils/circuitScoring';
-
 /** Data for "posición por parada" chart: evolution of each player's position at each stop. */
 export interface CircuitPositionEvolution {
   stops: string[];

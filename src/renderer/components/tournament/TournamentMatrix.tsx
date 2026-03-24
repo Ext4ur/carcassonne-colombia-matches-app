@@ -68,11 +68,11 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
       <div className="flex gap-6 text-sm">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800"></div>
-          <span>{t('tournaments.detail.best_rival', 'Mejor rival')}</span>
+          <span>{t('tournaments.detail.best_rival')}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800"></div>
-          <span>{t('tournaments.detail.worst_rival', 'Peor rival')}</span>
+          <span>{t('tournaments.detail.worst_rival')}</span>
         </div>
       </div>
       <div className="overflow-x-auto">

@@ -15,6 +15,12 @@ console.log('isPackaged:', app.isPackaged);
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 console.log('isDev:', isDev);
 
+if (isDev) {
+  const userDataPath = app.getPath('userData');
+  app.setPath('userData', `${userDataPath}-dev`);
+  console.log('[Main] Development mode: using separate userData path:', app.getPath('userData'));
+}
+
 function createWindow() {
   const preloadPath = path.join(__dirname, '../preload/preload.js');
   console.log('Preload path:', preloadPath);
@@ -47,9 +53,9 @@ function createWindow() {
     }
   });
 
-  // Log console messages from renderer
+  // Log console messages from renderer (level: 0–3 = verbose/info/warning/error, not window id)
   mainWindow.webContents.on('console-message', (event, level, message) => {
-    console.log(`[Renderer ${level}]:`, message);
+    console.log(`[Renderer console L${level}]:`, message);
   });
 
   if (isDev) {

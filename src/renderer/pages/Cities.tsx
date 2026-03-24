@@ -98,8 +98,10 @@ export default function Cities() {
       loadCities();
     } catch (error) {
       console.error('Error deleting city:', error);
+      const msg =
+        error instanceof Error && error.message ? error.message : t('cities.errors.delete');
       addNotification({
-        message: error instanceof Error ? error.message : t('cities.errors.delete'),
+        message: msg,
         type: 'error',
       });
     } finally {

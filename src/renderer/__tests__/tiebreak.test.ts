@@ -1,5 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { TiebreakService, TiebreakData } from '../services/tiebreak';
+import { BuchholzByeMode, Round } from '../types/tournament';
+
+function computeOpp(
+  playerId: number,
+  data: TiebreakData,
+  opts: {
+    buchholzByeMode: BuchholzByeMode;
+    numberOfRounds: number;
+    tournamentPointsAverage: number;
+  },
+  dropWorst: boolean,
+  dropBest: boolean
+): number {
+  return (
+    TiebreakService as unknown as { computeOpponentPointsTiebreak: (...a: unknown[]) => number }
+  ).computeOpponentPointsTiebreak(playerId, data, opts, dropWorst, dropBest);
+}
 
 describe('TiebreakService', () => {
   // Mock data setup
@@ -43,6 +60,74 @@ describe('TiebreakService', () => {
     it('returns 0 if no games played', () => {
       const points = TiebreakService.calculateOpponentPointsFromData(mockData, 99);
       expect(points).toBe(0);
+    });
+  });
+
+  describe('computeOpponentPointsTiebreak (bye modes)', () => {
+    it('legacy_virtual_avg injects field average for a round without a match', () => {
+      const rounds: Round[] = [
+        { id: 1, tournament_id: 1, round_number: 1, status: 'completed' },
+        { id: 2, tournament_id: 1, round_number: 2, status: 'completed' },
+      ];
+      const roundMatches = [
+        [{ id: 101, round_id: 1, match_number: 1, status: 'completed' as const }],
+        [],
+      ];
+      const resultsByMatch = {
+        101: [
+          { match_id: 101, player_id: 1, position: 1, points: 100, tournament_points: 1 },
+          { match_id: 101, player_id: 2, position: 2, points: 50, tournament_points: 0 },
+        ],
+      };
+      const playerTotalPoints = { 1: 1, 2: 0 };
+      const data: TiebreakData = { rounds, roundMatches, resultsByMatch, playerTotalPoints };
+      const avg = (1 + 0) / 2;
+      const v = computeOpp(
+        1,
+        data,
+        { buchholzByeMode: 'legacy_virtual_avg', numberOfRounds: 2, tournamentPointsAverage: avg },
+        true,
+        false
+      );
+      // flat: opponent 0 + virtual avg; sorted [avg,0] drop worst -> avg
+      expect(v).toBeCloseTo(avg, 5);
+    });
+
+    it('n_minus_1_virtual_avg fills bye round so cut applies like full schedule', () => {
+      const rounds: Round[] = [
+        { id: 1, tournament_id: 1, round_number: 1, status: 'completed' },
+        { id: 2, tournament_id: 1, round_number: 2, status: 'completed' },
+      ];
+      const roundMatches = [
+        [{ id: 101, round_id: 1, match_number: 1, status: 'completed' as const }],
+        [{ id: 102, round_id: 2, match_number: 1, status: 'completed' as const }],
+      ];
+      const resultsByMatch = {
+        101: [
+          { match_id: 101, player_id: 1, position: 1, points: 100, tournament_points: 1 },
+          { match_id: 101, player_id: 2, position: 2, points: 50, tournament_points: 0 },
+        ],
+        102: [
+          { match_id: 102, player_id: 2, position: 1, points: 100, tournament_points: 1 },
+          { match_id: 102, player_id: 3, position: 2, points: 50, tournament_points: 0 },
+        ],
+      };
+      const playerTotalPoints = { 1: 1, 2: 2, 3: 0 };
+      const data: TiebreakData = { rounds, roundMatches, resultsByMatch, playerTotalPoints };
+      const avg = (1 + 2 + 0) / 3;
+      const r1 = computeOpp(
+        1,
+        data,
+        {
+          buchholzByeMode: 'n_minus_1_virtual_avg',
+          numberOfRounds: 2,
+          tournamentPointsAverage: avg,
+        },
+        true,
+        false
+      );
+      // P1: round1 opp sum = P2's 2 pts, round2 virtual = avg -> [2, avg] cut worst -> 2
+      expect(r1).toBe(2);
     });
   });
 

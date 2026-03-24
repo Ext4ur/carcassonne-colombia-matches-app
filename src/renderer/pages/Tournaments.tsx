@@ -19,6 +19,7 @@ import { Place } from '../types/place';
 import { formatDateForDisplay } from '../utils/dateUtils';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
+import { TOURNAMENT_LIST_DELETE_SECRET } from '../constants/deleteGuards';
 
 type WizardStep = 'form' | 'config' | 'registration' | null;
 
@@ -99,6 +100,8 @@ export default function Tournaments() {
         tiebreak_criteria: DEFAULT_TIEBREAK_CRITERIA,
         scoring_system: getDefaultScoringSystem(tournamentData.players_per_match || 2),
         bye_selection: 'worst',
+        pairing_algorithm: 'greedy',
+        buchholz_bye_mode: 'legacy',
       });
       setWizardStep('registration');
     } else {
@@ -121,6 +124,8 @@ export default function Tournaments() {
         getDefaultScoringSystem(tournamentDraft!.players_per_match || 2),
       bye_selection: configData.bye_selection || 'worst',
       player_display_mode: configData.player_display_mode ?? 'per_player',
+      pairing_algorithm: configData.pairing_algorithm ?? 'greedy',
+      buchholz_bye_mode: configData.buchholz_bye_mode ?? 'legacy',
     });
     setWizardStep('registration');
   };
@@ -151,6 +156,8 @@ export default function Tournaments() {
             getDefaultScoringSystem(tournamentDraft.players_per_match || 2),
           bye_selection: configDraft.bye_selection || 'worst',
           player_display_mode: configDraft.player_display_mode ?? 'per_player',
+          pairing_algorithm: configDraft.pairing_algorithm ?? 'greedy',
+          buchholz_bye_mode: configDraft.buchholz_bye_mode ?? 'legacy',
         });
       }
       for (const player of registrationPlayers) {
@@ -179,6 +186,13 @@ export default function Tournaments() {
   const handleDelete = async (tournament: Tournament) => {
     if (!tournament.id) return;
     if (!confirm(t('tournaments.wizard.delete_confirm', { name: tournament.name }))) return;
+
+    const clave = window.prompt(t('tournaments.wizard.delete_enter_key'));
+    if (clave === null) return;
+    if (clave !== TOURNAMENT_LIST_DELETE_SECRET) {
+      addNotification({ message: t('tournaments.wizard.delete_key_invalid'), type: 'error' });
+      return;
+    }
 
     try {
       setIsLoading(true);

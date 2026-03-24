@@ -10,6 +10,7 @@ vi.mock('../services/database', () => ({
     getTournamentById: vi.fn(),
     getTournamentPlayers: vi.fn(),
     getTournamentConfig: vi.fn(),
+    getTournamentOpponents: vi.fn(),
     getPlayerStartStatistics: vi.fn(),
     getRoundMatches: vi.fn(),
     getMatchResults: vi.fn(),
@@ -66,6 +67,7 @@ describe('SwissPairingService - Late Entry Logic', () => {
       Promise.resolve(resultsByMatch[matchId] || [])
     );
     (DatabaseService.getPlayerByes as Mock).mockResolvedValue([{ player_id: 3, round_number: 1 }]);
+    (DatabaseService.getTournamentOpponents as Mock).mockResolvedValue({});
 
     // Points before R2:
     // P1: 1 pt

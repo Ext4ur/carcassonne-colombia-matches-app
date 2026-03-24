@@ -86,7 +86,7 @@ export default function Layout({ children }: LayoutProps) {
                 className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
                 aria-expanded="false"
               >
-                <span className="sr-only">Menu</span>
+                <span className="sr-only">{t('common.a11y.open_menu')}</span>
                 {/* Icon when menu is closed */}
                 {!isMobileMenuOpen ? (
                   <svg

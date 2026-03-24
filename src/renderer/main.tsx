@@ -40,8 +40,7 @@ class ErrorBoundary extends React.Component<
         >
           <h1 style={{ color: '#dc2626', marginBottom: '20px' }}>{i18n.t('common.app_error')}</h1>
           <p style={{ color: '#666', maxWidth: '600px', marginBottom: '10px' }}>
-            {this.state.error?.message ||
-              i18n.t('common.errors.unknown', 'Ocurrió un error inesperado')}
+            {this.state.error?.message || i18n.t('common.error_unknown')}
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -55,7 +54,7 @@ class ErrorBoundary extends React.Component<
               borderRadius: '4px',
             }}
           >
-            {i18n.t('common.reload', 'Recargar aplicación')}
+            {i18n.t('common.reload')}
           </button>
         </div>
       );
@@ -70,7 +69,7 @@ if (!window.electronAPI) {
   console.error('electronAPI is not available!');
   document.body.innerHTML = `
     <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; font-family: Arial, sans-serif; padding: 20px; text-align: center;">
-      <h1 style="color: #dc2626; margin-bottom: 20px;">${i18n.t('common.error_api', 'Error: Electron API no disponible')}</h1>
+      <h1 style="color: #dc2626; margin-bottom: 20px;">${i18n.t('common.error_api')}</h1>
       <ul style="margin: 10px 0; padding-left: 20px; text-align: left; max-width: 600px;">
         <li>${i18n.t('common.check_executable')}</li>
         <li>${i18n.t('common.check_console')}</li>
@@ -111,7 +110,7 @@ if (!window.electronAPI) {
           id="reload-btn"
           style="padding: 10px 20px; margin-top: 20px; cursor: pointer; background-color: #3b82f6; color: white; border: none; border-radius: 4px;"
         >
-          ${i18n.t('common.reload', 'Recargar aplicación')}
+          ${i18n.t('common.reload')}
         </button>
       </div>
       <script>

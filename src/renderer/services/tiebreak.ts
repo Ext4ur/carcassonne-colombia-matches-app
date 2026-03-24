@@ -1,5 +1,11 @@
 import { DatabaseService } from './database';
-import { Round, PlayerStanding, Match, MatchResultWithPlayer } from '../types/tournament';
+import {
+  Round,
+  PlayerStanding,
+  Match,
+  MatchResultWithPlayer,
+  BuchholzByeMode,
+} from '../types/tournament';
 import { Player } from '../types/player';
 
 /** Datos pre-cargados para calcular tiebreaks sin más queries */
@@ -10,42 +16,38 @@ export interface TiebreakData {
   playerTotalPoints: Record<number, number>;
 }
 
+export interface TiebreakCalculateOptions {
+  buchholzByeMode: BuchholzByeMode;
+  /** Rondas programadas N (>= 1) */
+  numberOfRounds: number;
+  /** Media de total_points del campo antes de tiebreaks */
+  tournamentPointsAverage: number;
+}
+
 export class TiebreakService {
   /** Calculate a specific tiebreak criterion for all players */
   static async calculate(
     criterionId: string,
     standings: PlayerStanding[],
-    roundMatches: Match[],
+    rounds: Round[],
+    roundMatchesByRound: Match[][],
     resultsByMatch: Record<number, MatchResultWithPlayer[]>,
-    players: Player[]
+    players: Player[],
+    buchholzOpts: TiebreakCalculateOptions
   ): Promise<Record<number, number>> {
     const playerTotalPoints: Record<number, number> = {};
     const result: Record<number, number> = {};
 
-    // Calculate total points for context if needed
     standings.forEach((s) => {
       playerTotalPoints[s.player_id] = s.total_points;
     });
 
     const data: TiebreakData = {
-      rounds: [], // Not strictly needed for these calcs if roundMatches is sufficient, but interface requires it
-      roundMatches: [roundMatches], // Hack: roundMatches passed here is flat, but data expects Match[][].
-      // Actually, looking at usages, existing methods iterate data.roundMatches[r].
-      // If we pass flat list as roundMatches[0], loop r=0 will work.
+      rounds,
+      roundMatches: roundMatchesByRound,
       resultsByMatch,
       playerTotalPoints,
     };
-
-    // Correction: existing methods iterate data.rounds.length.
-    // We need to construct a "fake" rounds array or adjust the input.
-    // Since calculating opponent points needs to know about rounds,
-    // it's better if we passed matches grouped by round?
-    // In SwissPairingService, we flattened roundMatches.
-    // BUT, existing TiebreakService methods (lines 23, 55, 74) iterate `r < data.rounds.length`.
-
-    // If we only have flat matches, we can wrap them in a single "round" (index 0).
-    // And set data.rounds = [dummyRound].
-    data.rounds = [{ id: 0, tournament_id: 0, round_number: 1, status: 'completed' }]; // Dummy round to trigger one iteration
 
     for (const player of players) {
       if (!player.id) continue;
@@ -53,24 +55,18 @@ export class TiebreakService {
       let val = 0;
       switch (criterionId) {
         case 'wins':
-          // Already processed in standings, but if we need to re-calc?
-          // Usually taken from standings directly.
-          // But TiebreakService should return the value.
           val = standings.find((s) => s.player_id === player.id)?.wins || 0;
           break;
         case 'opponent_points_drop_worst':
-          val = this.calculateOpponentPointsFromData(data, player.id, true, false);
+          val = this.computeOpponentPointsTiebreak(player.id, data, buchholzOpts, true, false);
           break;
         case 'opponent_points_drop_best_worst':
-          val = this.calculateOpponentPointsFromData(data, player.id, true, true);
+          val = this.computeOpponentPointsTiebreak(player.id, data, buchholzOpts, true, true);
           break;
         case 'point_difference':
           val = this.calculatePointDifferenceFromData(data, player.id);
           break;
         case 'head_to_head':
-          // Head to head is relative, not absolute value per player.
-          // It's usually handled during sort comparison.
-          // Assign 0 here.
           val = 0;
           break;
         default:
@@ -82,38 +78,137 @@ export class TiebreakService {
     return result;
   }
 
-  /** Calcula puntos de oponentes desde datos en memoria (0 queries) */
+  private static sumAfterSortedCuts(
+    values: number[],
+    dropWorst: boolean,
+    dropBest: boolean
+  ): number {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => b - a);
+    if (dropWorst && sorted.length > 0) sorted.pop();
+    if (dropBest && sorted.length > 0) sorted.shift();
+    return sorted.reduce((s, x) => s + x, 0);
+  }
+
+  static playerPlayedRound(
+    roundIndex: number,
+    playerId: number,
+    roundMatchesByRound: Match[][],
+    resultsByMatch: Record<number, MatchResultWithPlayer[]>
+  ): boolean {
+    const matches = roundMatchesByRound[roundIndex] || [];
+    for (const match of matches) {
+      const results = resultsByMatch[match.id!] || [];
+      if (results.some((r) => r.player_id === playerId)) return true;
+    }
+    return false;
+  }
+
+  static opponentTournamentPointsSumInRound(
+    roundIndex: number,
+    playerId: number,
+    roundMatchesByRound: Match[][],
+    resultsByMatch: Record<number, MatchResultWithPlayer[]>,
+    playerTotalPoints: Record<number, number>
+  ): number {
+    const matches = roundMatchesByRound[roundIndex] || [];
+    for (const match of matches) {
+      const results = resultsByMatch[match.id!] || [];
+      if (!results.some((r) => r.player_id === playerId)) continue;
+      return results
+        .filter((r) => r.player_id !== playerId)
+        .reduce((sum, r) => sum + (playerTotalPoints[r.player_id] ?? 0), 0);
+    }
+    return 0;
+  }
+
+  private static computeOpponentPointsTiebreak(
+    playerId: number,
+    data: TiebreakData,
+    opts: TiebreakCalculateOptions,
+    dropWorst: boolean,
+    dropBest: boolean
+  ): number {
+    const mode = opts.buchholzByeMode;
+    const { rounds, roundMatches, resultsByMatch, playerTotalPoints } = data;
+    const avg = opts.tournamentPointsAverage;
+    const N = Math.max(1, opts.numberOfRounds);
+
+    if (mode === 'legacy' || mode === 'legacy_virtual_avg') {
+      const flat: number[] = [];
+      for (let r = 0; r < rounds.length; r++) {
+        const matches = roundMatches[r] || [];
+        for (const match of matches) {
+          const results = resultsByMatch[match.id!] || [];
+          if (!results.some((res) => res.player_id === playerId)) continue;
+          for (const res of results) {
+            if (res.player_id !== playerId) {
+              flat.push(playerTotalPoints[res.player_id] ?? 0);
+            }
+          }
+        }
+      }
+      if (mode === 'legacy_virtual_avg') {
+        for (let r = 0; r < rounds.length; r++) {
+          if (!this.playerPlayedRound(r, playerId, roundMatches, resultsByMatch)) {
+            flat.push(avg);
+          }
+        }
+      }
+      return this.sumAfterSortedCuts(flat, dropWorst, dropBest);
+    }
+
+    // n_minus_1 and n_minus_1_virtual_avg: one aggregate per scheduled round number
+    const perRound: number[] = [];
+    for (let rn = 1; rn <= N; rn++) {
+      const idx = rounds.findIndex((r) => r.round_number === rn);
+      if (idx < 0) continue;
+      const played = this.playerPlayedRound(idx, playerId, roundMatches, resultsByMatch);
+      if (played) {
+        perRound.push(
+          this.opponentTournamentPointsSumInRound(
+            idx,
+            playerId,
+            roundMatches,
+            resultsByMatch,
+            playerTotalPoints
+          )
+        );
+      } else if (mode === 'n_minus_1_virtual_avg') {
+        perRound.push(avg);
+      }
+    }
+
+    const M = perRound.length;
+    if (M === N && N > 0) {
+      return this.sumAfterSortedCuts(perRound, dropWorst, dropBest);
+    }
+    return perRound.reduce((s, x) => s + x, 0);
+  }
+
+  /** Calcula puntos de oponentes desde datos en memoria (0 queries); usa estructura por rondas reales */
   static calculateOpponentPointsFromData(
     data: TiebreakData,
     playerId: number,
     dropWorst: boolean = false,
     dropBest: boolean = false
   ): number {
-    const opponentPoints: number[] = [];
-    for (let r = 0; r < data.rounds.length; r++) {
-      const matches = data.roundMatches[r] || [];
-      for (const match of matches) {
-        const results = data.resultsByMatch[match.id!] || [];
-        const playerResult = results.find((res) => res.player_id === playerId);
-        if (playerResult) {
-          const opponents = results.filter((res) => res.player_id !== playerId);
-          for (const opp of opponents) {
-            opponentPoints.push(data.playerTotalPoints[opp.player_id] ?? 0);
-          }
-        }
-      }
-    }
-    if (opponentPoints.length === 0) return 0;
-    const points = [...opponentPoints].sort((a, b) => b - a);
-
-    if (dropWorst && points.length > 0) {
-      points.pop();
-    }
-    if (dropBest && points.length > 0) {
-      points.shift();
-    }
-
-    return points.reduce((sum, p) => sum + p, 0);
+    const nRounds =
+      data.rounds.length > 0 ? Math.max(...data.rounds.map((r) => r.round_number)) : 1;
+    const sumPts = Object.values(data.playerTotalPoints).reduce((a, b) => a + b, 0);
+    const cnt = Object.keys(data.playerTotalPoints).length;
+    const avg = cnt > 0 ? sumPts / cnt : 0;
+    return this.computeOpponentPointsTiebreak(
+      playerId,
+      data,
+      {
+        buchholzByeMode: 'legacy',
+        numberOfRounds: Math.max(1, nRounds),
+        tournamentPointsAverage: avg,
+      },
+      dropWorst,
+      dropBest
+    );
   }
 
   /** Head-to-head desde datos en memoria */
@@ -164,7 +259,6 @@ export class TiebreakService {
     dropWorst: boolean = false,
     dropBest: boolean = false
   ): Promise<number> {
-    // Get all opponents this player has faced
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);
     const opponentPoints: number[] = [];
 
@@ -175,10 +269,8 @@ export class TiebreakService {
         const playerResult = results.find((r) => r.player_id === playerId);
 
         if (playerResult) {
-          // Get all opponents in this match
           const opponents = results.filter((r) => r.player_id !== playerId);
           for (const opponent of opponents) {
-            // Get opponent's total tournament points
             const opponentTotal = await this.getPlayerTotalPoints(tournamentId, opponent.player_id);
             opponentPoints.push(opponentTotal);
           }
@@ -191,11 +283,11 @@ export class TiebreakService {
     const points = [...opponentPoints].sort((a, b) => b - a);
 
     if (dropWorst && points.length > 0) {
-      points.pop(); // Remove worst
+      points.pop();
     }
 
     if (dropBest && points.length > 0) {
-      points.shift(); // Remove best
+      points.shift();
     }
 
     return points.reduce((sum, p) => sum + p, 0);
@@ -206,7 +298,6 @@ export class TiebreakService {
     playerId1: number,
     playerId2: number
   ): Promise<number> {
-    // Returns 1 if playerId1 won, -1 if playerId2 won, 0 if tie or no match
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);
 
     for (const round of rounds) {
@@ -219,20 +310,19 @@ export class TiebreakService {
 
         if (player1Result && player2Result) {
           if (player1Result.position < player2Result.position) {
-            return 1; // player1 won
+            return 1;
           } else if (player2Result.position < player1Result.position) {
-            return -1; // player2 won
+            return -1;
           }
-          return 0; // tie
+          return 0;
         }
       }
     }
 
-    return 0; // No head-to-head match
+    return 0;
   }
 
   static async calculatePointDifference(tournamentId: number, playerId: number): Promise<number> {
-    // Sum of (points scored - points against) in each match
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);
     let totalDifference = 0;
 

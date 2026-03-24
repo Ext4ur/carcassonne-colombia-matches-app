@@ -11,6 +11,7 @@ const {
   mockSelect,
   mockEq,
   mockGt,
+  mockIn,
   mockMaybeSingle,
   mockLimit,
   mockOrder,
@@ -24,6 +25,7 @@ const {
   mockSelect: vi.fn(),
   mockEq: vi.fn(),
   mockGt: vi.fn(),
+  mockIn: vi.fn(),
   mockLimit: vi.fn(),
   mockOrder: vi.fn(),
   mockMaybeSingle: vi.fn().mockImplementation(() => Promise.resolve({ data: null, error: null })),
@@ -44,6 +46,7 @@ interface MockChain {
   select: (...args: unknown[]) => MockChain;
   eq: (...args: unknown[]) => MockChain;
   gt: (...args: unknown[]) => MockChain;
+  in: (...args: unknown[]) => MockChain;
   limit: (...args: unknown[]) => MockChain;
   order: (...args: unknown[]) => MockChain;
   maybeSingle: (...args: unknown[]) => Promise<{ data: unknown; error: unknown; status: number }>;
@@ -52,8 +55,9 @@ interface MockChain {
   ) => Promise<unknown>;
 }
 
-// Create a robust chainable mock object factory
+/** `data` for awaitable queries: array => row list; single object => one row; used by .in() / .then() */
 const createMockChain = (data: unknown = [], error: unknown = null, status = 200): MockChain => {
+  const rows: unknown[] = Array.isArray(data) ? data : data != null ? [data] : [];
   const chain: MockChain = {
     insert: (...args: unknown[]) => {
       mockInsert(...args);
@@ -79,6 +83,10 @@ const createMockChain = (data: unknown = [], error: unknown = null, status = 200
       mockGt(...args);
       return chain;
     },
+    in: (...args: unknown[]) => {
+      mockIn(...args);
+      return chain;
+    },
     limit: (...args: unknown[]) => {
       mockLimit(...args);
       return chain;
@@ -89,10 +97,10 @@ const createMockChain = (data: unknown = [], error: unknown = null, status = 200
     },
     maybeSingle: (...args: unknown[]) => {
       mockMaybeSingle(...args);
-      return Promise.resolve({ data, error, status });
+      return Promise.resolve({ data: rows[0] ?? null, error, status });
     },
     then: (onFulfilled: (value: { data: unknown; error: unknown; status: number }) => unknown) =>
-      Promise.resolve({ data, error, status }).then(onFulfilled),
+      Promise.resolve({ data: rows, error, status }).then(onFulfilled),
   };
   return chain;
 };
@@ -153,6 +161,7 @@ describe('SyncService Pull', () => {
     mockSelect.mockClear();
     mockEq.mockClear();
     mockGt.mockClear();
+    mockIn.mockClear();
     mockLimit.mockClear();
     mockOrder.mockClear();
     mockMaybeSingle.mockClear();
@@ -185,9 +194,7 @@ describe('SyncService Pull', () => {
         return createMockChain(logs);
       }
       if (table === 'players') {
-        // First call: maybeSingle for dependency check (empty for players)
-        // Second call: maybeSingle to fetch the record (returns remoteRecord)
-        return createMockChain(remoteRecord);
+        return createMockChain([remoteRecord]);
       }
       return createMockChain();
     });
@@ -216,7 +223,7 @@ describe('SyncService Pull', () => {
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'sync_audit_logs') return createMockChain(logs);
-      if (table === 'players') return createMockChain(remoteRecord);
+      if (table === 'players') return createMockChain([remoteRecord]);
       return createMockChain();
     });
 
@@ -243,7 +250,7 @@ describe('SyncService Pull', () => {
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'sync_audit_logs') return createMockChain(logs);
-      if (table === 'players') return createMockChain(remoteRecord);
+      if (table === 'players') return createMockChain([remoteRecord]);
       return createMockChain();
     });
 
@@ -291,5 +298,39 @@ describe('SyncService Pull', () => {
       expect.stringMatching(/DELETE FROM players WHERE uuid = \?/i),
       ['deleted-uuid']
     );
+  });
+
+  it('pullChanges prefetches multiple players with one IN query', async () => {
+    const r1 = { uuid: 'u1', name: 'P1', id: 1 };
+    const r2 = { uuid: 'u2', name: 'P2', id: 2 };
+    const logs = [
+      { id: 1, table_name: 'players', record_uuid: 'u1', operation: 'INSERT' as const },
+      { id: 2, table_name: 'players', record_uuid: 'u2', operation: 'INSERT' as const },
+    ];
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sync_audit_logs') return createMockChain(logs);
+      if (table === 'players') return createMockChain([r1, r2]);
+      return createMockChain();
+    });
+
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('SELECT id FROM players WHERE uuid = ?')) return [];
+      return [];
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (SyncService as any).pullChanges();
+
+    expect(mockIn).toHaveBeenCalled();
+    expect(mockIn.mock.calls[0][0]).toBe('uuid');
+    expect(mockIn.mock.calls[0][1]).toEqual(expect.arrayContaining(['u1', 'u2']));
+    expect(mockEq).not.toHaveBeenCalled();
+
+    const inserts = mockExecute.mock.calls.filter((c) =>
+      String(c[0]).toLowerCase().includes('insert into players')
+    );
+    expect(inserts.length).toBe(2);
   });
 });

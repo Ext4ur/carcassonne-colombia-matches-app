@@ -176,7 +176,7 @@ export default function MatchResultForm({
       onSave();
     } catch (error) {
       console.error('Error saving match results:', error);
-      alert(t('tournaments.match.save_error', 'Error al guardar los resultados'));
+      alert(t('tournaments.match.save_error'));
     } finally {
       setIsLoading(false);
     }
@@ -207,7 +207,7 @@ export default function MatchResultForm({
     <div className="space-y-4">
       <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <strong>{t('common.note', 'Nota')}:</strong> {t('tournaments.match.note_positions')}
+          <strong>{t('common.note')}:</strong> {t('tournaments.match.note_positions')}
         </p>
       </div>
 
@@ -230,7 +230,7 @@ export default function MatchResultForm({
               <div className="flex-1 min-w-[200px] flex items-center justify-between gap-2">
                 <span className="text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
                   {isLoadingData
-                    ? t('tournaments.match.loading', 'Cargando...')
+                    ? t('tournaments.match.loading')
                     : player?.name || t('tournaments.detail.unassigned')}
                 </span>
 
@@ -261,7 +261,7 @@ export default function MatchResultForm({
               {/* Points */}
               <div className="w-full md:w-32">
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 md:hidden">
-                  {t('tournaments.match.points_label', 'Puntos')}
+                  {t('tournaments.match.points_label')}
                 </label>
                 <div className="relative">
                   <Input
@@ -296,7 +296,7 @@ export default function MatchResultForm({
                     required
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none">
-                    {t('tournaments.match.pts', 'PTS')}
+                    {t('tournaments.match.pts')}
                   </span>
                 </div>
               </div>
@@ -342,7 +342,7 @@ export default function MatchResultForm({
       {roundStatus === 'completed' && tournamentStatus !== 'completed' && (
         <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-300 dark:border-amber-700">
           <p className="text-sm text-amber-800 dark:text-amber-200">
-            <strong>⚠️ {t('common.warning', 'Atención')}:</strong>{' '}
+            <strong>⚠️ {t('common.warning')}:</strong>{' '}
             {t('tournaments.match.edit_completed_round_warning')}
           </p>
         </div>
@@ -351,7 +351,7 @@ export default function MatchResultForm({
       {tournamentStatus === 'completed' && (
         <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
           <p className="text-sm text-yellow-800 dark:text-yellow-200">
-            <strong>{t('common.note', 'Nota')}:</strong> {t('tournaments.match.note_completed')}
+            <strong>{t('common.note')}:</strong> {t('tournaments.match.note_completed')}
           </p>
         </div>
       )}
@@ -359,8 +359,8 @@ export default function MatchResultForm({
       <div className="flex justify-end space-x-2 pt-4">
         <Button variant="secondary" onClick={onCancel}>
           {tournamentStatus === 'completed'
-            ? t('tournaments.match.close', 'Cerrar')
-            : t('tournaments.preview.cancel', 'Cancelar')}
+            ? t('tournaments.match.close')
+            : t('tournaments.preview.cancel')}
         </Button>
         {tournamentStatus !== 'completed' && (
           <Button
@@ -368,7 +368,7 @@ export default function MatchResultForm({
             isLoading={isLoading}
             disabled={firstPlayerId === undefined || firstPlayerId === null}
           >
-            {t('tournaments.match.save_btn', 'Guardar Resultados')}
+            {t('tournaments.match.save_btn')}
           </Button>
         )}
       </div>

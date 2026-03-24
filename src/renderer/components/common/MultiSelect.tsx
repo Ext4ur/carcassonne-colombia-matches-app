@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface MultiSelectOption {
   value: string | number;
@@ -19,9 +20,11 @@ export default function MultiSelect({
   options,
   value,
   onChange,
-  placeholder = 'Seleccionar...',
+  placeholder,
   className = '',
 }: MultiSelectProps) {
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? t('common.multi_select_placeholder');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -53,10 +56,10 @@ export default function MultiSelect({
 
   const displayLabel =
     value.length === 0
-      ? placeholder
+      ? resolvedPlaceholder
       : value.length === options.length
-        ? 'Todos'
-        : `${value.length} seleccionado(s)`;
+        ? t('common.multi_select_all')
+        : t('common.multi_select_count', { count: value.length });
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
@@ -83,7 +86,9 @@ export default function MultiSelect({
               onClick={selectAll}
               className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
             >
-              {value.length === options.length ? 'Quitar todos' : 'Seleccionar todos'}
+              {value.length === options.length
+                ? t('common.multi_select_deselect_all')
+                : t('common.multi_select_select_all')}
             </button>
           </div>
           <div className="p-2 space-y-0.5">

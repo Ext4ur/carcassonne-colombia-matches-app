@@ -23,6 +23,27 @@ export interface Tournament {
 /** How to display player names in this tournament (configurable tournaments only). */
 export type PlayerDisplayMode = 'per_player' | 'names_only' | 'usernames_only';
 
+/** How Buchholz / opponent-sum tiebreaks treat byes and round-based cuts. */
+export type BuchholzByeMode =
+  | 'legacy'
+  | 'n_minus_1'
+  | 'legacy_virtual_avg'
+  | 'n_minus_1_virtual_avg';
+
+const BUCHHOLZ_BYE_MODES: BuchholzByeMode[] = [
+  'legacy',
+  'n_minus_1',
+  'legacy_virtual_avg',
+  'n_minus_1_virtual_avg',
+];
+
+export function normalizeBuchholzByeMode(value: unknown): BuchholzByeMode {
+  if (typeof value === 'string' && (BUCHHOLZ_BYE_MODES as string[]).includes(value)) {
+    return value as BuchholzByeMode;
+  }
+  return 'legacy';
+}
+
 export interface TournamentConfig {
   id?: number;
   tournament_id: number;
@@ -34,6 +55,8 @@ export interface TournamentConfig {
   player_display_mode?: PlayerDisplayMode;
   /** 'greedy' (basic) or 'backtracking' (advanced). Default is 'greedy' for backwards compatibility. */
   pairing_algorithm?: 'greedy' | 'backtracking';
+  /** Opponent-score tiebreaks: flat list vs per-round N−1 cut; optional virtual bye term = mean field points. */
+  buchholz_bye_mode?: BuchholzByeMode;
   created_at?: string;
   updated_at?: string;
 }

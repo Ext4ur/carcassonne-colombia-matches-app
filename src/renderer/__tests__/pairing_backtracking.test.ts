@@ -1,13 +1,19 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
 import { SwissPairingService } from '../services/swiss';
 import { PlayerStanding } from '../types/tournament';
 
-describe('SwissPairingService.findPairingsWithBacktracking', () => {
-  // Accessing private static method through any for testing
-  const findPairingsWithBacktracking = (
-    SwissPairingService as any
-  ).findPairingsWithBacktracking.bind(SwissPairingService);
+describe('SwissPairingService.findBestPairings', () => {
+  const findBestPairings = (
+    SwissPairingService as unknown as {
+      findBestPairings: (
+        r: PlayerStanding[],
+        o: Record<number, number[]>,
+        ppm: number,
+        maxR: number,
+        cur?: number
+      ) => PlayerStanding[][] | null;
+    }
+  ).findBestPairings.bind(SwissPairingService);
 
   it('finds a valid matching with 0 rematches in a complex scenario', () => {
     /**
@@ -96,9 +102,10 @@ describe('SwissPairingService.findPairingsWithBacktracking', () => {
       6: [],
     };
 
-    const result = findPairingsWithBacktracking(players, previousOpponents, 2);
+    const result = findBestPairings(players, previousOpponents, 2, 0, 0);
 
     expect(result).not.toBeNull();
+    if (!result) return;
     expect(result.length).toBe(3);
 
     // Verify no rematches in result
@@ -161,7 +168,7 @@ describe('SwissPairingService.findPairingsWithBacktracking', () => {
       4: [1, 2, 3],
     };
 
-    const result = findPairingsWithBacktracking(players, previousOpponents, 2);
+    const result = findBestPairings(players, previousOpponents, 2, 0, 0);
     expect(result).toBeNull();
   });
 });

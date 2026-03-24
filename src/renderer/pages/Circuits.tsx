@@ -232,7 +232,11 @@ export default function Circuits() {
       loadCircuits();
     } catch (error) {
       console.error('Error deleting circuit:', error);
-      addNotification({ message: t('circuits.errors.delete'), type: 'error' });
+      addNotification({
+        message:
+          error instanceof Error && error.message ? error.message : t('circuits.errors.delete'),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -265,7 +269,7 @@ export default function Circuits() {
         addNotification({ message: t('circuits.errors.report_success'), type: 'success' });
       } else if (!result.canceled) {
         addNotification({
-          message: t('circuits.errors.report') + ': ' + (result.error || 'Error desconocido'),
+          message: t('circuits.errors.report') + ': ' + (result.error || t('common.error_unknown')),
           type: 'error',
         });
       }

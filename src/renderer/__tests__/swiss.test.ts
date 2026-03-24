@@ -101,18 +101,21 @@ describe('SwissPairingService.calculateStandings', () => {
     rounds,
     roundMatches,
     resultsByMatch,
+    numberOfRounds: 3,
+    buchholzByeMode: 'legacy' as const,
   };
 
-  it('sorts by Total Points first', async () => {
+  it('sorts by wins then total_points; P4 last when winless', async () => {
     const standings = await SwissPairingService.calculateStandings(1, [], preFetched);
 
-    // P1, P2, P3 have 2 points. P4 has 0.
-    // Order between P1, P2, P3 is unstable without tiebreaks (or defined by id/stable sort).
-    // But P4 must be last.
+    // P1, P2, P3 have 2 wins and 2 tournament points each. P4 has 0 wins.
+    // Order among P1–P3 without tiebreaks: stable fallback by player_id.
     expect(standings[3].player_id).toBe(4);
     expect(standings[0].total_points).toBe(2);
     expect(standings[1].total_points).toBe(2);
     expect(standings[2].total_points).toBe(2);
+    expect(standings[0].wins).toBe(2);
+    expect(standings[3].wins).toBe(0);
   });
 
   it('breaks ties using Point Difference', async () => {

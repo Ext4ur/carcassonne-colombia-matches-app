@@ -38,7 +38,7 @@ export default function RoundPreviewDialog({
   const columns: Column<any>[] = [
     {
       key: 'table',
-      header: t('tournaments.preview.table_number', 'Mesa'),
+      header: t('tournaments.preview.table_number'),
       render: (_, index) => (index ?? 0) + 1,
     },
     {
@@ -75,7 +75,8 @@ export default function RoundPreviewDialog({
               {stats && (
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   {t('tournaments.preview.table_starts')} {stats.totalStarts}
-                  {stats.lastStartRound > 0 && ` (R${stats.lastStartRound})`}
+                  {stats.lastStartRound > 0 &&
+                    t('tournaments.preview.starts_last_round', { round: stats.lastStartRound })}
                 </div>
               )}
             </div>
@@ -86,7 +87,7 @@ export default function RoundPreviewDialog({
           <div className="flex items-center gap-4">
             <div className="flex-1">{renderPlayer(match.player1, player1Stats)}</div>
             <div className="flex flex-col items-center">
-              <span className="text-gray-400 font-bold text-sm">VS</span>
+              <span className="text-gray-400 font-bold text-sm">{t('common.versus_upper')}</span>
               {match.reason && startPlayerId && (
                 <span className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">
                   {match.reason === 'balance'
@@ -122,10 +123,10 @@ export default function RoundPreviewDialog({
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={onClose} disabled={isLoading}>
-              {t('tournaments.preview.cancel', 'Cancelar')}
+              {t('tournaments.preview.cancel')}
             </Button>
             <Button onClick={onConfirm} isLoading={isLoading}>
-              {t('tournaments.preview.confirm', 'Confirmar y Generar')}
+              {t('tournaments.preview.confirm')}
             </Button>
           </div>
         </div>

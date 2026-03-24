@@ -22,6 +22,7 @@ import { Place } from '../types/place';
 import { useNotifications } from '../contexts/NotificationContext';
 import { calculateNumberOfRounds } from '../utils/tournament';
 import { formatDateForDisplay } from '../utils/dateUtils';
+import { getEffectiveTiebreakCriteria } from '../constants';
 import { useTranslation } from 'react-i18next';
 
 export default function TournamentDetail() {
@@ -153,7 +154,7 @@ export default function TournamentDetail() {
         // setTournamentConfig(config || null);
         const data = await SwissPairingService.calculateStandings(
           tournament.id,
-          config?.tiebreak_criteria || [],
+          getEffectiveTiebreakCriteria(config?.tiebreak_criteria),
           preFetchedRounds?.length ? { rounds: preFetchedRounds } : undefined,
           config?.player_display_mode
         );
@@ -178,7 +179,7 @@ export default function TournamentDetail() {
     if (!tournament?.id) return;
     try {
       const config = await DatabaseService.getTournamentConfig(tournament.id);
-      setTiebreakCriteria(config?.tiebreak_criteria || []);
+      setTiebreakCriteria(getEffectiveTiebreakCriteria(config?.tiebreak_criteria));
     } catch (error) {
       console.error('Error loading tiebreak criteria:', error);
     }
@@ -210,7 +211,7 @@ export default function TournamentDetail() {
     }
   }, [currentRound, loadMatches]);
 
-  // Cargar estadísticas al abrir el panel solo si no hay datos (Leaderboard y estadísticas usan los mismos)
+  // Cargar estadísticas al abrir el panel solo si no hay datos (clasificación y estadísticas comparten cálculo)
   const loadedStandingsForStatsRef = useRef(false);
   useEffect(() => {
     if (!showStats) {
@@ -396,7 +397,7 @@ export default function TournamentDetail() {
         const sortedResults = matchResults
           .map((result) => ({
             player_id: result.player_id,
-            player_name: result.player_name ?? 'Desconocido',
+            player_name: result.player_name ?? t('tournaments.detail.unknown_player'),
             position: result.position,
             points: result.points,
           }))
@@ -500,7 +501,7 @@ export default function TournamentDetail() {
   const handleSaveEdit = async () => {
     if (!tournament?.id) return;
     if (!editFormData.name.trim()) {
-      addNotification({ message: 'El nombre es requerido', type: 'error' });
+      addNotification({ message: t('tournaments.form.name_req'), type: 'error' });
       return;
     }
     try {
@@ -556,10 +557,7 @@ export default function TournamentDetail() {
         });
       } else if (!result.canceled) {
         addNotification({
-          message:
-            t('reports.export_error') +
-            ': ' +
-            (result.error || t('common.error_unknown', 'Error desconocido')),
+          message: t('reports.export_error') + ': ' + (result.error || t('common.error_unknown')),
           type: 'error',
         });
       }
@@ -679,14 +677,14 @@ export default function TournamentDetail() {
           }
         );
         addNotification({
-          message: 'Jugador retirado exitosamente',
+          message: t('tournaments.detail.dropout_success'),
           type: 'success',
         });
         await loadStandings();
       } catch (error) {
         console.error('Error dropping player:', error);
         addNotification({
-          message: 'Error al retirar al jugador',
+          message: t('tournaments.detail.dropout_error'),
           type: 'error',
         });
       } finally {
@@ -732,7 +730,7 @@ export default function TournamentDetail() {
     // Also reload rounds if needed? Usually adding player doesn't change rounds unless we regenerate.
     // But we might want to update preview if open?
     addNotification({
-      message: 'Jugador agregado exitosamente',
+      message: t('tournaments.detail.player_added_success'),
       type: 'success',
     });
   };
@@ -761,7 +759,7 @@ export default function TournamentDetail() {
       })),
     {
       key: 'starts_count',
-      header: `🎲 ${t('tournaments.detail.starts_count', 'Inicios')}`,
+      header: `🎲 ${t('tournaments.detail.starts_count')}`,
       render: (standing) => standing.starts_count ?? 0,
     },
     {
@@ -977,7 +975,9 @@ export default function TournamentDetail() {
                   )}`}
                 >
                   {idx > 0 && (
-                    <span className="text-gray-300 dark:text-gray-600 font-normal mr-1">vs</span>
+                    <span className="text-gray-300 dark:text-gray-600 font-normal mr-1">
+                      {t('common.versus')}
+                    </span>
                   )}
                   {p.name}
                   {p.points !== undefined && (
@@ -986,7 +986,7 @@ export default function TournamentDetail() {
                   {match.first_player_id === p.id && (
                     <span
                       className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700 cursor-help"
-                      title="Jugador Inicial"
+                      title={t('tournaments.detail.first_player_tooltip')}
                     >
                       🎲
                     </span>
@@ -1002,12 +1002,14 @@ export default function TournamentDetail() {
           <div className="flex flex-row items-center gap-3">
             {players.map((p: any, index: number) => (
               <span key={p.id} className="flex items-center gap-1">
-                {index > 0 && <span className="text-gray-300 dark:text-gray-600">vs</span>}
+                {index > 0 && (
+                  <span className="text-gray-300 dark:text-gray-600">{t('common.versus')}</span>
+                )}
                 <span className="font-medium">{p.name}</span>
                 {match.first_player_id === p.id && (
                   <span
                     className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700 cursor-help"
-                    title="Jugador Inicial"
+                    title={t('tournaments.detail.first_player_tooltip')}
                   >
                     🎲
                   </span>
@@ -1028,7 +1030,7 @@ export default function TournamentDetail() {
         if (isBye) {
           return (
             <span className="px-2 py-1 rounded text-xs font-medium bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200">
-              Bye
+              {t('tournaments.detail.bye_badge')}
             </span>
           );
         }
@@ -1081,7 +1083,7 @@ export default function TournamentDetail() {
   if (!tournament) {
     return (
       <div className="px-4 py-6">
-        <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
+        <p className="text-center py-8 text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
       </div>
     );
   }
@@ -1147,28 +1149,28 @@ export default function TournamentDetail() {
                   onClick={() => handleGenerateReport('excel')}
                   className="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 font-semibold"
                 >
-                  {t('tournaments.reports.export_excel', 'Excel')}
+                  {t('tournaments.reports.export_excel')}
                 </button>
                 <div className="px-4 py-2 text-xs text-gray-400 font-semibold uppercase tracking-wider border-t border-gray-200 dark:border-gray-700">
-                  {t('tournaments.reports.export_csv_title', 'Exportar CSV')}
+                  {t('tournaments.reports.export_csv_title')}
                 </div>
                 <button
                   onClick={() => handleGenerateReport('csv-standings')}
                   className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
-                  {t('tournaments.reports.export_csv_standings', 'CSV - Leaderboard')}
+                  {t('tournaments.reports.export_csv_standings')}
                 </button>
                 <button
                   onClick={() => handleGenerateReport('csv-matches')}
                   className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
-                  {t('tournaments.reports.export_csv_matches', 'CSV - Partidas')}
+                  {t('tournaments.reports.export_csv_matches')}
                 </button>
                 <button
                   onClick={() => handleGenerateReport('csv-stats')}
                   className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
-                  {t('tournaments.reports.export_csv_stats', 'CSV - Estadísticas')}
+                  {t('tournaments.reports.export_csv_stats')}
                 </button>
               </div>
             </div>
@@ -1179,7 +1181,7 @@ export default function TournamentDetail() {
       <Modal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        title={t('tournaments.detail.edit_tournament_title', 'Editar datos del torneo')}
+        title={t('tournaments.detail.edit_tournament_title')}
         footer={
           <>
             <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>
@@ -1216,7 +1218,7 @@ export default function TournamentDetail() {
         </div>
       </Modal>
 
-      {/* Filtro por jugador: al inicio, aplica a estadísticas (excepto podio), leaderboard y partidas */}
+      {/* Filtro por jugador: aplica a estadísticas (excepto podio), clasificación y partidas */}
       {standings.length > 0 && (
         <div className="card mb-6">
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1273,9 +1275,9 @@ export default function TournamentDetail() {
         </div>
       )}
 
-      {/* Leaderboard - usa el mismo filtro del inicio */}
+      {/* Clasificación / standings: mismo filtro que estadísticas y partidas */}
       <div className="card mb-6">
-        <h2 className="text-xl font-bold mb-4">Leaderboard</h2>
+        <h2 className="text-xl font-bold mb-4">{t('tournaments.standings')}</h2>
         {isLoadingStandings && standings.length === 0 ? (
           <div className="p-6 text-center text-gray-600 dark:text-gray-400">
             {t('common.loading')}
@@ -1383,7 +1385,9 @@ export default function TournamentDetail() {
               >
                 <div className="flex justify-between items-center">
                   <div className="flex-1 cursor-pointer" onClick={() => setCurrentRound(round)}>
-                    <span className="font-medium">Ronda {round.round_number}</span>
+                    <span className="font-medium">
+                      {t('tournaments.round_n', { n: round.round_number })}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span
@@ -1396,10 +1400,10 @@ export default function TournamentDetail() {
                       }`}
                     >
                       {round.status === 'completed'
-                        ? 'Completada'
+                        ? t('tournaments.detail.round_status_completed')
                         : round.status === 'in_progress'
-                          ? 'En Progreso'
-                          : 'Pendiente'}
+                          ? t('tournaments.statuses.in_progress')
+                          : t('tournaments.statuses.pending')}
                     </span>
                     {round.status === 'completed' && (
                       <button
@@ -1408,7 +1412,7 @@ export default function TournamentDetail() {
                           handleViewRoundResults(round);
                         }}
                         className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
-                        title="Ver resultados de la ronda"
+                        title={t('tournaments.detail.view_round_results')}
                       >
                         <svg
                           className="w-5 h-5"
@@ -1452,7 +1456,7 @@ export default function TournamentDetail() {
                   completed: filteredMatches.filter((m) => m.status === 'completed').length,
                   total: filteredMatches.length,
                 })}
-                {selectedPlayerIds.length > 0 && ' (filtrado por jugador)'}
+                {selectedPlayerIds.length > 0 && t('tournaments.detail.matches_filtered_hint')}
               </span>
             )}
           </div>
@@ -1467,7 +1471,9 @@ export default function TournamentDetail() {
                   </div>
                 ))}
                 <div className="flex items-center gap-1">
-                  <span className="text-orange-600 dark:text-orange-400 font-bold">Bye</span>
+                  <span className="text-orange-600 dark:text-orange-400 font-bold">
+                    {t('tournaments.detail.bye_badge')}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1481,8 +1487,8 @@ export default function TournamentDetail() {
                 keyExtractor={(match) => match.id || Math.random()}
                 emptyMessage={
                   selectedPlayerIds.length > 0 && filteredMatches.length === 0
-                    ? 'Ninguna partida con los jugadores seleccionados'
-                    : 'No hay partidas en esta ronda'
+                    ? t('tournaments.detail.matches_empty_filtered')
+                    : t('tournaments.detail.matches_empty_round')
                 }
               />
             ) : (
@@ -1501,7 +1507,7 @@ export default function TournamentDetail() {
             setIsMatchModalOpen(false);
             setSelectedMatch(null);
           }}
-          title="Resultados de Partida"
+          title={t('tournaments.detail.match_results_title')}
           size="lg"
         >
           <MatchResultForm

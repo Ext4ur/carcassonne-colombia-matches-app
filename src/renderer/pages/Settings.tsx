@@ -199,10 +199,11 @@ export default function Settings() {
               >
                 <img
                   src={githubIcon}
-                  alt="GitHub"
+                  alt=""
+                  aria-hidden
                   className="w-5 h-5 mr-2 dark:invert transition-all"
                 />
-                <span>GitHub</span>
+                <span>{t('settings.links.github')}</span>
               </a>
               <a
                 href="https://boardgamearena.com/player?id=88813461"
@@ -212,10 +213,11 @@ export default function Settings() {
               >
                 <img
                   src="http://www.boardgamearena.com/favicon.ico"
-                  alt="BGA"
+                  alt=""
+                  aria-hidden
                   className="w-5 h-5 mr-2 rounded-sm"
                 />
-                <span>Board Game Arena</span>
+                <span>{t('settings.links.board_game_arena')}</span>
               </a>
             </div>
           </div>

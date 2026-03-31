@@ -120,7 +120,7 @@ function initializeSchema(database: Database.Database) {
       bye_selection TEXT DEFAULT 'worst',
       player_display_mode TEXT DEFAULT 'per_player',
       pairing_algorithm TEXT DEFAULT 'greedy' CHECK(pairing_algorithm IN ('greedy', 'backtracking')),
-      buchholz_bye_mode TEXT DEFAULT 'legacy' CHECK(buchholz_bye_mode IN ('legacy', 'n_minus_1', 'legacy_virtual_avg', 'n_minus_1_virtual_avg')),
+      buchholz_bye_mode TEXT DEFAULT 'legacy',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
@@ -487,6 +487,77 @@ function runMigrations(database: Database.Database) {
     if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
       console.warn('⚠️ [Migration 12] Warning:', errorMsg);
     }
+  }
+
+  // Migration 13: Relax buchholz_bye_mode CHECK (add virtual_worst modes; SQLite cannot widen CHECK in place)
+  try {
+    const applied = database
+      .prepare(`SELECT 1 FROM sync_meta WHERE key = 'migration_13_buchholz_bye_mode'`)
+      .get() as { 1: number } | undefined;
+    if (applied) {
+      console.log('ℹ️ Migration 13: buchholz_bye_mode already relaxed');
+    } else {
+      const cols = database.pragma('table_info(tournament_configs)') as {
+        cid: number;
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+        pk: number;
+      }[];
+      if (cols.length === 0) {
+        console.warn('⚠️ Migration 13: tournament_configs missing, skip');
+      } else {
+        const sorted = [...cols].sort((a, b) => a.cid - b.cid);
+        const colDefs = sorted
+          .map((c) => {
+            if (c.name === 'buchholz_bye_mode') {
+              return `"buchholz_bye_mode" TEXT DEFAULT 'legacy'`;
+            }
+            if (c.name === 'tournament_id') {
+              return `"tournament_id" INTEGER NOT NULL UNIQUE`;
+            }
+            let line = `"${c.name}" ${c.type || 'TEXT'}`;
+            if (c.pk) line += ' PRIMARY KEY AUTOINCREMENT';
+            else if (c.notnull) line += ' NOT NULL';
+            if (c.dflt_value != null && c.dflt_value !== undefined && String(c.dflt_value) !== '') {
+              line += ` DEFAULT ${c.dflt_value}`;
+            }
+            return line;
+          })
+          .join(',\n');
+        const colNames = sorted.map((c) => `"${c.name}"`).join(', ');
+        database.exec('BEGIN IMMEDIATE');
+        database.exec(`
+          CREATE TABLE tournament_configs__m13 (
+            ${colDefs},
+            FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+          )
+        `);
+        database.exec(
+          `INSERT INTO tournament_configs__m13 (${colNames}) SELECT ${colNames} FROM tournament_configs`
+        );
+        database.exec('DROP TABLE tournament_configs');
+        database.exec('ALTER TABLE tournament_configs__m13 RENAME TO tournament_configs');
+        database.exec(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_configs_uuid ON tournament_configs(uuid)`
+        );
+        database
+          .prepare(
+            `INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES ('migration_13_buchholz_bye_mode', '1', CURRENT_TIMESTAMP)`
+          )
+          .run();
+        database.exec('COMMIT');
+        console.log('✅ [Migration 13] Relaxed buchholz_bye_mode (virtual_worst supported)');
+      }
+    }
+  } catch (error: any) {
+    try {
+      database.exec('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    console.warn('⚠️ [Migration 13] Warning:', error?.message || error);
   }
 
   // Final Step: Default Data Initialization (Ensuring all columns exist)

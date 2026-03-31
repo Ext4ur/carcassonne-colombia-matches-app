@@ -8,6 +8,8 @@ interface ModalProps {
   children: ReactNode;
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** If false, clicking the backdrop does not close (e.g. avoids closing when text selection ends outside the panel). Default true. */
+  closeOnBackdropClick?: boolean;
 }
 
 /** z-index so modal and overlay are above everything (e.g. PlayerRegistration search bar z-[100]) */
@@ -20,6 +22,7 @@ export default function Modal({
   children,
   footer,
   size = 'md',
+  closeOnBackdropClick = true,
 }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
@@ -41,17 +44,19 @@ export default function Modal({
     xl: 'max-w-4xl',
   };
 
+  const handleBackdropClick = closeOnBackdropClick ? onClose : undefined;
+
   const modalContent = (
     <div
       className="fixed inset-0 overflow-hidden"
       style={{ zIndex: MODAL_Z_INDEX }}
-      onClick={onClose}
+      onClick={handleBackdropClick}
     >
       <div className="flex items-center justify-center min-h-full min-w-full p-4">
         <div
           className="fixed inset-0 transition-opacity bg-gray-500/75 dark:bg-black/70"
           aria-hidden="true"
-          onClick={onClose}
+          onClick={handleBackdropClick}
         />
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">
           &#8203;

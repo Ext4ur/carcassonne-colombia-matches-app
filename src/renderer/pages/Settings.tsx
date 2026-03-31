@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import Button from '../components/common/Button';
@@ -8,6 +8,15 @@ import DatabaseStatus from '../components/common/DatabaseStatus';
 import { useTranslation } from 'react-i18next';
 import Select from '../components/common/Select';
 import githubIcon from '../assets/icons/github.svg';
+import TournamentConfigComponent from '../components/tournament/TournamentConfig';
+import { TournamentConfig, normalizeBuchholzByeMode } from '../types/tournament';
+import { getDefaultScoringSystem } from '../utils/scoring';
+import { DEFAULT_TIEBREAK_CRITERIA } from '../utils/tiebreak';
+import {
+  clearQuickTournamentDefaults,
+  readQuickTournamentDefaults,
+  writeQuickTournamentDefaults,
+} from '../utils/quickTournamentDefaults';
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
@@ -15,6 +24,61 @@ export default function Settings() {
   const { addNotification } = useNotifications();
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [quickDefaultsPpm, setQuickDefaultsPpm] = useState(2);
+  const [quickDefaultsVersion, setQuickDefaultsVersion] = useState(0);
+
+  const quickDefaultsFormConfig: TournamentConfig = useMemo(() => {
+    const stored = readQuickTournamentDefaults();
+    const ppm = quickDefaultsPpm;
+    return {
+      tournament_id: 0,
+      avoid_rematches: stored?.avoid_rematches ?? true,
+      tiebreak_criteria: stored?.tiebreak_criteria ?? DEFAULT_TIEBREAK_CRITERIA,
+      scoring_system:
+        stored?.scoring_system && stored.scoring_players_per_match === ppm
+          ? stored.scoring_system
+          : getDefaultScoringSystem(ppm),
+      bye_selection: stored?.bye_selection ?? 'worst',
+      player_display_mode: stored?.player_display_mode ?? 'per_player',
+      pairing_algorithm: stored?.pairing_algorithm ?? 'greedy',
+      buchholz_bye_mode: normalizeBuchholzByeMode(stored?.buchholz_bye_mode),
+    };
+  }, [quickDefaultsPpm, quickDefaultsVersion]);
+
+  const handleQuickDefaultsSave = (
+    cfg: Partial<TournamentConfig> & {
+      bye_selection?: 'worst' | 'random' | 'round_robin';
+      player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
+      pairing_algorithm?: 'greedy' | 'backtracking';
+    }
+  ) => {
+    writeQuickTournamentDefaults({
+      avoid_rematches: cfg.avoid_rematches ?? true,
+      tiebreak_criteria: cfg.tiebreak_criteria ?? DEFAULT_TIEBREAK_CRITERIA,
+      scoring_system: cfg.scoring_system ?? getDefaultScoringSystem(quickDefaultsPpm),
+      bye_selection: cfg.bye_selection ?? 'worst',
+      player_display_mode: cfg.player_display_mode ?? 'per_player',
+      pairing_algorithm: cfg.pairing_algorithm ?? 'greedy',
+      buchholz_bye_mode: normalizeBuchholzByeMode(cfg.buchholz_bye_mode),
+      scoring_players_per_match: quickDefaultsPpm,
+    });
+    addNotification({
+      message: t('settings.quick_defaults_saved'),
+      type: 'success',
+    });
+  };
+
+  const handleQuickDefaultsReset = () => {
+    if (!confirm(t('settings.quick_defaults_reset_confirm'))) return;
+    clearQuickTournamentDefaults();
+    setQuickDefaultsPpm(2);
+    setQuickDefaultsVersion((v) => v + 1);
+    addNotification({
+      message: t('settings.quick_defaults_reset_done'),
+      type: 'success',
+    });
+  };
+
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(() => {
     const saved = localStorage.getItem('cloud_sync_enabled');
     if (saved === null) {
@@ -114,6 +178,43 @@ export default function Settings() {
                 />
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h2 className="text-xl font-bold mb-2">{t('settings.quick_defaults_title')}</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            {t('settings.quick_defaults_desc')}
+          </p>
+          <div className="mb-4 w-full max-w-xs">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              {t('settings.quick_defaults_ppm')}
+            </label>
+            <Select
+              value={String(quickDefaultsPpm)}
+              onChange={(e) => setQuickDefaultsPpm(Number(e.target.value))}
+              options={[
+                { value: '2', label: '2' },
+                { value: '3', label: '3' },
+                { value: '4', label: '4' },
+              ]}
+            />
+          </div>
+          <div className="max-h-[min(70vh,520px)] overflow-y-auto pr-1 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+            <TournamentConfigComponent
+              key={`quick-def-${quickDefaultsPpm}-${quickDefaultsVersion}`}
+              tournamentId={0}
+              playersPerMatch={quickDefaultsPpm}
+              config={quickDefaultsFormConfig}
+              onSave={handleQuickDefaultsSave}
+              onCancel={() => {}}
+              showCancel={false}
+            />
+          </div>
+          <div className="mt-4">
+            <Button variant="secondary" onClick={handleQuickDefaultsReset}>
+              {t('settings.quick_defaults_reset')}
+            </Button>
           </div>
         </div>
 

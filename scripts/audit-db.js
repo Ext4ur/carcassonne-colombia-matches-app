@@ -15,20 +15,33 @@ async function runAudit() {
       path.join(process.env.HOME || '', 'Library/Application Support') : 
       path.join(process.env.HOME || '', '.config'));
   
-  const userDataPath = path.join(appData, 'carcassonne-tournament-manager');
-  console.log(`[AUDIT] Using userData path: ${userDataPath}`);
-  
+  // Must mirror src/main/main.ts: in development Electron uses `${userData}-dev`
+  const userDataProd = path.join(appData, 'carcassonne-tournament-manager');
+  const userDataDev = `${userDataProd}-dev`;
+  console.log(`[AUDIT] Electron dev userData (npm run dev): ${userDataDev}`);
+  console.log(`[AUDIT] Packaged/prod userData: ${userDataProd}`);
+
   const envs = [
     { name: 'colombia', db: 'tournament_co.db', dir: 'supabase/colombia' },
-    { name: 'international', db: 'tournament_int.db', dir: 'supabase/international' }
+    { name: 'international', db: 'tournament_int.db', dir: 'supabase/international' },
   ];
 
   for (const env of envs) {
-    const dbPath = path.join(userDataPath, env.db);
-    if (!fs.existsSync(dbPath)) {
-      console.log(`[${env.name}] Skipping - DB not found at ${dbPath}`);
+    const devDb = path.join(userDataDev, env.db);
+    const prodDb = path.join(userDataProd, env.db);
+    let dbPath = null;
+    if (fs.existsSync(devDb)) {
+      dbPath = devDb;
+    } else if (fs.existsSync(prodDb)) {
+      dbPath = prodDb;
+    }
+
+    if (!dbPath) {
+      console.log(`[${env.name}] Skipping - DB not found. Tried:\n  ${devDb}\n  ${prodDb}`);
       continue;
     }
+
+    console.log(`[${env.name}] Using SQLite: ${dbPath}`);
 
     console.log(`[${env.name}] Auditing...`);
     const db = new Database(dbPath);

@@ -70,7 +70,14 @@ describe('ReportService', () => {
       // Check Leaderboard
       const lb = result.sheets[0];
       expect(lb.rows).toHaveLength(2); // 2 players
-      expect(lb.rows[0]).toEqual([1, 'P1', '1.00', 1]);
+      expect(lb.rows[0]).toEqual([
+        1,
+        'P1',
+        '1.00',
+        1,
+        'tournaments.config.buchholz_bye_legacy',
+        'tournaments.reports.virtual_rule_none',
+      ]);
 
       // Check detailed results
       const details = result.sheets[1];
@@ -95,6 +102,8 @@ describe('ReportService', () => {
         'tournaments.reports.player',
         'tournaments.reports.total_points',
         'tournaments.reports.wins',
+        'tournaments.reports.buchholz_mode',
+        'tournaments.reports.virtual_opponent',
       ]);
       expect(result.rows).toHaveLength(1);
       expect(result.rows[0]).toEqual({
@@ -102,6 +111,8 @@ describe('ReportService', () => {
         'tournaments.reports.player': 'Winner',
         'tournaments.reports.total_points': '3.50',
         'tournaments.reports.wins': 3,
+        'tournaments.reports.buchholz_mode': 'tournaments.config.buchholz_bye_legacy',
+        'tournaments.reports.virtual_opponent': 'tournaments.reports.virtual_rule_none',
       });
     });
   });

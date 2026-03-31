@@ -24,6 +24,13 @@ export interface TiebreakCalculateOptions {
   tournamentPointsAverage: number;
 }
 
+/** Synthetic opponent score for a round with no result (bye / missing), same rules as Buchholz. */
+export interface BuchholzVirtualSlot {
+  roundNumber: number;
+  value: number;
+  kind: 'field_avg' | 'round_worst';
+}
+
 export class TiebreakService {
   /** Calculate a specific tiebreak criterion for all players */
   static async calculate(
@@ -104,6 +111,25 @@ export class TiebreakService {
     return false;
   }
 
+  /** Mínimo de puntos de torneo entre jugadores que tienen resultado en esa ronda (bye = no cuenta como oponente). */
+  static minPlayerTotalPointsAmongWhoPlayedRound(
+    roundIndex: number,
+    roundMatchesByRound: Match[][],
+    resultsByMatch: Record<number, MatchResultWithPlayer[]>,
+    playerTotalPoints: Record<number, number>
+  ): number {
+    const matches = roundMatchesByRound[roundIndex] || [];
+    let min = Infinity;
+    for (const match of matches) {
+      const results = resultsByMatch[match.id!] || [];
+      for (const r of results) {
+        const p = playerTotalPoints[r.player_id] ?? 0;
+        if (p < min) min = p;
+      }
+    }
+    return Number.isFinite(min) ? min : 0;
+  }
+
   static opponentTournamentPointsSumInRound(
     roundIndex: number,
     playerId: number,
@@ -122,6 +148,69 @@ export class TiebreakService {
     return 0;
   }
 
+  /**
+   * Entries Buchholz adds for rounds where the player has no result (empty for legacy / n_minus_1 without virtual).
+   */
+  static getBuchholzVirtualSlots(
+    playerId: number,
+    data: TiebreakData,
+    opts: TiebreakCalculateOptions
+  ): BuchholzVirtualSlot[] {
+    const mode = opts.buchholzByeMode;
+    const { rounds, roundMatches, resultsByMatch, playerTotalPoints } = data;
+    const avg = opts.tournamentPointsAverage;
+    const N = Math.max(1, opts.numberOfRounds);
+    const out: BuchholzVirtualSlot[] = [];
+
+    if (mode === 'legacy_virtual_avg' || mode === 'legacy_virtual_worst') {
+      for (let r = 0; r < rounds.length; r++) {
+        if (!this.playerPlayedRound(r, playerId, roundMatches, resultsByMatch)) {
+          const rn = rounds[r]!.round_number;
+          if (mode === 'legacy_virtual_avg') {
+            out.push({ roundNumber: rn, value: avg, kind: 'field_avg' });
+          } else {
+            out.push({
+              roundNumber: rn,
+              value: this.minPlayerTotalPointsAmongWhoPlayedRound(
+                r,
+                roundMatches,
+                resultsByMatch,
+                playerTotalPoints
+              ),
+              kind: 'round_worst',
+            });
+          }
+        }
+      }
+      return out;
+    }
+
+    if (mode === 'n_minus_1_virtual_avg' || mode === 'n_minus_1_virtual_worst') {
+      for (let rn = 1; rn <= N; rn++) {
+        const idx = rounds.findIndex((r) => r.round_number === rn);
+        if (idx < 0) continue;
+        if (this.playerPlayedRound(idx, playerId, roundMatches, resultsByMatch)) continue;
+        if (mode === 'n_minus_1_virtual_avg') {
+          out.push({ roundNumber: rn, value: avg, kind: 'field_avg' });
+        } else {
+          out.push({
+            roundNumber: rn,
+            value: this.minPlayerTotalPointsAmongWhoPlayedRound(
+              idx,
+              roundMatches,
+              resultsByMatch,
+              playerTotalPoints
+            ),
+            kind: 'round_worst',
+          });
+        }
+      }
+      return out;
+    }
+
+    return [];
+  }
+
   private static computeOpponentPointsTiebreak(
     playerId: number,
     data: TiebreakData,
@@ -134,7 +223,7 @@ export class TiebreakService {
     const avg = opts.tournamentPointsAverage;
     const N = Math.max(1, opts.numberOfRounds);
 
-    if (mode === 'legacy' || mode === 'legacy_virtual_avg') {
+    if (mode === 'legacy' || mode === 'legacy_virtual_avg' || mode === 'legacy_virtual_worst') {
       const flat: number[] = [];
       for (let r = 0; r < rounds.length; r++) {
         const matches = roundMatches[r] || [];
@@ -152,6 +241,20 @@ export class TiebreakService {
         for (let r = 0; r < rounds.length; r++) {
           if (!this.playerPlayedRound(r, playerId, roundMatches, resultsByMatch)) {
             flat.push(avg);
+          }
+        }
+      }
+      if (mode === 'legacy_virtual_worst') {
+        for (let r = 0; r < rounds.length; r++) {
+          if (!this.playerPlayedRound(r, playerId, roundMatches, resultsByMatch)) {
+            flat.push(
+              this.minPlayerTotalPointsAmongWhoPlayedRound(
+                r,
+                roundMatches,
+                resultsByMatch,
+                playerTotalPoints
+              )
+            );
           }
         }
       }
@@ -176,6 +279,15 @@ export class TiebreakService {
         );
       } else if (mode === 'n_minus_1_virtual_avg') {
         perRound.push(avg);
+      } else if (mode === 'n_minus_1_virtual_worst') {
+        perRound.push(
+          this.minPlayerTotalPointsAmongWhoPlayedRound(
+            idx,
+            roundMatches,
+            resultsByMatch,
+            playerTotalPoints
+          )
+        );
       }
     }
 

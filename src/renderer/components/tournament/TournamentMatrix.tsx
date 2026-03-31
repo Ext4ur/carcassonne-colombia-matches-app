@@ -1,6 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DatabaseService } from '../../services/database';
-import { PlayerStanding, MatchResultWithPlayer } from '../../types/tournament';
+import {
+  PlayerStanding,
+  MatchResultWithPlayer,
+  Match,
+  BuchholzByeMode,
+} from '../../types/tournament';
+import { TiebreakService, TiebreakData, BuchholzVirtualSlot } from '../../services/tiebreak';
+import { getBuchholzModeMeta } from '../../utils/buchholzModeMeta';
 import { useTranslation } from 'react-i18next';
 
 interface TournamentMatrixProps {
@@ -10,46 +17,100 @@ interface TournamentMatrixProps {
 
 interface MatrixData {
   [playerId: number]: {
-    [opponentId: number]: number; // Points scored BY opponent
+    [opponentId: number]: number; // Times faced
   };
 }
 
 export default function TournamentMatrix({ tournamentId, standings }: TournamentMatrixProps) {
   const { t } = useTranslation();
   const [matrixData, setMatrixData] = useState<MatrixData>({});
+  const [virtualSlotsByPlayer, setVirtualSlotsByPlayer] = useState<
+    Record<number, BuchholzVirtualSlot[]>
+  >({});
+  const [buchholzMode, setBuchholzMode] = useState<BuchholzByeMode>('legacy');
   const [loading, setLoading] = useState(true);
+
+  const standingsTotalsKey = useMemo(
+    () => standings.map((s) => `${s.player_id}:${s.total_points}`).join('|'),
+    [standings]
+  );
 
   useEffect(() => {
     const fetchMatrixData = async () => {
       setLoading(true);
       try {
-        const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-        const allResults: MatchResultWithPlayer[][] = [];
+        const [roundsRaw, config, tournament] = await Promise.all([
+          DatabaseService.getTournamentRounds(tournamentId),
+          DatabaseService.getTournamentConfig(tournamentId),
+          DatabaseService.getTournamentById(tournamentId),
+        ]);
 
-        for (const round of rounds) {
+        const roundsSorted = [...roundsRaw].sort((a, b) => a.round_number - b.round_number);
+        const roundMatchesByRound: Match[][] = [];
+        const resultsByMatch: Record<number, MatchResultWithPlayer[]> = {};
+        const data: MatrixData = {};
+
+        for (const round of roundsSorted) {
           const matches = await DatabaseService.getRoundMatches(round.id!);
+          roundMatchesByRound.push(matches);
           for (const match of matches) {
-            const results = await DatabaseService.getMatchResults(match.id!, tournamentId);
-            allResults.push(results as MatchResultWithPlayer[]);
+            const results = (await DatabaseService.getMatchResults(
+              match.id!,
+              tournamentId
+            )) as MatchResultWithPlayer[];
+            resultsByMatch[match.id!] = results;
+
+            results.forEach((res1) => {
+              if (!data[res1.player_id]) data[res1.player_id] = {};
+              results.forEach((res2) => {
+                if (res1.player_id !== res2.player_id) {
+                  data[res1.player_id][res2.player_id] =
+                    (data[res1.player_id][res2.player_id] || 0) + 1;
+                }
+              });
+            });
           }
         }
 
-        const data: MatrixData = {};
-
-        allResults.forEach((matchResults) => {
-          matchResults.forEach((res1) => {
-            if (!data[res1.player_id]) data[res1.player_id] = {};
-
-            matchResults.forEach((res2) => {
-              if (res1.player_id !== res2.player_id) {
-                // Increment occurrences
-                data[res1.player_id][res2.player_id] =
-                  (data[res1.player_id][res2.player_id] || 0) + 1;
-              }
-            });
-          });
+        const playerTotalPoints: Record<number, number> = {};
+        standings.forEach((s) => {
+          playerTotalPoints[s.player_id] = s.total_points;
         });
 
+        const tiebreakData: TiebreakData = {
+          rounds: roundsSorted,
+          roundMatches: roundMatchesByRound,
+          resultsByMatch,
+          playerTotalPoints,
+        };
+
+        const mode = (config?.buchholz_bye_mode ?? 'legacy') as BuchholzByeMode;
+        setBuchholzMode(mode);
+        const scheduledN = tournament?.number_of_rounds ?? 0;
+        const maxRoundNo =
+          roundsSorted.length > 0 ? Math.max(...roundsSorted.map((r) => r.round_number)) : 0;
+        const numberOfRounds = Math.max(1, scheduledN, maxRoundNo, roundsSorted.length);
+        const avg =
+          standings.length > 0
+            ? standings.reduce((s, x) => s + x.total_points, 0) / standings.length
+            : 0;
+
+        const bOpts = {
+          buchholzByeMode: mode,
+          numberOfRounds,
+          tournamentPointsAverage: avg,
+        };
+
+        const virtualMap: Record<number, BuchholzVirtualSlot[]> = {};
+        standings.forEach((s) => {
+          virtualMap[s.player_id] = TiebreakService.getBuchholzVirtualSlots(
+            s.player_id,
+            tiebreakData,
+            bOpts
+          );
+        });
+
+        setVirtualSlotsByPlayer(virtualMap);
         setMatrixData(data);
       } catch (error) {
         console.error('Error fetching matrix data:', error);
@@ -59,21 +120,30 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
     };
 
     fetchMatrixData();
-  }, [tournamentId, t]);
+  }, [tournamentId, standingsTotalsKey]);
 
   if (loading) return <div className="p-4">{t('common.loading')}</div>;
+  const modeMeta = getBuchholzModeMeta(buchholzMode);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-6 text-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800"></div>
-          <span>{t('tournaments.detail.best_rival')}</span>
+      <div className="flex flex-col gap-2 text-sm">
+        <div className="flex flex-wrap gap-6">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800"></div>
+            <span>{t('tournaments.detail.best_rival')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800"></div>
+            <span>{t('tournaments.detail.worst_rival')}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800"></div>
-          <span>{t('tournaments.detail.worst_rival')}</span>
-        </div>
+        <p className="text-gray-600 dark:text-gray-400 max-w-3xl">
+          {t('tournaments.detail.matrix_virtual_legend')}
+        </p>
+        <p className="text-gray-600 dark:text-gray-400 max-w-3xl">
+          {t('tournaments.detail.matrix_round_mode_line', { mode: t(modeMeta.modeLabelI18nKey) })}
+        </p>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700 text-xs">
@@ -90,6 +160,9 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
                   {index + 1}
                 </th>
               ))}
+              <th className="border border-gray-200 dark:border-gray-700 p-2 font-bold bg-violet-50 dark:bg-violet-950/30 min-w-[88px]">
+                {t('tournaments.detail.matrix_virtual_column')}
+              </th>
               <th className="border border-gray-200 dark:border-gray-700 p-2 font-bold bg-blue-50 dark:bg-blue-900/20">
                 {t('tournaments.buchholz_cut')}
               </th>
@@ -117,7 +190,6 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
               let lastMinId = -1;
 
               if (playedOpponentsPoints.length > 1) {
-                // Find first max
                 for (const colPlayer of standings) {
                   const timesPlayed = matrixData[rowPlayer.player_id]?.[colPlayer.player_id] || 0;
                   if (timesPlayed > 0 && colPlayer.total_points === maxPoints) {
@@ -126,7 +198,6 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
                   }
                 }
 
-                // Find last min
                 for (let i = standings.length - 1; i >= 0; i--) {
                   const colPlayer = standings[i];
                   const timesPlayed = matrixData[rowPlayer.player_id]?.[colPlayer.player_id] || 0;
@@ -137,6 +208,7 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
                 }
               }
 
+              const virtualSlots = virtualSlotsByPlayer[rowPlayer.player_id] ?? [];
               return (
                 <tr
                   key={rowPlayer.player_id}
@@ -186,6 +258,39 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
                       </td>
                     );
                   })}
+                  <td className="border border-gray-200 dark:border-gray-700 p-2 text-center align-top bg-violet-50/80 dark:bg-violet-950/20">
+                    {virtualSlots.length === 0 ? (
+                      <span className="text-gray-400 dark:text-gray-500">—</span>
+                    ) : (
+                      <div className="flex flex-col gap-1 items-center">
+                        {virtualSlots.map((slot) => (
+                          <div
+                            key={`${slot.roundNumber}-${slot.kind}`}
+                            className="leading-tight"
+                            title={
+                              slot.kind === 'field_avg'
+                                ? t('tournaments.detail.matrix_virtual_kind_avg')
+                                : t('tournaments.detail.matrix_virtual_kind_worst')
+                            }
+                          >
+                            <span className="font-mono font-semibold">
+                              {Number.isInteger(slot.value)
+                                ? String(slot.value)
+                                : slot.value.toFixed(1)}
+                            </span>
+                            <span className="text-gray-500 dark:text-gray-400 ml-0.5">
+                              R{slot.roundNumber}
+                            </span>
+                            <span className="block text-[10px] text-violet-700 dark:text-violet-300">
+                              {slot.kind === 'field_avg'
+                                ? t('tournaments.detail.matrix_virtual_abbr_avg')
+                                : t('tournaments.detail.matrix_virtual_abbr_worst')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="border border-gray-200 dark:border-gray-700 p-2 text-center font-bold bg-blue-50 dark:bg-blue-900/20">
                     {rowPlayer.tiebreak_values['opponent_points_drop_worst']?.toFixed(0) || '-'}
                   </td>

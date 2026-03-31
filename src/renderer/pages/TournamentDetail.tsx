@@ -1,19 +1,29 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DatabaseService } from '../services/database';
 import { SwissPairingService } from '../services/swiss';
 import { ReportService } from '../services/reports';
-import { Tournament, Round, Match, PlayerStanding } from '../types/tournament';
+import {
+  Tournament,
+  Round,
+  Match,
+  PlayerStanding,
+  TournamentConfig,
+  BuchholzByeMode,
+  normalizeBuchholzByeMode,
+} from '../types/tournament';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import MatchResultForm from '../components/tournament/MatchResultForm';
 import TournamentStats from '../components/tournament/TournamentStats';
 import TournamentMatrix from '../components/tournament/TournamentMatrix';
+import TournamentRoundMatrix from '../components/tournament/TournamentRoundMatrix';
 import RoundPreviewDialog from '../components/tournament/RoundPreviewDialog';
 import ManualPairingDialog from '../components/tournament/ManualPairingDialog';
 import AddPlayerDialog from '../components/tournament/AddPlayerDialog';
+import TournamentConfigComponent from '../components/tournament/TournamentConfig';
 import MultiSelect from '../components/common/MultiSelect';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
@@ -23,6 +33,8 @@ import { useNotifications } from '../contexts/NotificationContext';
 import { calculateNumberOfRounds } from '../utils/tournament';
 import { formatDateForDisplay } from '../utils/dateUtils';
 import { getEffectiveTiebreakCriteria } from '../constants';
+import { DEFAULT_TIEBREAK_CRITERIA } from '../utils/tiebreak';
+import { getDefaultScoringSystem } from '../utils/scoring';
 import { useTranslation } from 'react-i18next';
 
 export default function TournamentDetail() {
@@ -40,6 +52,7 @@ export default function TournamentDetail() {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [showStats, setShowStats] = useState(false);
   const [showMatrix, setShowMatrix] = useState(false);
+  const [matrixView, setMatrixView] = useState<'byOpponent' | 'byRound'>('byOpponent');
   const [isLoadingStandings, setIsLoadingStandings] = useState(false);
 
   // Preview State
@@ -75,6 +88,12 @@ export default function TournamentDetail() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [tiebreakCriteria, setTiebreakCriteria] = useState<any[]>([]);
   const [isAddPlayerOpen, setIsAddPlayerOpen] = useState(false);
+  const [isPrestartConfigOpen, setIsPrestartConfigOpen] = useState(false);
+  const [prestartConfigLoading, setPrestartConfigLoading] = useState(false);
+  const [prestartConfig, setPrestartConfig] = useState<TournamentConfig | null>(null);
+  const [prestartNumRounds, setPrestartNumRounds] = useState('1');
+  const [tournamentSettingsModalKey, setTournamentSettingsModalKey] = useState(0);
+  const [buchholzByeMode, setBuchholzByeMode] = useState<BuchholzByeMode>('legacy');
 
   const loadTournament = useCallback(async () => {
     if (!id) return;
@@ -136,6 +155,8 @@ export default function TournamentDetail() {
       if (data.length > 0) {
         const inProgress = data.find((r) => r.status === 'in_progress');
         setCurrentRound(inProgress || data[data.length - 1]);
+      } else {
+        setCurrentRound(null);
       }
       return data;
     } catch (error) {
@@ -150,6 +171,7 @@ export default function TournamentDetail() {
       setIsLoadingStandings(true);
       try {
         const config = await DatabaseService.getTournamentConfig(tournament.id);
+        setBuchholzByeMode(normalizeBuchholzByeMode(config?.buchholz_bye_mode));
         if (isCancelled?.()) return;
         // setTournamentConfig(config || null);
         const data = await SwissPairingService.calculateStandings(
@@ -179,6 +201,7 @@ export default function TournamentDetail() {
     if (!tournament?.id) return;
     try {
       const config = await DatabaseService.getTournamentConfig(tournament.id);
+      setBuchholzByeMode(normalizeBuchholzByeMode(config?.buchholz_bye_mode));
       setTiebreakCriteria(getEffectiveTiebreakCriteria(config?.tiebreak_criteria));
     } catch (error) {
       console.error('Error loading tiebreak criteria:', error);
@@ -190,6 +213,47 @@ export default function TournamentDetail() {
       loadTournament();
     }
   }, [id, loadTournament]);
+
+  useEffect(() => {
+    const tournamentId = tournament?.id;
+    if (!isPrestartConfigOpen || tournamentId == null || !tournament) return;
+    const ppm = tournament.players_per_match;
+    const numRoundsHint = tournament.number_of_rounds;
+    let cancelled = false;
+    setPrestartConfigLoading(true);
+    (async () => {
+      try {
+        const c = await DatabaseService.getTournamentConfig(tournamentId);
+        if (cancelled) return;
+        setPrestartConfig(
+          c ?? {
+            tournament_id: tournamentId,
+            avoid_rematches: true,
+            tiebreak_criteria: DEFAULT_TIEBREAK_CRITERIA,
+            scoring_system: getDefaultScoringSystem(ppm),
+            bye_selection: 'worst',
+            player_display_mode: 'per_player',
+            pairing_algorithm: 'greedy',
+            buchholz_bye_mode: 'legacy',
+          }
+        );
+        setPrestartNumRounds(
+          String(numRoundsHint || calculateNumberOfRounds(standings.length || 0))
+        );
+      } finally {
+        if (!cancelled) setPrestartConfigLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isPrestartConfigOpen,
+    tournament?.id,
+    tournament?.number_of_rounds,
+    tournament?.players_per_match,
+    standings.length,
+  ]);
 
   useEffect(() => {
     if (!tournament) return;
@@ -352,7 +416,26 @@ export default function TournamentDetail() {
 
       const nextRoundNumber = rounds.length + 1;
 
-      await SwissPairingService.createRoundFromPairings(tournament.id, nextRoundNumber, pairings);
+      const startStats = await DatabaseService.getPlayerStartStatistics(tournament.id);
+      const pairingsWithStarts = await Promise.all(
+        pairings.map(async (p) => {
+          if (!p.player2) return p;
+          const id1 = (p.player1.player_id ?? p.player1.id) as number;
+          const id2 = (p.player2.player_id ?? p.player2.id) as number;
+          const startPlayerId = await SwissPairingService.pickStartPlayerForPair(
+            id1,
+            id2,
+            startStats
+          );
+          return { ...p, startPlayerId };
+        })
+      );
+
+      await SwissPairingService.createRoundFromPairings(
+        tournament.id,
+        nextRoundNumber,
+        pairingsWithStarts
+      );
 
       const roundsData = await loadRounds();
       const newRound = roundsData.length > 0 ? roundsData[roundsData.length - 1] : null;
@@ -479,6 +562,112 @@ export default function TournamentDetail() {
     }
   };
 
+  const tournamentConfigReadOnly = useMemo(() => rounds.length > 0, [rounds.length]);
+
+  const canOfferDeleteLastRound = useMemo(() => {
+    if (!tournament || tournament.status === 'completed' || rounds.length === 0) return false;
+    const last = rounds[rounds.length - 1];
+    if (!last?.id || last.status !== 'pending' || currentRound?.id !== last.id) return false;
+    return !matches.some((m) => m.id && (matchResultsMap[m.id]?.length ?? 0) > 0);
+  }, [tournament, rounds, currentRound?.id, matches, matchResultsMap]);
+
+  const handlePrestartConfigSave = async (
+    cfg: Partial<TournamentConfig> & {
+      bye_selection?: 'worst' | 'random' | 'round_robin';
+      player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
+      pairing_algorithm?: 'greedy' | 'backtracking';
+      buchholz_bye_mode?: BuchholzByeMode;
+    }
+  ) => {
+    if (!tournament?.id) return;
+    setIsLoading(true);
+    try {
+      const n = Math.max(1, Math.min(99, parseInt(String(prestartNumRounds), 10) || 1));
+      await DatabaseService.updateTournament(tournament.id, { number_of_rounds: n });
+
+      const existing = await DatabaseService.getTournamentConfig(tournament.id);
+      if (!existing) {
+        await DatabaseService.createTournamentConfig({
+          tournament_id: tournament.id,
+          avoid_rematches: cfg.avoid_rematches ?? true,
+          tiebreak_criteria: cfg.tiebreak_criteria ?? DEFAULT_TIEBREAK_CRITERIA,
+          scoring_system:
+            cfg.scoring_system ?? getDefaultScoringSystem(tournament.players_per_match),
+          bye_selection: cfg.bye_selection ?? 'worst',
+          player_display_mode: cfg.player_display_mode ?? 'per_player',
+          pairing_algorithm: cfg.pairing_algorithm ?? 'greedy',
+          buchholz_bye_mode: cfg.buchholz_bye_mode ?? 'legacy',
+        });
+      } else {
+        await DatabaseService.updateTournamentConfig(tournament.id, {
+          avoid_rematches: cfg.avoid_rematches,
+          tiebreak_criteria: cfg.tiebreak_criteria,
+          scoring_system: cfg.scoring_system,
+          bye_selection: cfg.bye_selection,
+          player_display_mode: cfg.player_display_mode,
+          pairing_algorithm: cfg.pairing_algorithm,
+          buchholz_bye_mode: cfg.buchholz_bye_mode,
+        });
+      }
+
+      addNotification({
+        message: t('tournaments.detail.prestart_config_success'),
+        type: 'success',
+      });
+      setIsPrestartConfigOpen(false);
+      await loadTournament();
+      const roundsData = await loadRounds();
+      await loadStandings(roundsData);
+      await loadTiebreakCriteria();
+    } catch (e) {
+      console.error(e);
+      addNotification({
+        message: t('tournaments.detail.prestart_config_error'),
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteLastRound = async () => {
+    if (!tournament?.id || !currentRound?.id || !canOfferDeleteLastRound) return;
+    if (!confirm(t('tournaments.detail.delete_last_round_confirm'))) return;
+    setIsLoading(true);
+    try {
+      const res = await DatabaseService.deleteLastPendingRoundWithoutResults(
+        currentRound.id,
+        tournament.id
+      );
+      if (!res.deleted) {
+        const key =
+          res.reason === 'has_results'
+            ? 'tournaments.detail.delete_last_round_error_has_results'
+            : 'tournaments.detail.delete_last_round_error_generic';
+        addNotification({ message: t(key), type: 'error' });
+        return;
+      }
+      addNotification({
+        message: t('tournaments.detail.delete_last_round_success'),
+        type: 'success',
+      });
+      await loadTournament();
+      const roundsData = await loadRounds();
+      setMatches([]);
+      setMatchResultsMap({});
+      setMatchPlayersMap({});
+      await loadStandings(roundsData);
+    } catch (e) {
+      console.error(e);
+      addNotification({
+        message: t('tournaments.detail.delete_last_round_error_generic'),
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleOpenEditModal = async () => {
     if (!tournament) return;
     const dateStr = tournament.date?.includes('T')
@@ -579,10 +768,13 @@ export default function TournamentDetail() {
   }, [tournament, loadTiebreakCriteria]);
 
   const getTiebreakValue = (standing: PlayerStanding, criterionId: string): string => {
+    if (criterionId === 'head_to_head') {
+      return '\u2014';
+    }
+
     const value = standing.tiebreak_values[criterionId];
     if (value === undefined || value === null) return '-';
 
-    // Format based on criterion type
     if (criterionId === 'wins') {
       return value.toString();
     } else if (
@@ -590,8 +782,6 @@ export default function TournamentDetail() {
       criterionId === 'opponent_points_drop_best_worst'
     ) {
       return Number(value.toFixed(2)).toString();
-    } else if (criterionId === 'head_to_head') {
-      return value > 0 ? '✅' : value < 0 ? '❌' : '-';
     } else if (criterionId === 'point_difference') {
       return value > 0 ? `+${value.toFixed(0)}` : value.toFixed(0);
     }
@@ -755,6 +945,7 @@ export default function TournamentDetail() {
       .map((criterion) => ({
         key: `tiebreak_${criterion.id}`,
         header: getTiebreakLabel(criterion.id),
+        title: criterion.id === 'head_to_head' ? t('stats.h2h_column_hint') : undefined,
         render: (standing: PlayerStanding) => getTiebreakValue(standing, criterion.id),
       })),
     {
@@ -1104,6 +1295,31 @@ export default function TournamentDetail() {
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
               {t(`tournaments.types.${tournament.type}`)} • {formatDateForDisplay(tournament.date)}
+              {(() => {
+                const planned =
+                  tournament.number_of_rounds || calculateNumberOfRounds(standings.length || 0);
+                const safePlanned = Math.max(1, planned);
+                const cur =
+                  currentRound?.round_number ??
+                  (rounds.length > 0 ? rounds[rounds.length - 1].round_number : 0);
+                return (
+                  <>
+                    {' • '}
+                    {safePlanned === 1
+                      ? t('tournaments.detail.rounds_planned_one', { count: safePlanned })
+                      : t('tournaments.detail.rounds_planned_other', { count: safePlanned })}
+                    {rounds.length > 0 && cur > 0 && (
+                      <>
+                        {' • '}
+                        {t('tournaments.detail.rounds_progress', {
+                          current: cur,
+                          total: safePlanned,
+                        })}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
               {tournament.status === 'completed' && (
                 <span className="ml-2 px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded text-sm font-medium">
                   {t('tournaments.statuses.completed')}
@@ -1119,11 +1335,26 @@ export default function TournamentDetail() {
               disabled={tournament?.status === 'completed' || rounds.length > 1}
               title={
                 rounds.length > 1
-                  ? 'Solo se pueden agregar jugadores durante la primera ronda'
-                  : 'Agregar jugador al torneo'
+                  ? t('tournaments.detail.add_player_blocked_title')
+                  : t('tournaments.detail.add_player_title')
               }
             >
               + {t('players.new')}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setTournamentSettingsModalKey((k) => k + 1);
+                setIsPrestartConfigOpen(true);
+              }}
+              title={
+                tournamentConfigReadOnly
+                  ? t('tournaments.detail.tournament_settings_view_hint')
+                  : t('tournaments.detail.prestart_settings_hint')
+              }
+            >
+              {t('tournaments.detail.prestart_settings')}
             </Button>
             <Button variant="secondary" size="sm" onClick={handleOpenEditModal}>
               {t('common.edit')}
@@ -1244,12 +1475,32 @@ export default function TournamentDetail() {
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold">{t('tournaments.detail.matrix_title')}</h2>
-            <Button variant="secondary" size="sm" onClick={() => setShowMatrix(false)}>
-              {t('common.close')}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={matrixView === 'byOpponent' ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => setMatrixView('byOpponent')}
+              >
+                {t('tournaments.detail.matrix_view_by_opponent')}
+              </Button>
+              <Button
+                variant={matrixView === 'byRound' ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => setMatrixView('byRound')}
+              >
+                {t('tournaments.detail.matrix_view_by_round')}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setShowMatrix(false)}>
+                {t('common.close')}
+              </Button>
+            </div>
           </div>
           <div className="card">
-            <TournamentMatrix tournamentId={Number(id)} standings={standings} />
+            {matrixView === 'byOpponent' ? (
+              <TournamentMatrix tournamentId={Number(id)} standings={standings} />
+            ) : (
+              <TournamentRoundMatrix tournamentId={Number(id)} standings={standings} />
+            )}
           </div>
         </div>
       )}
@@ -1270,6 +1521,7 @@ export default function TournamentDetail() {
               standingsForPodium={standings}
               standings={filteredStandings}
               tiebreakCriteria={tiebreakCriteria}
+              buchholzByeMode={buchholzByeMode}
             />
           )}
         </div>
@@ -1298,7 +1550,21 @@ export default function TournamentDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
         <div className="card lg:col-span-1">
           <div className="flex flex-col gap-3 mb-4">
-            <h2 className="text-xl font-bold">{t('tournaments.detail.rounds')}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-xl font-bold">{t('tournaments.detail.rounds')}</h2>
+              {canOfferDeleteLastRound && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
+                  onClick={handleDeleteLastRound}
+                  disabled={isLoading}
+                  title={t('tournaments.detail.delete_last_round_title')}
+                >
+                  {t('tournaments.detail.delete_last_round')}
+                </Button>
+              )}
+            </div>
             {rounds.length === 0 ? (
               <div className="flex flex-col gap-2">
                 <Button
@@ -1645,6 +1911,62 @@ export default function TournamentDetail() {
         previewData={previewData}
       />
 
+      {tournament?.id && (
+        <Modal
+          isOpen={isPrestartConfigOpen}
+          onClose={() => {
+            if (!isLoading) setIsPrestartConfigOpen(false);
+          }}
+          title={
+            tournamentConfigReadOnly
+              ? t('tournaments.detail.tournament_settings_view_title')
+              : t('tournaments.detail.prestart_settings_title')
+          }
+          size="lg"
+        >
+          {prestartConfigLoading || !prestartConfig ? (
+            <p className="text-center text-gray-500 dark:text-gray-400 py-6">
+              {t('common.loading')}
+            </p>
+          ) : (
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+              {tournamentConfigReadOnly && (
+                <p
+                  className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 border border-amber-200/80 dark:border-amber-800/50 rounded-lg px-3 py-2"
+                  role="status"
+                >
+                  {t('tournaments.detail.tournament_settings_readonly_notice')}
+                </p>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {t('tournaments.form.rounds_label')}
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={99}
+                  value={prestartNumRounds}
+                  disabled={tournamentConfigReadOnly}
+                  onChange={(e) => setPrestartNumRounds(e.target.value)}
+                />
+              </div>
+              <TournamentConfigComponent
+                key={`tournament-settings-${tournamentSettingsModalKey}`}
+                tournamentId={tournament.id}
+                playersPerMatch={tournament.players_per_match}
+                config={prestartConfig}
+                readOnly={tournamentConfigReadOnly}
+                cancelLabel={tournamentConfigReadOnly ? t('common.close') : undefined}
+                onSave={handlePrestartConfigSave}
+                onCancel={() => {
+                  if (!isLoading) setIsPrestartConfigOpen(false);
+                }}
+              />
+            </div>
+          )}
+        </Modal>
+      )}
       {tournament?.id && (
         <AddPlayerDialog
           isOpen={isAddPlayerOpen}

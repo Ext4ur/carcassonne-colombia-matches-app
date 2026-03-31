@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Tournament, PlayerStanding } from '../../types/tournament';
+import { Tournament, PlayerStanding, BuchholzByeMode } from '../../types/tournament';
 import { Bar } from 'react-chartjs-2';
 import { useTranslation } from 'react-i18next';
 import {
@@ -11,6 +11,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import { getBuchholzModeMeta } from '../../utils/buchholzModeMeta';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -19,16 +20,20 @@ interface TournamentStatsProps {
   standingsForPodium: PlayerStanding[];
   standings: PlayerStanding[];
   tiebreakCriteria: any[];
+  buchholzByeMode: BuchholzByeMode;
 }
 
 export default function TournamentStats({
   standingsForPodium,
   standings,
   tiebreakCriteria,
+  buchholzByeMode,
 }: TournamentStatsProps) {
   const { t } = useTranslation();
+  const modeMeta = getBuchholzModeMeta(buchholzByeMode);
   const top4 = standingsForPodium.slice(0, 4);
   const enabledCriteria = tiebreakCriteria.filter((c) => c.enabled && c.id !== 'wins');
+  const chartCriteria = enabledCriteria.filter((c) => c.id !== 'head_to_head');
   const CHART_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7'];
 
   const getCriterionData = (criterionId: string) => {
@@ -38,7 +43,7 @@ export default function TournamentStats({
       return value !== undefined && value !== null ? value : 0;
     });
     const color =
-      CHART_COLORS[enabledCriteria.findIndex((c) => c.id === criterionId) % CHART_COLORS.length];
+      CHART_COLORS[chartCriteria.findIndex((c) => c.id === criterionId) % CHART_COLORS.length];
     return {
       labels,
       datasets: [
@@ -129,6 +134,22 @@ export default function TournamentStats({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card">
+          <h3 className="text-lg font-bold mb-2">{t('stats.buchholz_mode_title')}</h3>
+          <p className="text-sm text-gray-700 dark:text-gray-300">{t(modeMeta.modeLabelI18nKey)}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            {modeMeta.usesVirtualOpponent
+              ? t('stats.buchholz_virtual_yes')
+              : t('stats.buchholz_virtual_no')}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {modeMeta.virtualKind === 'field_avg'
+              ? t('stats.buchholz_virtual_kind_avg')
+              : modeMeta.virtualKind === 'round_worst'
+                ? t('stats.buchholz_virtual_kind_worst')
+                : t('stats.buchholz_virtual_kind_none')}
+          </p>
+        </div>
+        <div className="card">
           <h3 className="text-lg font-bold mb-4">🏆 {t('stats.wins_distribution')}</h3>
           <Bar
             data={winsData}
@@ -147,7 +168,7 @@ export default function TournamentStats({
           />
         </div>
 
-        {enabledCriteria.map((criterion) => (
+        {chartCriteria.map((criterion) => (
           <div key={criterion.id} className="card">
             <h3 className="text-lg font-bold mb-4">{getCriterionLabel(criterion.id)}</h3>
             <Bar

@@ -117,13 +117,9 @@ export default function ManualPairingDialog({
     for (let i = 1; i <= numTables; i++) {
       const tableItems = columns[`table-${i}`].items;
       if (tableItems.length === 2) {
-        // Randomly assign start player for manual pairings
-        const startPlayerId =
-          Math.random() > 0.5 ? tableItems[0].player_id : tableItems[1].player_id;
         pairings.push({
           player1: tableItems[0],
           player2: tableItems[1],
-          startPlayerId,
         });
       } else if (tableItems.length === 1) {
         // Bye

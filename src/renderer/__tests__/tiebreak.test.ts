@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TiebreakService, TiebreakData } from '../services/tiebreak';
 import { BuchholzByeMode, Round } from '../types/tournament';
+import { getBuchholzModeMeta } from '../utils/buchholzModeMeta';
 
 function computeOpp(
   playerId: number,
@@ -19,6 +20,35 @@ function computeOpp(
 }
 
 describe('TiebreakService', () => {
+  describe('buchholz mode metadata', () => {
+    it('marks virtual and kind consistently for each mode', () => {
+      expect(getBuchholzModeMeta('legacy')).toMatchObject({
+        usesVirtualOpponent: false,
+        virtualKind: 'none',
+      });
+      expect(getBuchholzModeMeta('n_minus_1')).toMatchObject({
+        usesVirtualOpponent: false,
+        virtualKind: 'none',
+      });
+      expect(getBuchholzModeMeta('legacy_virtual_avg')).toMatchObject({
+        usesVirtualOpponent: true,
+        virtualKind: 'field_avg',
+      });
+      expect(getBuchholzModeMeta('n_minus_1_virtual_avg')).toMatchObject({
+        usesVirtualOpponent: true,
+        virtualKind: 'field_avg',
+      });
+      expect(getBuchholzModeMeta('legacy_virtual_worst')).toMatchObject({
+        usesVirtualOpponent: true,
+        virtualKind: 'round_worst',
+      });
+      expect(getBuchholzModeMeta('n_minus_1_virtual_worst')).toMatchObject({
+        usesVirtualOpponent: true,
+        virtualKind: 'round_worst',
+      });
+    });
+  });
+
   // Mock data setup
   const mockData: TiebreakData = {
     rounds: [{ id: 1, tournament_id: 1, round_number: 1, status: 'completed' }],
@@ -128,6 +158,72 @@ describe('TiebreakService', () => {
       );
       // P1: round1 opp sum = P2's 2 pts, round2 virtual = avg -> [2, avg] cut worst -> 2
       expect(r1).toBe(2);
+    });
+
+    it('legacy_virtual_worst injects min field score for a bye round', () => {
+      const rounds: Round[] = [
+        { id: 1, tournament_id: 1, round_number: 1, status: 'completed' },
+        { id: 2, tournament_id: 1, round_number: 2, status: 'completed' },
+      ];
+      const roundMatches = [
+        [{ id: 101, round_id: 1, match_number: 1, status: 'completed' as const }],
+        [],
+      ];
+      const resultsByMatch = {
+        101: [
+          { match_id: 101, player_id: 1, position: 1, points: 100, tournament_points: 1 },
+          { match_id: 101, player_id: 2, position: 2, points: 50, tournament_points: 0 },
+        ],
+      };
+      const playerTotalPoints = { 1: 1, 2: 0 };
+      const data: TiebreakData = { rounds, roundMatches, resultsByMatch, playerTotalPoints };
+      const v = computeOpp(
+        1,
+        data,
+        { buchholzByeMode: 'legacy_virtual_worst', numberOfRounds: 2, tournamentPointsAverage: 0 },
+        true,
+        false
+      );
+      // flat: opponent 0 + virtual min for empty r2 = 0; [0,0] drop worst -> 0
+      expect(v).toBe(0);
+    });
+  });
+
+  describe('getBuchholzVirtualSlots', () => {
+    it('returns empty for legacy mode', () => {
+      expect(
+        TiebreakService.getBuchholzVirtualSlots(1, mockData, {
+          buchholzByeMode: 'legacy',
+          numberOfRounds: 1,
+          tournamentPointsAverage: 1,
+        })
+      ).toEqual([]);
+    });
+
+    it('lists virtual avg for each round without a result (legacy_virtual_avg)', () => {
+      const rounds: Round[] = [
+        { id: 1, tournament_id: 1, round_number: 1, status: 'completed' },
+        { id: 2, tournament_id: 1, round_number: 2, status: 'completed' },
+      ];
+      const roundMatches = [
+        [{ id: 101, round_id: 1, match_number: 1, status: 'completed' as const }],
+        [],
+      ];
+      const resultsByMatch = {
+        101: [
+          { match_id: 101, player_id: 1, position: 1, points: 100, tournament_points: 1 },
+          { match_id: 101, player_id: 2, position: 2, points: 50, tournament_points: 0 },
+        ],
+      };
+      const playerTotalPoints = { 1: 1, 2: 0 };
+      const data: TiebreakData = { rounds, roundMatches, resultsByMatch, playerTotalPoints };
+      const avg = (1 + 0) / 2;
+      const slots = TiebreakService.getBuchholzVirtualSlots(1, data, {
+        buchholzByeMode: 'legacy_virtual_avg',
+        numberOfRounds: 2,
+        tournamentPointsAverage: avg,
+      });
+      expect(slots).toEqual([{ roundNumber: 2, value: avg, kind: 'field_avg' }]);
     });
   });
 

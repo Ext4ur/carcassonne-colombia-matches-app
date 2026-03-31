@@ -16,6 +16,36 @@ import { calculateNumberOfRounds } from '../utils/tournament';
 import { getPlayerDisplayName, type PlayerDisplayMode } from '../utils/playerDisplayName';
 import i18n from '../i18n/config';
 
+function binomial(n: number, k: number): number {
+  if (k < 0 || k > n) return 0;
+  if (k > n - k) k = n - k;
+  let r = 1;
+  for (let i = 1; i <= k; i++) {
+    r = (r * (n - k + i)) / i;
+  }
+  return Math.round(r);
+}
+
+function combinationsOf<T>(arr: T[], k: number): T[][] {
+  if (k === 0) return [[]];
+  if (arr.length < k) return [];
+  const out: T[][] = [];
+  const path: T[] = [];
+  function dfs(start: number) {
+    if (path.length === k) {
+      out.push([...path]);
+      return;
+    }
+    for (let i = start; i < arr.length; i++) {
+      path.push(arr[i]!);
+      dfs(i + 1);
+      path.pop();
+    }
+  }
+  dfs(0);
+  return out;
+}
+
 export class SwissPairingService {
   static async generateFirstRound(tournamentId: number): Promise<void> {
     // Get all registered players
@@ -500,14 +530,21 @@ export class SwissPairingService {
     const warnings: string[] = [];
 
     const pairingAlgorithm = config?.pairing_algorithm || 'greedy';
+    const avoidRematches = config?.avoid_rematches ?? true;
+    const useBacktrackingSearch =
+      pairingAlgorithm === 'backtracking' || (pairingAlgorithm === 'greedy' && avoidRematches);
+
     let results: PlayerStanding[][] | null = null;
     const sortedAvailable = [...availablePlayers].sort((a, b) => b.total_points - a.total_points);
 
-    if (pairingAlgorithm === 'backtracking') {
-      // Robust backtracking: Try with 0 rematches first, then 1, 2, 3...
-      // This ensures we find the solution with MINIMUM possible rematches.
-      console.log(`[Swiss] Starting robust backtracking for ${sortedAvailable.length} players...`);
-      for (let maxRematches = 0; maxRematches <= 5; maxRematches++) {
+    if (useBacktrackingSearch) {
+      const n = sortedAvailable.length;
+      const maxRematchBudget = Math.min(
+        40,
+        Math.max(8, Math.ceil(n / 2) + (playersPerMatch > 2 ? Math.min(n, 12) : 0))
+      );
+      console.log(`[Swiss] Starting robust backtracking for ${n} players...`);
+      for (let maxRematches = 0; maxRematches <= maxRematchBudget; maxRematches++) {
         results = this.findBestPairings(
           sortedAvailable,
           previousOpponents,
@@ -528,7 +565,7 @@ export class SwissPairingService {
       }
     } else {
       // Greedy logic (used as primary or fallback)
-      if (pairingAlgorithm === 'backtracking') {
+      if (useBacktrackingSearch) {
         warnings.push(
           i18n.t('tournaments.preview.backtracking_failed', {
             defaultValue:
@@ -545,7 +582,6 @@ export class SwissPairingService {
 
       while (remainingGreedy.length >= playersPerMatch) {
         const matchPlayers = [remainingGreedy.shift()!];
-        const avoidRematches = config?.avoid_rematches ?? true;
 
         // Fill the match
         while (matchPlayers.length < playersPerMatch && remainingGreedy.length > 0) {
@@ -609,16 +645,14 @@ export class SwissPairingService {
 
     const first = remaining[0];
     const rest = remaining.slice(1);
+    const k = playersPerMatch - 1;
 
-    // Optimization: Restrict the search to a reasonable "window" of candidates to keep performance high.
-    // However, we must ensure we try enough combinations.
+    // For N=2 we must try every possible partner; a truncated window can miss valid 0-rematch pairings
+    // and fall back to greedy (more rematches). For N>2 keep a bounded window for performance.
     const searchWindowSize = Math.max(15, Math.floor(rest.length / 2));
-    const searchWindow = Math.min(rest.length, searchWindowSize);
+    const searchWindow =
+      playersPerMatch === 2 ? rest.length : Math.min(rest.length, searchWindowSize);
 
-    // To properly support N players per match, we can't just take rest.slice(i, i+N-1).
-    // We need to explore combinations. But for performance, if N is small (usually 2-4),
-    // we can use a nested loop or a simplified combination picker.
-    // For N=2, this is just i loop.
     if (playersPerMatch === 2) {
       for (let i = 0; i < searchWindow; i++) {
         const second = rest[i];
@@ -642,32 +676,59 @@ export class SwissPairingService {
         }
       }
     } else {
-      // Generic case for N > 2: Just take contiguous for now but improve later if needed.
-      // Swiss pairing with 3+ players usually pairs contiguous ranks anyway.
-      for (let i = 0; i <= searchWindow - (playersPerMatch - 1); i++) {
-        const candidates = rest.slice(i, i + playersPerMatch - 1);
-        const matchPlayers = [first, ...candidates];
-
-        let matchRematches = 0;
+      const countRematchesInMatch = (matchPlayers: PlayerStanding[]): number => {
+        let m = 0;
         for (let j = 0; j < matchPlayers.length; j++) {
           const p = matchPlayers[j];
           const others = matchPlayers.slice(j + 1);
           const opps = previousOpponents[p.player_id] || [];
-          matchRematches += others.filter((o) => opps.includes(o.player_id)).length;
+          m += others.filter((o) => opps.includes(o.player_id)).length;
         }
+        return m;
+      };
 
-        if (currentRematches + matchRematches <= maxTotalRematches) {
-          const subRemaining = [...rest.slice(0, i), ...rest.slice(i + playersPerMatch - 1)];
-          const result = this.findBestPairings(
-            subRemaining,
-            previousOpponents,
-            playersPerMatch,
-            maxTotalRematches,
-            currentRematches + matchRematches
-          );
+      const comboCount = binomial(rest.length, k);
+      const useComboEnumeration =
+        k > 0 && comboCount <= 4000 && (remaining.length <= 16 || comboCount <= 600);
 
-          if (result) {
-            return [matchPlayers, ...result];
+      if (useComboEnumeration) {
+        for (const combo of combinationsOf(rest, k)) {
+          const matchPlayers = [first, ...combo];
+          const matchRematches = countRematchesInMatch(matchPlayers);
+          if (currentRematches + matchRematches <= maxTotalRematches) {
+            const comboIds = new Set(combo.map((p) => p.player_id));
+            const subRemaining = rest.filter((p) => !comboIds.has(p.player_id));
+            const result = this.findBestPairings(
+              subRemaining,
+              previousOpponents,
+              playersPerMatch,
+              maxTotalRematches,
+              currentRematches + matchRematches
+            );
+            if (result) {
+              return [matchPlayers, ...result];
+            }
+          }
+        }
+      } else {
+        for (let i = 0; i <= searchWindow - k; i++) {
+          const candidates = rest.slice(i, i + k);
+          const matchPlayers = [first, ...candidates];
+          const matchRematches = countRematchesInMatch(matchPlayers);
+
+          if (currentRematches + matchRematches <= maxTotalRematches) {
+            const subRemaining = [...rest.slice(0, i), ...rest.slice(i + k)];
+            const result = this.findBestPairings(
+              subRemaining,
+              previousOpponents,
+              playersPerMatch,
+              maxTotalRematches,
+              currentRematches + matchRematches
+            );
+
+            if (result) {
+              return [matchPlayers, ...result];
+            }
           }
         }
       }
@@ -750,6 +811,19 @@ export class SwissPairingService {
     }
 
     return { pointGroups, sortedPoints };
+  }
+
+  /** Same rules as automatic round generation: balance starts, then recency, then random tiebreak. */
+  static async pickStartPlayerForPair(
+    playerId1: number,
+    playerId2: number,
+    startStats: Record<number, { totalStarts: number; lastStartRound: number }>
+  ): Promise<number> {
+    const { startPlayerId } = await this.determineStartPlayer(
+      [{ player_id: playerId1 }, { player_id: playerId2 }],
+      startStats
+    );
+    return startPlayerId;
   }
 
   private static async determineStartPlayer(
@@ -938,27 +1012,19 @@ export class SwissPairingService {
       });
     }
 
-    // Sort standings
-    // Priority: Active > Wins (1st places) > Total tournament points > configured tiebreakers
-    // (Previously total_points came before wins, so two players with the same win count could
-    // rank by placement points from non-win games and never reach point_difference — confusing in UI.)
+    // Sort standings: Active > Wins > enabled tiebreak criteria in user order (no extra total_points step).
     return Object.values(standings).sort((a, b) => {
       // 0. Active Status (Active first)
       if (a.active !== b.active) {
         return a.active ? -1 : 1;
       }
 
-      // 1. Wins (first places) — primary column in leaderboard
+      // 1. Wins (first places)
       if (b.wins !== a.wins) {
         return b.wins - a.wins;
       }
 
-      // 2. Total tournament points (sum of scoring-system points per match)
-      if (b.total_points !== a.total_points) {
-        return b.total_points - a.total_points;
-      }
-
-      // 3. Tiebreakers from config ('wins' is already applied above)
+      // 2. Configured tiebreakers in order ('wins' already applied above)
       for (const criterion of criteria) {
         if (!criterion.enabled) continue;
         if (criterion.id === 'wins') continue;
@@ -988,7 +1054,7 @@ export class SwissPairingService {
         }
       }
 
-      // 3. Random fallback (using ID)
+      // Stable fallback
       return a.player_id - b.player_id;
     });
   }

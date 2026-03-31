@@ -514,6 +514,23 @@ export class DatabaseService {
     ]);
   }
 
+  static async getTournamentByNameDateAndPlace(
+    name: string,
+    date: string,
+    placeId: number
+  ): Promise<Tournament[]> {
+    return this.query<Tournament>(
+      'SELECT * FROM tournaments WHERE name = ? AND date = ? AND place_id = ?',
+      [name, date, placeId]
+    );
+  }
+
+  static async getPlayersByExactName(name: string): Promise<Player[]> {
+    const trimmed = name.trim();
+    if (!trimmed) return [];
+    return this.query<Player>('SELECT * FROM players WHERE TRIM(name) = ?', [trimmed]);
+  }
+
   static async getPlayerByBGAUsername(bgaUsername: string): Promise<Player[]> {
     if (!bgaUsername) return [];
     return this.query<Player>('SELECT * FROM players WHERE bga_username = ?', [bgaUsername]);
@@ -885,6 +902,92 @@ export class DatabaseService {
 
     await SyncService.addToQueue('rounds', 'UPDATE', { uuid, ...payload });
     dbCache.invalidateAllRounds();
+  }
+
+  /** Borra partido y filas relacionadas encolando DELETE para sync (Supabase). */
+  private static async deleteMatchWithDependentsSync(matchId: number): Promise<void> {
+    await this.deleteMatchResults(matchId);
+    const mps = await this.query<{ uuid: string }>(
+      'SELECT uuid FROM match_players WHERE match_id = ?',
+      [matchId]
+    );
+    await this.execute('DELETE FROM match_players WHERE match_id = ?', [matchId]);
+    for (const r of mps) {
+      if (r.uuid) {
+        await SyncService.addToQueue('match_players', 'DELETE', { uuid: r.uuid });
+      }
+    }
+    await this.deleteMatch(matchId);
+  }
+
+  /**
+   * Elimina la ronda solo si es la de mayor número, está pending y no hay match_results en sus partidos.
+   * Si no quedan rondas y el torneo estaba in_progress, pasa a draft.
+   */
+  static async deleteLastPendingRoundWithoutResults(
+    roundId: number,
+    tournamentId: number
+  ): Promise<
+    | { deleted: true }
+    | { deleted: false; reason: 'not_last' | 'not_pending' | 'has_results' | 'not_found' }
+  > {
+    const rows = await this.query<{
+      id: number;
+      round_number: number;
+      status: string;
+      tournament_id: number;
+      max_rn: number;
+    }>(
+      `SELECT r.id, r.round_number, r.status, r.tournament_id,
+        (SELECT MAX(round_number) FROM rounds WHERE tournament_id = r.tournament_id) AS max_rn
+       FROM rounds r WHERE r.id = ? AND r.tournament_id = ?`,
+      [roundId, tournamentId]
+    );
+    const row = rows[0];
+    if (!row) return { deleted: false, reason: 'not_found' };
+    if (row.status !== 'pending') return { deleted: false, reason: 'not_pending' };
+    if (row.round_number !== row.max_rn) return { deleted: false, reason: 'not_last' };
+
+    const cntRows = await this.query<{ cnt: number }>(
+      `SELECT COUNT(*) AS cnt FROM match_results mr
+       JOIN matches m ON mr.match_id = m.id
+       WHERE m.round_id = ?`,
+      [roundId]
+    );
+    if ((cntRows[0]?.cnt ?? 0) > 0) return { deleted: false, reason: 'has_results' };
+
+    const matches = await this.getRoundMatches(roundId);
+    for (const m of matches) {
+      if (m.id) await this.deleteMatchWithDependentsSync(m.id);
+    }
+
+    const ru = await this.query<{ uuid: string }>('SELECT uuid FROM rounds WHERE id = ?', [
+      roundId,
+    ]);
+    const roundUuid = ru[0]?.uuid;
+    await this.execute('DELETE FROM rounds WHERE id = ?', [roundId]);
+    if (roundUuid) {
+      await SyncService.addToQueue('rounds', 'DELETE', { uuid: roundUuid });
+    }
+
+    dbCache.invalidateTournament(tournamentId);
+    dbCache.invalidateAllRounds();
+
+    const remaining = await this.query<{ c: number }>(
+      'SELECT COUNT(*) AS c FROM rounds WHERE tournament_id = ?',
+      [tournamentId]
+    );
+    if ((remaining[0]?.c ?? 0) === 0) {
+      const trow = await this.query<{ status: string }>(
+        'SELECT status FROM tournaments WHERE id = ?',
+        [tournamentId]
+      );
+      if (trow[0]?.status === 'in_progress') {
+        await this.updateTournament(tournamentId, { status: 'draft' });
+      }
+    }
+
+    return { deleted: true };
   }
 
   // ==========================================

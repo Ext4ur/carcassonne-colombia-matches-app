@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
-import { Tournament, PlayerStanding } from '../types/tournament';
+import { Tournament, PlayerStanding, normalizeBuchholzByeMode } from '../types/tournament';
+import { getBuchholzModeMeta } from '../utils/buchholzModeMeta';
 
 import i18n from '../i18n/config';
 
@@ -8,6 +9,14 @@ export class ReportService {
   static async generateTournamentExcel(tournamentId: number): Promise<any> {
     const standings = await this.getStandings(tournamentId);
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);
+    const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const modeMeta = getBuchholzModeMeta(normalizeBuchholzByeMode(config?.buchholz_bye_mode));
+    const modeLabel = i18n.t(modeMeta.modeLabelI18nKey);
+    const virtualRule = modeMeta.usesVirtualOpponent
+      ? modeMeta.virtualKind === 'field_avg'
+        ? i18n.t('tournaments.reports.virtual_rule_avg')
+        : i18n.t('tournaments.reports.virtual_rule_worst')
+      : i18n.t('tournaments.reports.virtual_rule_none');
 
     // Sheet 1: Leaderboard
     const leaderboardHeaders = [
@@ -15,12 +24,16 @@ export class ReportService {
       i18n.t('tournaments.reports.player'),
       i18n.t('tournaments.reports.total_points'),
       i18n.t('tournaments.reports.wins'),
+      i18n.t('tournaments.reports.buchholz_mode'),
+      i18n.t('tournaments.reports.virtual_opponent'),
     ];
     const leaderboardRows = standings.map((s, index) => [
       index + 1,
       s.player_name,
       s.total_points.toFixed(2),
       s.wins,
+      modeLabel,
+      virtualRule,
     ]);
 
     // Sheet 2: Results by Round
@@ -89,6 +102,8 @@ export class ReportService {
           2
         ),
       ],
+      [i18n.t('tournaments.reports.buchholz_mode'), modeLabel],
+      [i18n.t('tournaments.reports.virtual_opponent'), virtualRule],
     ];
 
     return {
@@ -142,6 +157,14 @@ export class ReportService {
   static async generateTournamentPDF(tournamentId: number): Promise<string> {
     const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const standings = await this.getStandings(tournamentId);
+    const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const modeMeta = getBuchholzModeMeta(normalizeBuchholzByeMode(config?.buchholz_bye_mode));
+    const modeLabel = i18n.t(modeMeta.modeLabelI18nKey);
+    const virtualRule = modeMeta.usesVirtualOpponent
+      ? modeMeta.virtualKind === 'field_avg'
+        ? i18n.t('tournaments.reports.virtual_rule_avg')
+        : i18n.t('tournaments.reports.virtual_rule_worst')
+      : i18n.t('tournaments.reports.virtual_rule_none');
     const top3 = standings.slice(0, 3);
 
     // Create HTML content for PDF
@@ -166,6 +189,8 @@ export class ReportService {
         <body>
           <h1>${tournament.name}</h1>
           <p>${i18n.t('tournaments.reports.export_pdf_date')}: ${new Date(tournament.date).toLocaleDateString(i18n.language)}</p>
+          <p>${i18n.t('tournaments.reports.buchholz_mode')}: ${modeLabel}</p>
+          <p>${i18n.t('tournaments.reports.virtual_opponent')}: ${virtualRule}</p>
           
           <div class="podium">
             ${
@@ -233,6 +258,13 @@ export class ReportService {
     const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const standings = await this.getStandings(tournamentId);
     const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const modeMeta = getBuchholzModeMeta(normalizeBuchholzByeMode(config?.buchholz_bye_mode));
+    const modeLabel = i18n.t(modeMeta.modeLabelI18nKey);
+    const virtualRule = modeMeta.usesVirtualOpponent
+      ? modeMeta.virtualKind === 'field_avg'
+        ? i18n.t('tournaments.reports.virtual_rule_avg')
+        : i18n.t('tournaments.reports.virtual_rule_worst')
+      : i18n.t('tournaments.reports.virtual_rule_none');
     const tiebreakCriteria = config?.tiebreak_criteria || [];
     const top4 = standings.slice(0, 4);
 
@@ -337,6 +369,13 @@ export class ReportService {
               margin-bottom: 40px;
               font-size: 1.2em;
             }
+            .buchholz-meta {
+              text-align: center;
+              color: #4b5563;
+              margin-top: -20px;
+              margin-bottom: 30px;
+              font-size: 1em;
+            }
             .podium { 
               display: flex; 
               justify-content: center; 
@@ -403,6 +442,7 @@ export class ReportService {
           <div class="container">
             <h1>${tournament.name}</h1>
             <div class="date">${new Date(tournament.date).toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            <div class="buchholz-meta">${i18n.t('tournaments.reports.buchholz_mode')}: ${modeLabel} · ${i18n.t('tournaments.reports.virtual_opponent')}: ${virtualRule}</div>
             
             <div class="podium">
               ${

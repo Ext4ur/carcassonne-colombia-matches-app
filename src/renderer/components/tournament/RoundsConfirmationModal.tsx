@@ -46,7 +46,13 @@ export default function RoundsConfirmationModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('tournaments.rounds_modal.title')} size="sm">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('tournaments.rounds_modal.title')}
+      size="sm"
+      closeOnBackdropClick={false}
+    >
       <div className="space-y-3">
         <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <p className="text-sm text-gray-700 dark:text-gray-300">

@@ -13,6 +13,7 @@ import Select from '../common/Select';
 import Button from '../common/Button';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
+import BuchholzModeHelpModal from './BuchholzModeHelpModal';
 
 interface TournamentConfigProps {
   tournamentId: number;
@@ -27,6 +28,12 @@ interface TournamentConfigProps {
     }
   ) => void;
   onCancel: () => void;
+  /** Si es false, no se muestra el botón Cancelar (p. ej. ajustes solo en localStorage). */
+  showCancel?: boolean;
+  /** Solo lectura: mismos campos deshabilitados, sin guardar ni reordenar tiebreaks. */
+  readOnly?: boolean;
+  /** Etiqueta del botón secundario (p. ej. Cerrar en modo lectura). */
+  cancelLabel?: string;
 }
 
 export default function TournamentConfigComponent({
@@ -35,6 +42,9 @@ export default function TournamentConfigComponent({
   config,
   onSave,
   onCancel,
+  showCancel = true,
+  readOnly = false,
+  cancelLabel,
 }: TournamentConfigProps) {
   const { t } = useTranslation();
   const [tiebreakCriteria, setTiebreakCriteria] = useState<TiebreakCriterion[]>(
@@ -56,8 +66,10 @@ export default function TournamentConfigComponent({
   const [buchholzByeMode, setBuchholzByeMode] = useState<BuchholzByeMode>(
     (config as TournamentConfig)?.buchholz_bye_mode ?? 'legacy'
   );
+  const [isBuchholzHelpOpen, setIsBuchholzHelpOpen] = useState(false);
 
   const handleDragEnd = (result: any) => {
+    if (readOnly) return;
     if (!result.destination) return;
 
     const items = Array.from(tiebreakCriteria);
@@ -100,6 +112,8 @@ export default function TournamentConfigComponent({
     });
   };
 
+  const secondaryBtnLabel = cancelLabel ?? t('common.cancel');
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -108,6 +122,7 @@ export default function TournamentConfigComponent({
             <input
               type="checkbox"
               checked={avoidRematches}
+              disabled={readOnly}
               onChange={(e) => setAvoidRematches(e.target.checked)}
               className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
             />
@@ -121,6 +136,7 @@ export default function TournamentConfigComponent({
           <Select
             label={t('tournaments.config.bye_selection')}
             value={byeSelection}
+            disabled={readOnly}
             onChange={(e) => setByeSelection(e.target.value as 'worst' | 'random' | 'round_robin')}
             options={[
               { value: 'worst', label: t('tournaments.config.bye_worst') },
@@ -135,6 +151,7 @@ export default function TournamentConfigComponent({
           <Select
             label={t('tournaments.config.display_mode')}
             value={playerDisplayMode}
+            disabled={readOnly}
             onChange={(e) =>
               setPlayerDisplayMode(e.target.value as 'per_player' | 'names_only' | 'usernames_only')
             }
@@ -154,6 +171,7 @@ export default function TournamentConfigComponent({
           <Select
             label={t('tournaments.config.pairing_algorithm')}
             value={pairingAlgorithm}
+            disabled={readOnly}
             onChange={(e) => setPairingAlgorithm(e.target.value as 'greedy' | 'backtracking')}
             options={[
               { value: 'greedy', label: t('tournaments.config.pairing_greedy') },
@@ -164,9 +182,18 @@ export default function TournamentConfigComponent({
         </div>
 
         <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('tournaments.config.buchholz_bye_mode')}
+            </span>
+            <Button variant="secondary" size="sm" onClick={() => setIsBuchholzHelpOpen(true)}>
+              {t('tournaments.config.buchholz_help_button')}
+            </Button>
+          </div>
           <Select
-            label={t('tournaments.config.buchholz_bye_mode')}
+            label=""
             value={buchholzByeMode}
+            disabled={readOnly}
             onChange={(e) => setBuchholzByeMode(e.target.value as BuchholzByeMode)}
             options={[
               { value: 'legacy', label: t('tournaments.config.buchholz_bye_legacy') },
@@ -179,6 +206,14 @@ export default function TournamentConfigComponent({
                 value: 'n_minus_1_virtual_avg',
                 label: t('tournaments.config.buchholz_bye_n_minus_1_virtual'),
               },
+              {
+                value: 'legacy_virtual_worst',
+                label: t('tournaments.config.buchholz_bye_legacy_virtual_worst'),
+              },
+              {
+                value: 'n_minus_1_virtual_worst',
+                label: t('tournaments.config.buchholz_bye_n_minus_1_virtual_worst'),
+              },
             ]}
             helperText={t('tournaments.config.buchholz_bye_help')}
           />
@@ -190,56 +225,79 @@ export default function TournamentConfigComponent({
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
           {t('tournaments.config.tiebreaks_help')}
         </p>
-        <DragDropContext onDragEnd={handleDragEnd}>
-          <Droppable droppableId="tiebreak-criteria">
-            {(provided: any) => (
-              <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
-                {tiebreakCriteria.map((criterion, index) => (
-                  <Draggable key={criterion.id} draggableId={criterion.id} index={index}>
-                    {(provided: any, snapshot: any) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        className={`flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg ${
-                          snapshot.isDragging ? 'shadow-lg' : ''
-                        }`}
-                      >
-                        <div {...provided.dragHandleProps} className="cursor-move">
-                          <svg
-                            className="w-5 h-5 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M4 8h16M4 16h16"
-                            />
-                          </svg>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={criterion.enabled}
-                          onChange={() => toggleCriterion(criterion.id)}
-                          className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
-                        />
-                        <span className="flex-1 text-sm">
-                          {t(`tiebreaks.${criterion.id}`, { defaultValue: criterion.name })}
-                        </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          #{criterion.order}
-                        </span>
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
+        {readOnly ? (
+          <div className="space-y-2">
+            {tiebreakCriteria.map((criterion) => (
+              <div
+                key={criterion.id}
+                className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+              >
+                <input
+                  type="checkbox"
+                  checked={criterion.enabled}
+                  disabled
+                  readOnly
+                  className="rounded border-gray-300 dark:border-gray-600 text-primary-600 opacity-70"
+                />
+                <span className="flex-1 text-sm">
+                  {t(`tiebreaks.${criterion.id}`, { defaultValue: criterion.name })}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">#{criterion.order}</span>
               </div>
-            )}
-          </Droppable>
-        </DragDropContext>
+            ))}
+          </div>
+        ) : (
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId="tiebreak-criteria">
+              {(provided: any) => (
+                <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                  {tiebreakCriteria.map((criterion, index) => (
+                    <Draggable key={criterion.id} draggableId={criterion.id} index={index}>
+                      {(provided: any, snapshot: any) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className={`flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg ${
+                            snapshot.isDragging ? 'shadow-lg' : ''
+                          }`}
+                        >
+                          <div {...provided.dragHandleProps} className="cursor-move">
+                            <svg
+                              className="w-5 h-5 text-gray-400"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M4 8h16M4 16h16"
+                              />
+                            </svg>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={criterion.enabled}
+                            onChange={() => toggleCriterion(criterion.id)}
+                            className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="flex-1 text-sm">
+                            {t(`tiebreaks.${criterion.id}`, { defaultValue: criterion.name })}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            #{criterion.order}
+                          </span>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
+        )}
       </div>
 
       <div>
@@ -253,6 +311,7 @@ export default function TournamentConfigComponent({
               key={position}
               label={t('tournaments.config.position_n', { position })}
               type="number"
+              disabled={readOnly}
               value={scoringSystem[position]?.toString() || '0'}
               onChange={(e) => {
                 const value = e.target.value;
@@ -271,11 +330,17 @@ export default function TournamentConfigComponent({
       </div>
 
       <div className="flex justify-end space-x-2 pt-4">
-        <Button variant="secondary" onClick={onCancel}>
-          {t('common.cancel')}
-        </Button>
-        <Button onClick={handleSubmit}>{t('tournaments.config.save_config')}</Button>
+        {showCancel && (
+          <Button variant="secondary" onClick={onCancel}>
+            {secondaryBtnLabel}
+          </Button>
+        )}
+        {!readOnly && <Button onClick={handleSubmit}>{t('tournaments.config.save_config')}</Button>}
       </div>
+      <BuchholzModeHelpModal
+        isOpen={isBuchholzHelpOpen}
+        onClose={() => setIsBuchholzHelpOpen(false)}
+      />
     </div>
   );
 }

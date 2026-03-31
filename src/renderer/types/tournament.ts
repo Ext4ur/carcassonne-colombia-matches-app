@@ -28,13 +28,17 @@ export type BuchholzByeMode =
   | 'legacy'
   | 'n_minus_1'
   | 'legacy_virtual_avg'
-  | 'n_minus_1_virtual_avg';
+  | 'n_minus_1_virtual_avg'
+  | 'legacy_virtual_worst'
+  | 'n_minus_1_virtual_worst';
 
 const BUCHHOLZ_BYE_MODES: BuchholzByeMode[] = [
   'legacy',
   'n_minus_1',
   'legacy_virtual_avg',
   'n_minus_1_virtual_avg',
+  'legacy_virtual_worst',
+  'n_minus_1_virtual_worst',
 ];
 
 export function normalizeBuchholzByeMode(value: unknown): BuchholzByeMode {

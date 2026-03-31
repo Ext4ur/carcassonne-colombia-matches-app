@@ -11,7 +11,7 @@ const MASTER_SCHEMA = {
   tournament_configs: [
     'id', 'uuid', 'tournament_id', 'tournament_uuid', 'avoid_rematches', 
     'tiebreak_criteria', 'scoring_system', 'bye_selection', 
-    'player_display_mode', 'pairing_algorithm'
+    'player_display_mode', 'pairing_algorithm', 'buchholz_bye_mode'
   ],
   circuits: ['id', 'uuid', 'name', 'description', 'start_date', 'end_date', 'status'],
   rounds: ['id', 'uuid', 'tournament_id', 'tournament_uuid', 'round_number', 'status', 'started_at', 'completed_at'],

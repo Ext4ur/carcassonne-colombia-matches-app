@@ -105,11 +105,11 @@ describe('SwissPairingService.calculateStandings', () => {
     buchholzByeMode: 'legacy' as const,
   };
 
-  it('sorts by wins then total_points; P4 last when winless', async () => {
+  it('sorts by wins; P4 last when winless; with no criteria order among ties by player_id', async () => {
     const standings = await SwissPairingService.calculateStandings(1, [], preFetched);
 
     // P1, P2, P3 have 2 wins and 2 tournament points each. P4 has 0 wins.
-    // Order among P1–P3 without tiebreaks: stable fallback by player_id.
+    // With empty tiebreak criteria, no total_points step: ties among P1–P3 fall through to player_id order.
     expect(standings[3].player_id).toBe(4);
     expect(standings[0].total_points).toBe(2);
     expect(standings[1].total_points).toBe(2);
@@ -131,6 +131,18 @@ describe('SwissPairingService.calculateStandings', () => {
     // P3 (+40)
     // P4 (-180)
 
+    expect(standings[0].player_id).toBe(2);
+    expect(standings[1].player_id).toBe(1);
+    expect(standings[2].player_id).toBe(3);
+    expect(standings[3].player_id).toBe(4);
+  });
+
+  it('applies point_difference after wins when both are in criteria (same wins and tournament points)', async () => {
+    const criteria: TiebreakCriterion[] = [
+      { id: 'wins', name: 'Wins', enabled: true, order: 1 },
+      { id: 'point_difference', name: 'Diff', enabled: true, order: 2 },
+    ];
+    const standings = await SwissPairingService.calculateStandings(1, criteria, preFetched);
     expect(standings[0].player_id).toBe(2);
     expect(standings[1].player_id).toBe(1);
     expect(standings[2].player_id).toBe(3);
@@ -200,6 +212,30 @@ describe('SwissPairingService.calculateStandings', () => {
     expect(p1?.tiebreak_values['opponent_points_drop_worst']).toBeDefined();
     // Value should be 4 (based on original data)
     expect(p1?.tiebreak_values['opponent_points_drop_worst']).toBe(4);
+  });
+});
+
+describe('SwissPairingService.findBestPairings', () => {
+  const findBestPairings = (SwissPairingService as any).findBestPairings.bind(SwissPairingService);
+
+  it('for N=2 explores all rest positions so a non-rematch partner after the first slot is not missed', () => {
+    const standings = [
+      { player_id: 1, total_points: 4 },
+      { player_id: 2, total_points: 3 },
+      { player_id: 3, total_points: 2 },
+      { player_id: 4, total_points: 1 },
+    ] as any[];
+    const previousOpponents: Record<number, number[]> = {
+      1: [2],
+      2: [1],
+      3: [4],
+      4: [3],
+    };
+    const res = findBestPairings(standings, previousOpponents, 2, 0);
+    expect(res).not.toBeNull();
+    expect(res!.length).toBe(2);
+    const flat = new Set(res!.flatMap((m: any[]) => m.map((p: any) => p.player_id)));
+    expect(flat.size).toBe(4);
   });
 });
 

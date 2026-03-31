@@ -6,6 +6,7 @@ import { Tournament, TournamentConfig } from '../types/tournament';
 import { Player } from '../types/player';
 import { getDefaultScoringSystem } from '../utils/scoring';
 import { DEFAULT_TIEBREAK_CRITERIA } from '../utils/tiebreak';
+import { buildQuickConfigDraft } from '../utils/quickTournamentDefaults';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
@@ -38,6 +39,9 @@ export default function Tournaments() {
   const [configDraft, setConfigDraft] = useState<ConfigDraft | null>(null);
   const [registrationPlayers, setRegistrationPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
+  const [deleteKeyInput, setDeleteKeyInput] = useState('');
   const [mode, setMode] = useState<'quick' | 'advanced'>('quick');
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlaceIds, setSelectedPlaceIds] = useState<number[]>([]);
@@ -95,14 +99,7 @@ export default function Tournaments() {
       place_id: tournamentData.place_id,
     });
     if (mode === 'quick') {
-      setConfigDraft({
-        avoid_rematches: true,
-        tiebreak_criteria: DEFAULT_TIEBREAK_CRITERIA,
-        scoring_system: getDefaultScoringSystem(tournamentData.players_per_match || 2),
-        bye_selection: 'worst',
-        pairing_algorithm: 'greedy',
-        buchholz_bye_mode: 'legacy',
-      });
+      setConfigDraft(buildQuickConfigDraft(tournamentData.players_per_match || 2) as ConfigDraft);
       setWizardStep('registration');
     } else {
       setWizardStep('config');
@@ -183,20 +180,25 @@ export default function Tournaments() {
     navigate(`/tournament/${tournament.id}`);
   };
 
-  const handleDelete = async (tournament: Tournament) => {
-    if (!tournament.id) return;
-    if (!confirm(t('tournaments.wizard.delete_confirm', { name: tournament.name }))) return;
+  const handleDelete = (tournament: Tournament) => {
+    setDeleteTarget(tournament);
+    setDeleteKeyInput('');
+    setIsDeleteModalOpen(true);
+  };
 
-    const clave = window.prompt(t('tournaments.wizard.delete_enter_key'));
-    if (clave === null) return;
-    if (clave !== TOURNAMENT_LIST_DELETE_SECRET) {
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget?.id) return;
+    if (deleteKeyInput !== TOURNAMENT_LIST_DELETE_SECRET) {
       addNotification({ message: t('tournaments.wizard.delete_key_invalid'), type: 'error' });
       return;
     }
 
     try {
       setIsLoading(true);
-      await DatabaseService.deleteTournament(tournament.id);
+      await DatabaseService.deleteTournament(deleteTarget.id);
+      setIsDeleteModalOpen(false);
+      setDeleteTarget(null);
+      setDeleteKeyInput('');
       loadTournaments();
     } catch (error) {
       console.error('Error deleting tournament:', error);
@@ -383,6 +385,49 @@ export default function Tournaments() {
             mode={mode}
           />
         )}
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          if (isLoading) return;
+          setIsDeleteModalOpen(false);
+          setDeleteTarget(null);
+          setDeleteKeyInput('');
+        }}
+        title={t('common.delete')}
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setDeleteTarget(null);
+                setDeleteKeyInput('');
+              }}
+              disabled={isLoading}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button variant="danger" onClick={handleConfirmDelete} isLoading={isLoading}>
+              {t('common.delete')}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            {deleteTarget
+              ? t('tournaments.wizard.delete_confirm', { name: deleteTarget.name })
+              : t('common.loading')}
+          </p>
+          <Input
+            label={t('tournaments.wizard.delete_enter_key')}
+            value={deleteKeyInput}
+            onChange={(e) => setDeleteKeyInput(e.target.value)}
+          />
+        </div>
       </Modal>
     </div>
   );

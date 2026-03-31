@@ -721,12 +721,11 @@ export class SyncService {
       remoteRecord = (data as Record<string, unknown> | null) ?? null;
       if (remoteRecord) {
         this.putRowInRemoteCache(rowCache, table, uuid, remoteRecord);
-        console.log(`[Pull] Fallback fetch ${table} (${uuid}): FOUND`);
       }
     }
 
     if (!remoteRecord) {
-      console.warn(`⚠️ Record ${uuid} not found in ${table}, skipping.`);
+      // Common after cascades/deletes on related tables; keep quiet to avoid noisy logs.
       return 'processed';
     }
 

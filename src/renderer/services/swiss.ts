@@ -1,9 +1,282 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
 import { TiebreakService } from './tiebreak';
-import { Tournament, Round, Match, PlayerStanding } from '../types/tournament';
+import {
+  Tournament,
+  Round,
+  Match,
+  PlayerStanding,
+  MatchResult,
+  TiebreakCriterion,
+  TournamentConfig,
+  BuchholzByeMode,
+  normalizeBuchholzByeMode,
+} from '../types/tournament';
+import { Player } from '../types/player';
 import { calculateNumberOfRounds } from '../utils/tournament';
 import { getPlayerDisplayName, type PlayerDisplayMode } from '../utils/playerDisplayName';
+import i18n from '../i18n/config';
+
+function binomial(n: number, k: number): number {
+  if (k < 0 || k > n) return 0;
+  if (k > n - k) k = n - k;
+  let r = 1;
+  for (let i = 1; i <= k; i++) {
+    r = (r * (n - k + i)) / i;
+  }
+  return Math.round(r);
+}
+
+function combinationsOf<T>(arr: T[], k: number): T[][] {
+  if (k === 0) return [[]];
+  if (arr.length < k) return [];
+  const out: T[][] = [];
+  const path: T[] = [];
+  function dfs(start: number) {
+    if (path.length === k) {
+      out.push([...path]);
+      return;
+    }
+    for (let i = start; i < arr.length; i++) {
+      path.push(arr[i]!);
+      dfs(i + 1);
+      path.pop();
+    }
+  }
+  dfs(0);
+  return out;
+}
+
+/** Contexto para comparar dos filas de clasificación (misma lógica que el sort). */
+export type StandingsPairCompareContext = {
+  criteria: TiebreakCriterion[];
+  resultsByMatch: Record<number, MatchResult[]>;
+  /**
+   * Firmas pre-H2H donde, dentro del grupo empatado, todos tienen el mismo número de victorias
+   * directas entre sí (p. ej. ciclo 3: 1-1-1). El H2H por parejas no es transitivo → se pasa al
+   * siguiente criterio.
+   */
+  headToHeadInconclusiveSignatures?: Set<string>;
+  /** Victorias directas de cada jugador contra el resto de su grupo pre-H2H (mismo signature). */
+  intraGroupHeadToHeadWins?: Map<number, number>;
+};
+
+/** Criterios habilitados en el orden configurado (`order`); misma cadena que el desempate en clasificación. */
+export function enabledTiebreakCriteriaInOrder(criteria: TiebreakCriterion[]): TiebreakCriterion[] {
+  return [...criteria].filter((c) => c.enabled).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+/** Victorias en mesas compartidas (mejor posición = victoria en esa mesa). */
+export function mutualHeadToHeadWins(
+  playerIdA: number,
+  playerIdB: number,
+  resultsByMatch: Record<number, MatchResult[]>
+): { winsA: number; winsB: number } {
+  let winsA = 0;
+  let winsB = 0;
+  Object.values(resultsByMatch).forEach((results) => {
+    const resA = results.find((r: MatchResult) => r.player_id === playerIdA);
+    const resB = results.find((r: MatchResult) => r.player_id === playerIdB);
+    if (resA && resB) {
+      if (resA.position < resB.position) winsA++;
+      else if (resB.position < resA.position) winsB++;
+    }
+  });
+  return { winsA, winsB };
+}
+
+/**
+ * Firma de empate en el mismo punto en que el ordenador usa el H2H: activo, victorias y valores de
+ * criterios habilitados que van **antes** de `head_to_head` por `order`. No incluye criterios posteriores
+ * (p. ej. `point_difference`), porque si el sort llegó a H2H es que ya iban empatados sin esos.
+ */
+export function preHeadToHeadTieSignature(
+  s: PlayerStanding,
+  criteria: TiebreakCriterion[]
+): string {
+  const sorted = enabledTiebreakCriteriaInOrder(criteria);
+  const parts: string[] = [s.active ? '1' : '0', String(s.wins)];
+  for (const c of sorted) {
+    if (c.id === 'wins') continue;
+    if (c.id === 'head_to_head') break;
+    parts.push(String(s.tiebreak_values[c.id] ?? 0));
+  }
+  return parts.join('|');
+}
+
+/**
+ * Agrupa por `preHeadToHeadTieSignature` y detecta empates “reales” en H2H dentro del grupo
+ * (mismo récord de victorias directas mutuas), p. ej. rock-paper-scissors entre tres.
+ */
+export function buildHeadToHeadClusterMeta(
+  standings: PlayerStanding[],
+  criteria: TiebreakCriterion[],
+  resultsByMatch: Record<number, MatchResult[]>
+): Pick<
+  StandingsPairCompareContext,
+  'headToHeadInconclusiveSignatures' | 'intraGroupHeadToHeadWins'
+> {
+  const intraGroupHeadToHeadWins = new Map<number, number>();
+  const headToHeadInconclusiveSignatures = new Set<string>();
+
+  const bySig = new Map<string, PlayerStanding[]>();
+  for (const s of standings) {
+    const sig = preHeadToHeadTieSignature(s, criteria);
+    if (!bySig.has(sig)) bySig.set(sig, []);
+    bySig.get(sig)!.push(s);
+  }
+
+  for (const [sig, group] of bySig) {
+    if (group.length < 2) continue;
+    const ids = group.map((g) => g.player_id);
+    for (const p of ids) {
+      let w = 0;
+      for (const q of ids) {
+        if (q === p) continue;
+        const { winsA, winsB } = mutualHeadToHeadWins(p, q, resultsByMatch);
+        if (winsA > winsB) w++;
+      }
+      intraGroupHeadToHeadWins.set(p, w);
+    }
+    const counts = ids.map((id) => intraGroupHeadToHeadWins.get(id) ?? 0);
+    if (counts.length > 0 && counts.every((c) => c === counts[0])) {
+      headToHeadInconclusiveSignatures.add(sig);
+    }
+  }
+
+  return { headToHeadInconclusiveSignatures, intraGroupHeadToHeadWins };
+}
+
+/**
+ * Comparador: negativo si `a` va antes que `b` en la clasificación.
+ * Tras activo y victorias, aplica criterios habilitados según su `order` (no el orden del array).
+ */
+export function compareStandingsPair(
+  a: PlayerStanding,
+  b: PlayerStanding,
+  ctx: StandingsPairCompareContext
+): number {
+  if (a.active !== b.active) {
+    return a.active ? -1 : 1;
+  }
+  if (b.wins !== a.wins) {
+    return b.wins - a.wins;
+  }
+  for (const criterion of enabledTiebreakCriteriaInOrder(ctx.criteria)) {
+    if (criterion.id === 'wins') continue;
+
+    if (criterion.id === 'head_to_head') {
+      const sigA = preHeadToHeadTieSignature(a, ctx.criteria);
+      const sigB = preHeadToHeadTieSignature(b, ctx.criteria);
+      if (sigA === sigB && ctx.headToHeadInconclusiveSignatures?.has(sigA)) {
+        continue;
+      }
+      if (sigA === sigB && ctx.intraGroupHeadToHeadWins?.size) {
+        const wa = ctx.intraGroupHeadToHeadWins.get(a.player_id) ?? 0;
+        const wb = ctx.intraGroupHeadToHeadWins.get(b.player_id) ?? 0;
+        if (wa !== wb) {
+          return wb - wa;
+        }
+      }
+      const { winsA, winsB } = mutualHeadToHeadWins(a.player_id, b.player_id, ctx.resultsByMatch);
+      if (winsA !== winsB) {
+        return winsB - winsA;
+      }
+    } else {
+      const valA = a.tiebreak_values[criterion.id] || 0;
+      const valB = b.tiebreak_values[criterion.id] || 0;
+      if (valA !== valB) {
+        return valB - valA;
+      }
+    }
+  }
+  return a.player_id - b.player_id;
+}
+
+/** Primer criterio (id) en el que difieren `a` vs `b`, o null si empate total en el ordenamiento. */
+export function explainFirstDifferingStandingsCriterion(
+  a: PlayerStanding,
+  b: PlayerStanding,
+  ctx: StandingsPairCompareContext
+): string | null {
+  if (a.active !== b.active) {
+    return 'active';
+  }
+  if (b.wins !== a.wins) {
+    return 'wins';
+  }
+  for (const criterion of enabledTiebreakCriteriaInOrder(ctx.criteria)) {
+    if (criterion.id === 'wins') continue;
+
+    if (criterion.id === 'head_to_head') {
+      const sigA = preHeadToHeadTieSignature(a, ctx.criteria);
+      const sigB = preHeadToHeadTieSignature(b, ctx.criteria);
+      if (sigA === sigB && ctx.headToHeadInconclusiveSignatures?.has(sigA)) {
+        continue;
+      }
+      if (sigA === sigB && ctx.intraGroupHeadToHeadWins?.size) {
+        const wa = ctx.intraGroupHeadToHeadWins.get(a.player_id) ?? 0;
+        const wb = ctx.intraGroupHeadToHeadWins.get(b.player_id) ?? 0;
+        if (wa !== wb) {
+          return 'head_to_head';
+        }
+      }
+      const { winsA, winsB } = mutualHeadToHeadWins(a.player_id, b.player_id, ctx.resultsByMatch);
+      if (winsA !== winsB) {
+        return 'head_to_head';
+      }
+    } else {
+      const valA = a.tiebreak_values[criterion.id] || 0;
+      const valB = b.tiebreak_values[criterion.id] || 0;
+      if (valA !== valB) {
+        return criterion.id;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Para cada bloque consecutivo con el mismo empate pre-H2H, anota contra quién ganó / perdió
+ * el directo dentro del bloque (p. ej. triple empate cíclico: cada uno con un ganó y un perdió).
+ */
+export function annotateHeadToHeadGroupDisplay(
+  sorted: PlayerStanding[],
+  ctx: StandingsPairCompareContext
+): void {
+  const { criteria, resultsByMatch } = ctx;
+  const indexOfPlayer = (playerId: number) => sorted.findIndex((s) => s.player_id === playerId);
+
+  let start = 0;
+  while (start < sorted.length) {
+    const sig0 = preHeadToHeadTieSignature(sorted[start]!, criteria);
+    let end = start + 1;
+    while (end < sorted.length && preHeadToHeadTieSignature(sorted[end]!, criteria) === sig0) {
+      end++;
+    }
+    const cluster = sorted.slice(start, end);
+    if (cluster.length >= 2) {
+      for (const p of cluster) {
+        const beatIds: number[] = [];
+        const lostIds: number[] = [];
+        for (const q of cluster) {
+          if (q.player_id === p.player_id) continue;
+          const { winsA, winsB } = mutualHeadToHeadWins(p.player_id, q.player_id, resultsByMatch);
+          if (winsA > winsB) beatIds.push(q.player_id);
+          else if (winsB > winsA) lostIds.push(q.player_id);
+        }
+        const byStandingsOrder = (idA: number, idB: number) =>
+          indexOfPlayer(idA) - indexOfPlayer(idB);
+        beatIds.sort(byStandingsOrder);
+        lostIds.sort(byStandingsOrder);
+        const beatNames = beatIds.map((id) => sorted.find((s) => s.player_id === id)!.player_name);
+        const lostNames = lostIds.map((id) => sorted.find((s) => s.player_id === id)!.player_name);
+        if (beatNames.length) p.h2h_beat_opponent_names = beatNames;
+        if (lostNames.length) p.h2h_lost_opponent_names = lostNames;
+      }
+    }
+    start = end;
+  }
+}
 
 export class SwissPairingService {
   static async generateFirstRound(tournamentId: number): Promise<void> {
@@ -28,6 +301,10 @@ export class SwissPairingService {
     const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const playersPerMatch = tournament.players_per_match;
 
+    // Get players who have already received bye (should be empty for round 1, but keeps logic consistent)
+    const byeHistory = await DatabaseService.getPlayerByes(tournamentId);
+    const playersWithBye = new Set(byeHistory.map((b) => b.player_id));
+
     // Create matches
     let matchNumber = 1;
     for (let i = 0; i < shuffled.length; i += playersPerMatch) {
@@ -35,6 +312,25 @@ export class SwissPairingService {
 
       // If odd number and last match has only 1 player, give bye
       if (matchPlayers.length === 1 && i === shuffled.length - 1) {
+        // Enforce bye history even in random round 1 (for robustness)
+        const byePlayerConfig = await DatabaseService.getTournamentConfig(tournamentId);
+        const byeSelection = byePlayerConfig?.bye_selection || 'worst';
+
+        // Map to PlayerStanding format to satisfy signature
+        const standingInput = matchPlayers.map((p) => ({
+          player_id: p.id!,
+          player_name: p.name,
+          total_points: 0,
+          matches_played: 0,
+          wins: 0,
+          tiebreak_values: {},
+          active: true,
+          dropout_round: null,
+          starts_count: 0,
+        }));
+
+        const byePlayer = this.selectByePlayer(standingInput, playersWithBye, byeSelection);
+
         // Create match with bye (player gets automatic win)
         const matchId = await DatabaseService.createMatch({
           round_id: roundId,
@@ -42,12 +338,11 @@ export class SwissPairingService {
           status: 'completed',
         });
 
-        const config = await DatabaseService.getTournamentConfig(tournamentId);
-        const scoringSystem = config?.scoring_system || { 1: 1, 2: 0 };
+        const scoringSystem = byePlayerConfig?.scoring_system || { 1: 1, 2: 0 };
 
         await DatabaseService.createMatchResult({
           match_id: matchId,
-          player_id: matchPlayers[0].id!,
+          player_id: byePlayer.player_id || matchPlayers[0].id!,
           position: 1,
           points: 0,
           tournament_points: scoringSystem[1] || 1,
@@ -83,13 +378,14 @@ export class SwissPairingService {
 
   static async previewFirstRound(tournamentId: number): Promise<{
     matches: Array<{
-      player1: any;
-      player2?: any;
+      player1: Player & { player_name: string; player_id: number };
+      player2?: Player & { player_name: string; player_id: number };
       startPlayerId?: number;
       reason?: string;
     }>;
     warnings: string[];
     startStats: Record<number, { totalStarts: number; lastStartRound: number }>;
+    previousOpponents: Record<number, number[]>;
   }> {
     const players = await DatabaseService.getTournamentPlayers(tournamentId);
 
@@ -101,11 +397,16 @@ export class SwissPairingService {
     const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const playersPerMatch = tournament.players_per_match;
 
-    const matches: any[] = [];
+    const matches: Array<{
+      player1: Player & { player_name: string; player_id: number };
+      player2?: Player & { player_name: string; player_id: number };
+      startPlayerId?: number;
+      reason?: string;
+    }> = [];
     const startStats: Record<number, { totalStarts: number; lastStartRound: number }> = {};
 
     // Initialize stats
-    players.forEach((p: any) => {
+    players.forEach((p) => {
       startStats[p.id!] = { totalStarts: 0, lastStartRound: 0 };
     });
 
@@ -118,7 +419,7 @@ export class SwissPairingService {
           player1: {
             ...matchPlayers[0],
             player_name: matchPlayers[0].name,
-            player_id: matchPlayers[0].id,
+            player_id: matchPlayers[0].id!,
           },
           reason: 'random',
         });
@@ -132,12 +433,12 @@ export class SwissPairingService {
           player1: {
             ...matchPlayers[0],
             player_name: matchPlayers[0].name,
-            player_id: matchPlayers[0].id,
+            player_id: matchPlayers[0].id!,
           },
           player2: {
             ...matchPlayers[1],
             player_name: matchPlayers[1].name,
-            player_id: matchPlayers[1].id,
+            player_id: matchPlayers[1].id!,
           },
           startPlayerId,
           reason: 'random',
@@ -145,15 +446,15 @@ export class SwissPairingService {
       }
     }
 
-    return { matches, warnings: [], startStats };
+    return { matches, warnings: [], startStats, previousOpponents: {} };
   }
 
   static async createRoundFromPairings(
     tournamentId: number,
     roundNumber: number,
     pairings: Array<{
-      player1: any;
-      player2?: any;
+      player1: { id?: number; player_id?: number };
+      player2?: { id?: number; player_id?: number };
       startPlayerId?: number;
     }>
   ): Promise<void> {
@@ -178,7 +479,7 @@ export class SwissPairingService {
 
         await DatabaseService.createMatchResult({
           match_id: matchId,
-          player_id: pairing.player1.player_id || pairing.player1.id,
+          player_id: (pairing.player1.player_id || pairing.player1.id) as number,
           position: 1,
           points: 0,
           tournament_points: scoringSystem[1] || 1,
@@ -196,7 +497,7 @@ export class SwissPairingService {
         // If we really need to record the bye for history:
         await DatabaseService.addPlayerBye(
           tournamentId,
-          pairing.player1.player_id || pairing.player1.id,
+          (pairing.player1.player_id || pairing.player1.id) as number,
           roundNumber
         );
       } else {
@@ -209,8 +510,8 @@ export class SwissPairingService {
         });
 
         await DatabaseService.setMatchPlayers(matchId, [
-          pairing.player1.player_id || pairing.player1.id,
-          pairing.player2.player_id || pairing.player2.id,
+          (pairing.player1.player_id || pairing.player1.id) as number,
+          (pairing.player2.player_id || pairing.player2.id) as number,
         ]);
       }
       matchNumber++;
@@ -238,7 +539,8 @@ export class SwissPairingService {
     }
 
     const numberOfRounds = tournament.number_of_rounds || calculateNumberOfRounds(players.length);
-    if (rounds.length >= numberOfRounds) {
+    const swissRoundCount = rounds.filter((r) => (r.phase ?? 'swiss') === 'swiss').length;
+    if (swissRoundCount >= numberOfRounds) {
       throw new Error(`Se ha alcanzado el número máximo de rondas (${numberOfRounds})`);
     }
 
@@ -249,7 +551,7 @@ export class SwissPairingService {
     const allResults = await Promise.all(
       allMatches.map((m) => DatabaseService.getMatchResults(m.id!))
     );
-    const resultsByMatch: Record<number, any[]> = {};
+    const resultsByMatch: Record<number, MatchResult[]> = {};
     allMatches.forEach((m, i) => {
       resultsByMatch[m.id!] = allResults[i] || [];
     });
@@ -260,11 +562,7 @@ export class SwissPairingService {
       { players, rounds, roundMatches, resultsByMatch },
       config?.player_display_mode
     );
-    const previousOpponents = this.getPreviousOpponentsFromData(
-      rounds,
-      roundMatches,
-      resultsByMatch
-    );
+    const previousOpponents = await DatabaseService.getTournamentOpponents(tournamentId);
 
     // Create new round
     const nextRoundNumber = rounds.length + 1;
@@ -276,133 +574,69 @@ export class SwissPairingService {
 
     // Pair players
     const playersPerMatch = tournament.players_per_match;
-    const paired = new Set<number>();
     let matchNumber = 1;
 
-    // Group players using shared logic
-    const { pointGroups, sortedPoints } = this.groupPlayersByPoints(standings);
-
     // Get bye selection method from config
-    const byeSelection = (config as any)?.bye_selection || 'worst';
+    const byeSelection = config?.bye_selection || 'worst';
 
     // Get players who have already received bye
     const byeHistory = await DatabaseService.getPlayerByes(tournamentId);
-    const playersWithBye = new Set(byeHistory.map((b: any) => b.player_id));
+    const playersWithBye = new Set(byeHistory.map((b) => b.player_id));
 
-    // Process all players across all point groups
-    // Pair players avoiding rematches
-    while (true) {
-      // Get all unpaired players, ordered by points (highest first)
-      const remaining: PlayerStanding[] = [];
-      for (const points of sortedPoints) {
-        const group = pointGroups[points];
-        const unpaired = group.filter((p) => !paired.has(p.player_id));
-        remaining.push(...unpaired);
-      }
+    // PROCESS PARTIALLY REFACTORED LOOP
+    // Collect all players to be paired (after handling bye)
+    let allAvailable = standings.filter((p) => p.active);
 
-      if (remaining.length === 0) break;
+    // Handle byes IF total players is not a multiple of playersPerMatch
+    while (allAvailable.length % playersPerMatch !== 0) {
+      const byePlayer = this.selectByePlayer(allAvailable, playersWithBye, byeSelection);
 
-      // Get next group of players for a match
-      let matchPlayers = remaining.slice(0, playersPerMatch);
+      const byeMatchId = await DatabaseService.createMatch({
+        round_id: roundId,
+        match_number: matchNumber,
+        status: 'completed',
+      });
 
-      // Handle bye if odd number of players remaining
-      if (remaining.length < playersPerMatch) {
-        // Need to assign bye to one player
-        let byePlayer = remaining[remaining.length - 1];
+      const scoringSystem = config?.scoring_system || { 1: 1, 2: 0 };
 
-        if (byeSelection === 'round_robin') {
-          // Select worst player who hasn't received bye
-          const candidatesWithoutBye = remaining.filter((p) => !playersWithBye.has(p.player_id));
-          if (candidatesWithoutBye.length > 0) {
-            byePlayer = candidatesWithoutBye[candidatesWithoutBye.length - 1];
-          }
-        } else if (byeSelection === 'random') {
-          // Select random player
-          const candidates = remaining.filter((p) => !playersWithBye.has(p.player_id));
-          if (candidates.length > 0) {
-            byePlayer = candidates[Math.floor(Math.random() * candidates.length)];
-          } else {
-            byePlayer = remaining[Math.floor(Math.random() * remaining.length)];
-          }
-        } else {
-          // 'worst' - select worst player (last in remaining)
-          byePlayer = remaining[remaining.length - 1];
-        }
+      await DatabaseService.createMatchResult({
+        match_id: byeMatchId,
+        player_id: byePlayer.player_id,
+        position: 1,
+        points: 0,
+        tournament_points: scoringSystem[1] || 1,
+      });
 
-        // Create bye match
-        const byeMatchId = await DatabaseService.createMatch({
-          round_id: roundId,
-          match_number: matchNumber,
-          status: 'completed',
-        });
+      await DatabaseService.updateMatch(byeMatchId, {
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+      });
 
-        const scoringSystem = config?.scoring_system || { 1: 1, 2: 0 };
+      await DatabaseService.addPlayerBye(tournamentId, byePlayer.player_id, nextRoundNumber);
+      playersWithBye.add(byePlayer.player_id);
+      allAvailable = allAvailable.filter((p) => p.player_id !== byePlayer.player_id);
+      matchNumber++;
+    }
 
-        await DatabaseService.createMatchResult({
-          match_id: byeMatchId,
-          player_id: byePlayer.player_id,
-          position: 1,
-          points: 0,
-          tournament_points: scoringSystem[1] || 1,
-        });
+    // Compute Pairings using unified helper
+    const { pairings } = await this.computePairings(
+      allAvailable,
+      previousOpponents,
+      playersPerMatch,
+      config,
+      startStats
+    );
 
-        await DatabaseService.updateMatch(byeMatchId, {
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-        });
-
-        await DatabaseService.addPlayerBye(tournamentId, byePlayer.player_id, nextRoundNumber);
-        playersWithBye.add(byePlayer.player_id);
-        paired.add(byePlayer.player_id);
-        matchNumber++;
-
-        // Remove bye player from matchPlayers if present
-        matchPlayers = matchPlayers.filter((p) => p.player_id !== byePlayer.player_id);
-
-        // If no players left for match, continue to next iteration
-        if (matchPlayers.length === 0) {
-          continue;
-        }
-      }
-
-      // Check for rematches if needed (only for 2-player matches)
-      const avoidRematches = config?.avoid_rematches ?? true;
-      if (avoidRematches && matchPlayers.length === 2) {
-        const player1Opponents = previousOpponents[matchPlayers[0].player_id] || [];
-        if (player1Opponents.includes(matchPlayers[1].player_id)) {
-          // Try to find alternative pairing from remaining unpaired players
-          const remainingUnpaired = remaining.filter(
-            (p) =>
-              p.player_id !== matchPlayers[0].player_id &&
-              p.player_id !== matchPlayers[1].player_id &&
-              !paired.has(p.player_id)
-          );
-
-          for (const altPlayer of remainingUnpaired) {
-            const altOpponents = previousOpponents[matchPlayers[0].player_id] || [];
-            if (!altOpponents.includes(altPlayer.player_id)) {
-              // Swap
-              matchPlayers[1] = altPlayer;
-              break;
-            }
-          }
-        }
-      }
-
-      // Start Player Logic (Step 4: Balance -> Recency -> Random)
-      const { startPlayerId } = await this.determineStartPlayer(matchPlayers, startStats);
-
+    for (const p of pairings) {
       const matchId = await DatabaseService.createMatch({
         round_id: roundId,
         match_number: matchNumber,
         status: 'pending',
-        first_player_id: startPlayerId,
+        first_player_id: p.startPlayerId,
       });
 
-      const playerIds = matchPlayers.map((p) => p.player_id);
+      const playerIds = p.players.map((item) => item.player_id);
       await DatabaseService.setMatchPlayers(matchId, playerIds);
-
-      matchPlayers.forEach((p) => paired.add(p.player_id));
       matchNumber++;
     }
 
@@ -418,6 +652,7 @@ export class SwissPairingService {
     }>;
     warnings: string[];
     startStats: Record<number, { totalStarts: number; lastStartRound: number }>;
+    previousOpponents: Record<number, number[]>;
   }> {
     const [rounds, tournamentData, players, config, startStatsData] = await Promise.all([
       DatabaseService.getTournamentRounds(tournamentId),
@@ -437,7 +672,7 @@ export class SwissPairingService {
     const allResults = await Promise.all(
       allMatches.map((m) => DatabaseService.getMatchResults(m.id!))
     );
-    const resultsByMatch: Record<number, any[]> = {};
+    const resultsByMatch: Record<number, MatchResult[]> = {};
     allMatches.forEach((m, i) => {
       resultsByMatch[m.id!] = allResults[i] || [];
     });
@@ -448,14 +683,9 @@ export class SwissPairingService {
       { players, rounds, roundMatches, resultsByMatch },
       config?.player_display_mode
     );
-    const previousOpponents = this.getPreviousOpponentsFromData(
-      rounds,
-      roundMatches,
-      resultsByMatch
-    );
+    const previousOpponents = await DatabaseService.getTournamentOpponents(tournamentId);
 
     const playersPerMatch = tournament.players_per_match;
-    const paired = new Set<number>();
     const proposedMatches: Array<{
       player1: PlayerStanding;
       player2?: PlayerStanding;
@@ -464,101 +694,307 @@ export class SwissPairingService {
     }> = [];
     const warnings: string[] = [];
 
-    // Group players using shared logic
-    const { pointGroups, sortedPoints } = this.groupPlayersByPoints(standings);
-
-    const byeSelection = (config as any)?.bye_selection || 'worst';
+    const byeSelection = config?.bye_selection || 'worst';
     const byeHistory = await DatabaseService.getPlayerByes(tournamentId);
-    const playersWithBye = new Set(byeHistory.map((b: any) => b.player_id));
+    const playersWithBye = new Set(byeHistory.map((b) => b.player_id));
 
-    while (true) {
-      const remaining: PlayerStanding[] = [];
-      for (const points of sortedPoints) {
-        const group = pointGroups[points];
-        const unpaired = group.filter((p) => !paired.has(p.player_id));
-        remaining.push(...unpaired);
-      }
+    // Collect all players to be paired (after handling bye)
+    let allAvailable = standings.filter((p) => p.active);
 
-      if (remaining.length === 0) break;
-
-      let matchPlayers = remaining.slice(0, playersPerMatch);
-
-      if (remaining.length < playersPerMatch) {
-        let byePlayer = remaining[remaining.length - 1];
-
-        if (byeSelection === 'round_robin') {
-          const candidatesWithoutBye = remaining.filter((p) => !playersWithBye.has(p.player_id));
-          if (candidatesWithoutBye.length > 0) {
-            byePlayer = candidatesWithoutBye[candidatesWithoutBye.length - 1];
-          }
-        } else if (byeSelection === 'random') {
-          const candidates = remaining.filter((p) => !playersWithBye.has(p.player_id));
-          if (candidates.length > 0) {
-            byePlayer = candidates[Math.floor(Math.random() * candidates.length)];
-          } else {
-            byePlayer = remaining[Math.floor(Math.random() * remaining.length)];
-          }
-        } else {
-          byePlayer = remaining[remaining.length - 1];
-        }
-
-        proposedMatches.push({
-          player1: byePlayer,
-        });
-
-        playersWithBye.add(byePlayer.player_id);
-        paired.add(byePlayer.player_id);
-        matchPlayers = matchPlayers.filter((p) => p.player_id !== byePlayer.player_id);
-        if (matchPlayers.length === 0) continue;
-      }
-
-      const avoidRematches = config?.avoid_rematches ?? true;
-
-      if (avoidRematches && matchPlayers.length === 2) {
-        const player1Opponents = previousOpponents[matchPlayers[0].player_id] || [];
-        if (player1Opponents.includes(matchPlayers[1].player_id)) {
-          let hasRematch = true;
-          // Try to find alternative pairing (simplified check for preview)
-          const remainingUnpaired = remaining.filter(
-            (p) =>
-              p.player_id !== matchPlayers[0].player_id &&
-              p.player_id !== matchPlayers[1].player_id &&
-              !paired.has(p.player_id)
-          );
-
-          for (const candidate of remainingUnpaired) {
-            const candidateOpponents = previousOpponents[candidate.player_id] || [];
-            if (
-              !player1Opponents.includes(candidate.player_id) &&
-              !candidateOpponents.includes(matchPlayers[0].player_id)
-            ) {
-              matchPlayers[1] = candidate;
-              hasRematch = false;
-              break;
-            }
-          }
-          if (hasRematch) {
-            warnings.push(
-              `Rematch inevitable: ${matchPlayers[0].player_name} vs ${matchPlayers[1].player_name}`
-            );
-          }
-        }
-      }
-
-      // Start Player Logic (Step 4: Balance -> Recency -> Random)
-      const { startPlayerId, reason } = await this.determineStartPlayer(matchPlayers, startStats);
+    // Handle byes IF total players is not a multiple of playersPerMatch
+    while (allAvailable.length % playersPerMatch !== 0) {
+      const byePlayer = this.selectByePlayer(allAvailable, playersWithBye, byeSelection);
 
       proposedMatches.push({
-        player1: matchPlayers[0],
-        player2: matchPlayers[1],
-        startPlayerId,
-        reason,
+        player1: byePlayer,
       });
 
-      matchPlayers.forEach((p) => paired.add(p.player_id));
+      playersWithBye.add(byePlayer.player_id);
+      allAvailable = allAvailable.filter((p) => p.player_id !== byePlayer.player_id);
     }
 
-    return { matches: proposedMatches, warnings, startStats };
+    // Compute Pairings using unified helper
+    const { pairings, warnings: pairingWarnings } = await this.computePairings(
+      allAvailable,
+      previousOpponents,
+      playersPerMatch,
+      config,
+      startStats
+    );
+
+    warnings.push(...pairingWarnings);
+
+    for (const p of pairings) {
+      proposedMatches.push({
+        player1: p.players[0],
+        player2: p.players[1],
+        startPlayerId: p.startPlayerId,
+        reason: p.reason,
+      });
+    }
+
+    return { matches: proposedMatches, warnings, startStats, previousOpponents };
+  }
+
+  /**
+   * Internal helper to compute pairings using either backtracking or greedy algorithm.
+   * Centralizes logic to avoid divergence between preview and live generation.
+   */
+  private static async computePairings(
+    availablePlayers: PlayerStanding[],
+    previousOpponents: Record<number, number[]>,
+    playersPerMatch: number,
+    config: TournamentConfig | null,
+    startStats: Record<number, { totalStarts: number; lastStartRound: number }>
+  ): Promise<{
+    pairings: Array<{
+      players: PlayerStanding[];
+      startPlayerId?: number;
+      reason?: string;
+    }>;
+    warnings: string[];
+    previousOpponents: Record<number, number[]>;
+  }> {
+    const pairings: Array<{
+      players: PlayerStanding[];
+      startPlayerId?: number;
+      reason?: string;
+    }> = [];
+    const warnings: string[] = [];
+
+    const pairingAlgorithm = config?.pairing_algorithm || 'greedy';
+    const avoidRematches = config?.avoid_rematches ?? true;
+    const useBacktrackingSearch =
+      pairingAlgorithm === 'backtracking' || (pairingAlgorithm === 'greedy' && avoidRematches);
+
+    let results: PlayerStanding[][] | null = null;
+    const sortedAvailable = [...availablePlayers].sort((a, b) => b.total_points - a.total_points);
+
+    if (useBacktrackingSearch) {
+      const n = sortedAvailable.length;
+      const maxRematchBudget = Math.min(
+        40,
+        Math.max(8, Math.ceil(n / 2) + (playersPerMatch > 2 ? Math.min(n, 12) : 0))
+      );
+      console.log(`[Swiss] Starting robust backtracking for ${n} players...`);
+      for (let maxRematches = 0; maxRematches <= maxRematchBudget; maxRematches++) {
+        results = this.findBestPairings(
+          sortedAvailable,
+          previousOpponents,
+          playersPerMatch,
+          maxRematches
+        );
+        if (results) {
+          console.log(`[Swiss] Found solution with ${maxRematches} total rematches.`);
+          break;
+        }
+      }
+    }
+
+    if (results) {
+      for (const matchPlayers of results) {
+        const { startPlayerId, reason } = this.determineStartPlayer(matchPlayers, startStats);
+        pairings.push({ players: matchPlayers, startPlayerId, reason });
+      }
+    } else {
+      // Greedy logic (used as primary or fallback)
+      if (useBacktrackingSearch) {
+        warnings.push(
+          i18n.t('tournaments.preview.backtracking_failed', {
+            defaultValue:
+              'No se encontró una solución sin muchas revanchas mediante búsqueda avanzada. Usando sistema básico.',
+          })
+        );
+      }
+
+      const { pointGroups, sortedPoints } = this.groupPlayersByPoints(availablePlayers);
+      const remainingGreedy = [];
+      for (const points of sortedPoints) {
+        remainingGreedy.push(...pointGroups[points]);
+      }
+
+      while (remainingGreedy.length >= playersPerMatch) {
+        const matchPlayers = [remainingGreedy.shift()!];
+
+        // Fill the match
+        while (matchPlayers.length < playersPerMatch && remainingGreedy.length > 0) {
+          let bestCandidateIndex = 0;
+          if (avoidRematches) {
+            // Find a candidate that hasn't played against ANY of the current match members
+            for (let i = 0; i < remainingGreedy.length; i++) {
+              const candidate = remainingGreedy[i];
+              const isRematch = matchPlayers.some((p) => {
+                const opps = previousOpponents[p.player_id] || [];
+                return opps.includes(candidate.player_id);
+              });
+
+              if (!isRematch) {
+                bestCandidateIndex = i;
+                break;
+              }
+            }
+          }
+
+          const chosen = remainingGreedy.splice(bestCandidateIndex, 1)[0];
+          matchPlayers.push(chosen);
+        }
+
+        // Check if the final match has rematches to warn the user
+        const hasAnyRematch = matchPlayers.some((p, idx) => {
+          const others = matchPlayers.slice(idx + 1);
+          const opps = previousOpponents[p.player_id] || [];
+          return others.some((o) => opps.includes(o.player_id));
+        });
+
+        if (hasAnyRematch) {
+          warnings.push(
+            i18n.t('tournaments.preview.rematch_inevitable_generic', {
+              match: matchPlayers.map((p) => p.player_name).join(' vs '),
+            })
+          );
+        }
+
+        const { startPlayerId, reason } = this.determineStartPlayer(matchPlayers, startStats);
+        pairings.push({ players: matchPlayers, startPlayerId, reason });
+      }
+    }
+
+    return { pairings, warnings, previousOpponents };
+  }
+
+  /**
+   * Recursive backtracking that tries to find a pairing solution with a maximum number of rematches.
+   * This is used with Iterative Deepening (0 rematches, then 1, etc.) to find the best possible outcome.
+   */
+  private static findBestPairings(
+    remaining: PlayerStanding[],
+    previousOpponents: Record<number, number[]>,
+    playersPerMatch: number,
+    maxTotalRematches: number,
+    currentRematches: number = 0
+  ): PlayerStanding[][] | null {
+    if (remaining.length === 0) return [];
+    if (remaining.length < playersPerMatch) return null;
+
+    const first = remaining[0];
+    const rest = remaining.slice(1);
+    const k = playersPerMatch - 1;
+
+    // For N=2 we must try every possible partner; a truncated window can miss valid 0-rematch pairings
+    // and fall back to greedy (more rematches). For N>2 keep a bounded window for performance.
+    const searchWindowSize = Math.max(15, Math.floor(rest.length / 2));
+    const searchWindow =
+      playersPerMatch === 2 ? rest.length : Math.min(rest.length, searchWindowSize);
+
+    if (playersPerMatch === 2) {
+      for (let i = 0; i < searchWindow; i++) {
+        const second = rest[i];
+        const opps = previousOpponents[first.player_id] || [];
+        const isRematch = opps.includes(second.player_id);
+        const matchRematches = isRematch ? 1 : 0;
+
+        if (currentRematches + matchRematches <= maxTotalRematches) {
+          const subRemaining = [...rest.slice(0, i), ...rest.slice(i + 1)];
+          const result = this.findBestPairings(
+            subRemaining,
+            previousOpponents,
+            playersPerMatch,
+            maxTotalRematches,
+            currentRematches + matchRematches
+          );
+
+          if (result) {
+            return [[first, second], ...result];
+          }
+        }
+      }
+    } else {
+      const countRematchesInMatch = (matchPlayers: PlayerStanding[]): number => {
+        let m = 0;
+        for (let j = 0; j < matchPlayers.length; j++) {
+          const p = matchPlayers[j];
+          const others = matchPlayers.slice(j + 1);
+          const opps = previousOpponents[p.player_id] || [];
+          m += others.filter((o) => opps.includes(o.player_id)).length;
+        }
+        return m;
+      };
+
+      const comboCount = binomial(rest.length, k);
+      const useComboEnumeration =
+        k > 0 && comboCount <= 4000 && (remaining.length <= 16 || comboCount <= 600);
+
+      if (useComboEnumeration) {
+        for (const combo of combinationsOf(rest, k)) {
+          const matchPlayers = [first, ...combo];
+          const matchRematches = countRematchesInMatch(matchPlayers);
+          if (currentRematches + matchRematches <= maxTotalRematches) {
+            const comboIds = new Set(combo.map((p) => p.player_id));
+            const subRemaining = rest.filter((p) => !comboIds.has(p.player_id));
+            const result = this.findBestPairings(
+              subRemaining,
+              previousOpponents,
+              playersPerMatch,
+              maxTotalRematches,
+              currentRematches + matchRematches
+            );
+            if (result) {
+              return [matchPlayers, ...result];
+            }
+          }
+        }
+      } else {
+        for (let i = 0; i <= searchWindow - k; i++) {
+          const candidates = rest.slice(i, i + k);
+          const matchPlayers = [first, ...candidates];
+          const matchRematches = countRematchesInMatch(matchPlayers);
+
+          if (currentRematches + matchRematches <= maxTotalRematches) {
+            const subRemaining = [...rest.slice(0, i), ...rest.slice(i + k)];
+            const result = this.findBestPairings(
+              subRemaining,
+              previousOpponents,
+              playersPerMatch,
+              maxTotalRematches,
+              currentRematches + matchRematches
+            );
+
+            if (result) {
+              return [matchPlayers, ...result];
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Selects the most appropriate player to receive a bye, enforcing the primary constraint
+   * that a player should NOT receive more than one bye in a tournament.
+   * If all candidates already had a bye, it falls back to the default rules.
+   */
+  private static selectByePlayer(
+    remaining: PlayerStanding[],
+    playersWithBye: Set<number>,
+    byeSelection: string
+  ): PlayerStanding {
+    if (remaining.length === 0) throw new Error('No players available for bye');
+    if (remaining.length === 1) return remaining[0];
+
+    const candidatesWithoutBye = remaining.filter((p) => !playersWithBye.has(p.player_id));
+
+    // Fallback: If ALL players already had a bye, we must pick from the pool of all remaining players
+    const pool = candidatesWithoutBye.length > 0 ? candidatesWithoutBye : remaining;
+
+    if (byeSelection === 'random') {
+      return pool[Math.floor(Math.random() * pool.length)];
+    } else {
+      // Both 'worst' and 'round_robin' modes default to the worst player in the current pool.
+      // Since `remaining` is sorted by points descending, the worst player is at the end.
+      return pool[pool.length - 1];
+    }
   }
 
   private static groupPlayersByPoints(standings: PlayerStanding[]): {
@@ -576,6 +1012,11 @@ export class SwissPairingService {
         pointGroups[points] = [];
       }
       pointGroups[points].push(standing);
+    });
+
+    // Shuffle each group to avoid predictable pairings and local minima in the search
+    Object.keys(pointGroups).forEach((points) => {
+      pointGroups[Number(points)].sort(() => Math.random() - 0.5);
     });
 
     // Pair within groups
@@ -605,14 +1046,26 @@ export class SwissPairingService {
     return { pointGroups, sortedPoints };
   }
 
-  private static async determineStartPlayer(
+  /** Mismas reglas que el emparejamiento automático: equilibrio de inicios, antigüedad y azar. */
+  static async pickStartPlayerForPair(
+    playerId1: number,
+    playerId2: number,
+    startStats: Record<number, { totalStarts: number; lastStartRound: number }>
+  ): Promise<number> {
+    const { startPlayerId } = this.determineStartPlayer(
+      [{ player_id: playerId1 }, { player_id: playerId2 }],
+      startStats
+    );
+    return startPlayerId;
+  }
+
+  private static determineStartPlayer(
     players: { player_id: number; player_name?: string }[],
     stats: { [playerId: number]: { totalStarts: number; lastStartRound: number } }
-  ): Promise<{ startPlayerId: number; reason: 'balance' | 'recency' | 'azar' }> {
+  ): { startPlayerId: number; reason: 'balance' | 'recency' | 'azar' } {
     if (players.length === 0) return { startPlayerId: -1, reason: 'azar' };
     if (players.length === 1) return { startPlayerId: players[0].player_id, reason: 'balance' };
 
-    // 1. Balance: Sort by total starts (ascending)
     const sortedByStarts = [...players].sort((a, b) => {
       const statsA = stats[a.player_id] || { totalStarts: 0, lastStartRound: 0 };
       const statsB = stats[b.player_id] || { totalStarts: 0, lastStartRound: 0 };
@@ -629,8 +1082,6 @@ export class SwissPairingService {
       return { startPlayerId: candidatesByStarts[0].player_id, reason: 'balance' };
     }
 
-    // 2. Recency: Sort by last start round (ascending -> smaller round number means started longer ago)
-    // 0 means never started
     const sortedByRecency = [...candidatesByStarts].sort((a, b) => {
       const statsA = stats[a.player_id] || { totalStarts: 0, lastStartRound: 0 };
       const statsB = stats[b.player_id] || { totalStarts: 0, lastStartRound: 0 };
@@ -649,19 +1100,20 @@ export class SwissPairingService {
       return { startPlayerId: candidatesByRecency[0].player_id, reason: 'recency' };
     }
 
-    // 3. Random
     const randomIndex = Math.floor(Math.random() * candidatesByRecency.length);
     return { startPlayerId: candidatesByRecency[randomIndex].player_id, reason: 'azar' };
   }
 
   static async calculateStandings(
     tournamentId: number,
-    tiebreakCriteria: any[],
+    tiebreakCriteria: TiebreakCriterion[],
     preFetchedData?: {
-      players?: any[];
+      players?: Player[];
       rounds?: Round[];
       roundMatches?: Match[][];
-      resultsByMatch?: Record<number, any[]>;
+      resultsByMatch?: Record<number, MatchResult[]>;
+      numberOfRounds?: number;
+      buchholzByeMode?: BuchholzByeMode;
     },
     playerDisplayMode: PlayerDisplayMode = 'per_player'
   ): Promise<PlayerStanding[]> {
@@ -674,38 +1126,47 @@ export class SwissPairingService {
       preFetchedData?.rounds || (await DatabaseService.getTournamentRounds(tournamentId));
 
     let roundMatches: Match[] = [];
-    let resultsByMatch: Record<number, any[]> = {};
+    let resultsByMatch: Record<number, MatchResult[]> = {};
+    let roundMatchesByRound: Match[][] = [];
 
-    if (preFetchedData && preFetchedData.roundMatches && preFetchedData.resultsByMatch) {
-      // Flatten matches if they are grouped by round
-      roundMatches = preFetchedData.roundMatches.flat();
+    if (preFetchedData?.roundMatches && preFetchedData.resultsByMatch) {
       resultsByMatch = preFetchedData.resultsByMatch;
+      const order = [...rounds]
+        .map((r, i) => ({ r, i }))
+        .sort((a, b) => a.r.round_number - b.r.round_number);
+      roundMatchesByRound = order.map((x) => preFetchedData.roundMatches![x.i] || []);
+      roundMatches = roundMatchesByRound.flat();
     } else {
-      const allRoundMatches = await Promise.all(
-        rounds.map((r) => DatabaseService.getRoundMatches(r.id!))
+      const roundsSorted = [...rounds].sort((a, b) => a.round_number - b.round_number);
+      roundMatchesByRound = await Promise.all(
+        roundsSorted.map((r) => DatabaseService.getRoundMatches(r.id!))
       );
-      roundMatches = allRoundMatches.flat();
+      roundMatches = roundMatchesByRound.flat();
       const allResults = await Promise.all(
         roundMatches.map((m) => DatabaseService.getMatchResults(m.id!))
       );
       resultsByMatch = {};
       roundMatches.forEach((m, i) => {
-        resultsByMatch[m.id!] = allResults[i] || [];
+        resultsByMatch[m.id!] = (allResults[i] || []) as MatchResult[];
       });
     }
 
+    const roundsSorted = [...rounds].sort((a, b) => a.round_number - b.round_number);
+
     // Initialize standings
     const standings: Record<number, PlayerStanding> = {};
-    players.forEach((player: any) => {
-      standings[player.id] = {
-        player_id: player.id,
+    players.forEach((player: Player) => {
+      const pid = player.id!;
+      standings[pid] = {
+        player_id: pid,
         player_name: getPlayerDisplayName(player, playerDisplayMode),
         total_points: 0,
         matches_played: 0,
         wins: 0,
         tiebreak_values: {},
-        active: player.active ?? true,
-        dropout_round: player.dropout_round ?? null,
+        active: (player as unknown as { active: boolean }).active ?? true,
+        dropout_round:
+          (player as unknown as { dropout_round: number | null }).dropout_round ?? null,
         starts_count: 0,
       };
     });
@@ -721,7 +1182,7 @@ export class SwissPairingService {
     // Process all match results
     Object.values(resultsByMatch)
       .flat()
-      .forEach((result: any) => {
+      .forEach((result: MatchResult) => {
         const pid = result.player_id;
         if (standings[pid]) {
           standings[pid].matches_played++;
@@ -732,16 +1193,44 @@ export class SwissPairingService {
         }
       });
 
+    const standingsList = Object.values(standings);
+    const tournamentPointsAverage =
+      standingsList.length > 0
+        ? standingsList.reduce((s, x) => s + x.total_points, 0) / standingsList.length
+        : 0;
+
+    let buchholzMode: BuchholzByeMode = 'legacy';
+    if (preFetchedData?.buchholzByeMode !== undefined) {
+      buchholzMode = normalizeBuchholzByeMode(preFetchedData.buchholzByeMode);
+    } else {
+      const cfg = await DatabaseService.getTournamentConfig(tournamentId);
+      buchholzMode = normalizeBuchholzByeMode(cfg?.buchholz_bye_mode);
+    }
+
+    let scheduledN = preFetchedData?.numberOfRounds ?? 0;
+    if (scheduledN < 1) {
+      const tour = await DatabaseService.getTournamentById(tournamentId);
+      scheduledN = tour?.number_of_rounds ?? 0;
+    }
+    const maxRoundNo = rounds.length > 0 ? Math.max(...rounds.map((r) => r.round_number)) : 0;
+    const numberOfRounds = Math.max(1, scheduledN, maxRoundNo, rounds.length);
+
     // Calculate tiebreakers
     for (const criterion of criteria) {
       if (!criterion.enabled) continue;
 
       const calculatedInfo = await TiebreakService.calculate(
         criterion.id,
-        Object.values(standings),
-        roundMatches,
+        standingsList,
+        roundsSorted,
+        roundMatchesByRound,
         resultsByMatch,
-        players
+        players,
+        {
+          buchholzByeMode: buchholzMode,
+          numberOfRounds,
+          tournamentPointsAverage,
+        }
       );
 
       Object.keys(calculatedInfo).forEach((playerId) => {
@@ -752,75 +1241,19 @@ export class SwissPairingService {
       });
     }
 
-    // Sort standings
-    // Priority: Active > Points > Tiebreakers
-    return Object.values(standings).sort((a, b) => {
-      // 0. Active Status (Active first)
-      if (a.active !== b.active) {
-        return a.active ? -1 : 1;
-      }
-
-      // 1. Total Points
-      if (b.total_points !== a.total_points) {
-        return b.total_points - a.total_points;
-      }
-
-      // 2. Tiebreakers
-      // 2. Tiebreakers
-      for (const criterion of criteria) {
-        if (!criterion.enabled) continue;
-
-        if (criterion.id === 'head_to_head') {
-          // Check matches between a and b
-          let winsA = 0;
-          let winsB = 0;
-          Object.values(resultsByMatch).forEach((results) => {
-            const resA = results.find((r: any) => r.player_id === a.player_id);
-            const resB = results.find((r: any) => r.player_id === b.player_id);
-            if (resA && resB) {
-              if (resA.position < resB.position) winsA++;
-              else if (resB.position < resA.position) winsB++;
-            }
-          });
-
-          if (winsA !== winsB) {
-            return winsB - winsA;
-          }
-        } else {
-          const valA = a.tiebreak_values[criterion.id] || 0;
-          const valB = b.tiebreak_values[criterion.id] || 0;
-          if (valA !== valB) {
-            return valB - valA;
-          }
-        }
-      }
-
-      // 3. Random fallback (using ID)
-      return a.player_id - b.player_id;
-    });
-  }
-
-  private static getPreviousOpponentsFromData(
-    rounds: Round[],
-    roundMatches: Match[][],
-    resultsByMatch: Record<number, any[]>
-  ): { [playerId: number]: number[] } {
-    const opponents: { [playerId: number]: number[] } = {};
-    for (let r = 0; r < rounds.length; r++) {
-      const matches = roundMatches[r] || [];
-      for (const match of matches) {
-        const results = resultsByMatch[match.id!] || [];
-        const playerIds = results.map((res: any) => res.player_id);
-        for (const playerId of playerIds) {
-          if (!opponents[playerId]) opponents[playerId] = [];
-          for (const opponentId of playerIds) {
-            if (opponentId !== playerId && !opponents[playerId].includes(opponentId)) {
-              opponents[playerId].push(opponentId);
-            }
-          }
-        }
-      }
+    const h2hClusterMeta = buildHeadToHeadClusterMeta(standingsList, criteria, resultsByMatch);
+    const pairCtx: StandingsPairCompareContext = {
+      criteria,
+      resultsByMatch,
+      ...h2hClusterMeta,
+    };
+    const sortedStandings = Object.values(standings).sort((a, b) =>
+      compareStandingsPair(a, b, pairCtx)
+    );
+    const h2hEnabled = criteria.some((c) => c.enabled && c.id === 'head_to_head');
+    if (h2hEnabled) {
+      annotateHeadToHeadGroupDisplay(sortedStandings, pairCtx);
     }
-    return opponents;
+    return sortedStandings;
   }
 }

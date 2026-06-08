@@ -9,8 +9,13 @@ let db: Database.Database | null = null;
 
 export function getDatabase(): Database.Database {
   if (!db) {
+    const env = (process.env.APP_ENV || 'colombia').toLowerCase();
+    const dbName = env === 'international' ? 'tournament_int.db' : 'tournament_co.db';
     const userDataPath = app.getPath('userData');
-    const dbPath = path.join(userDataPath, 'tournament.db');
+    const dbPath = path.join(userDataPath, dbName);
+    console.log(`[DB] Environment: ${env}`);
+    console.log(`[DB] Database filename: ${dbName}`);
+    console.log(`[DB] Full database path: ${dbPath}`);
 
     // Ensure directory exists
     const dbDir = path.dirname(dbPath);
@@ -33,8 +38,9 @@ export async function initDatabase() {
 }
 
 function initializeSchema(database: Database.Database) {
-  // Players table
-  database.exec(`
+  try {
+    // Players table
+    database.exec(`
     CREATE TABLE IF NOT EXISTS players (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -47,8 +53,8 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Circuits table
-  database.exec(`
+    // Circuits table
+    database.exec(`
     CREATE TABLE IF NOT EXISTS circuits (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -60,15 +66,15 @@ function initializeSchema(database: Database.Database) {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  // Migration: add status column to existing circuits tables (no-op if already present)
-  try {
-    database.exec(`ALTER TABLE circuits ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
-  } catch {
-    // Column already exists
-  }
+    // Migration: add status column to existing circuits tables (no-op if already present)
+    try {
+      database.exec(`ALTER TABLE circuits ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
+    } catch {
+      // Column already exists
+    }
 
-  // Cities table
-  database.exec(`
+    // Cities table
+    database.exec(`
     CREATE TABLE IF NOT EXISTS cities (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -77,8 +83,8 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Places table (city_id added in migration 7)
-  database.exec(`
+    // Places table (city_id added in migration 7)
+    database.exec(`
     CREATE TABLE IF NOT EXISTS places (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -87,8 +93,8 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Tournaments table
-  database.exec(`
+    // Tournaments table
+    database.exec(`
     CREATE TABLE IF NOT EXISTS tournaments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -103,22 +109,26 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Tournament configs table
-  database.exec(`
+    // Tournament configs table
+    database.exec(`
     CREATE TABLE IF NOT EXISTS tournament_configs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL UNIQUE,
       avoid_rematches INTEGER NOT NULL DEFAULT 1,
       tiebreak_criteria TEXT NOT NULL,
       scoring_system TEXT NOT NULL,
+      bye_selection TEXT DEFAULT 'worst',
+      player_display_mode TEXT DEFAULT 'per_player',
+      pairing_algorithm TEXT DEFAULT 'greedy' CHECK(pairing_algorithm IN ('greedy', 'backtracking')),
+      buchholz_bye_mode TEXT DEFAULT 'legacy',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
     )
   `);
 
-  // Tournament players (registrations)
-  database.exec(`
+    // Tournament players (registrations)
+    database.exec(`
     CREATE TABLE IF NOT EXISTS tournament_players (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
@@ -130,8 +140,8 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Rounds table
-  database.exec(`
+    // Rounds table
+    database.exec(`
     CREATE TABLE IF NOT EXISTS rounds (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
@@ -144,8 +154,8 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Matches table
-  database.exec(`
+    // Matches table
+    database.exec(`
     CREATE TABLE IF NOT EXISTS matches (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       round_id INTEGER NOT NULL,
@@ -157,8 +167,8 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Match players table (jugadores asignados a cada partida)
-  database.exec(`
+    // Match players table (jugadores asignados a cada partida)
+    database.exec(`
     CREATE TABLE IF NOT EXISTS match_players (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       match_id INTEGER NOT NULL,
@@ -169,8 +179,8 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Match results table
-  database.exec(`
+    // Match results table
+    database.exec(`
     CREATE TABLE IF NOT EXISTS match_results (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       match_id INTEGER NOT NULL,
@@ -184,8 +194,8 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Player byes table (historial de byes por jugador)
-  database.exec(`
+    // Player byes table (historial de byes por jugador)
+    database.exec(`
     CREATE TABLE IF NOT EXISTS player_byes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
@@ -198,8 +208,17 @@ function initializeSchema(database: Database.Database) {
     )
   `);
 
-  // Create indexes
-  database.exec(`
+    // Sync Meta table (for tracking last sync position)
+    database.exec(`
+    CREATE TABLE IF NOT EXISTS sync_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+    // Create indexes
+    database.exec(`
     CREATE INDEX IF NOT EXISTS idx_tournament_players_tournament ON tournament_players(tournament_id);
     CREATE INDEX IF NOT EXISTS idx_tournament_players_player ON tournament_players(player_id);
     CREATE INDEX IF NOT EXISTS idx_rounds_tournament ON rounds(tournament_id);
@@ -215,8 +234,11 @@ function initializeSchema(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_player_byes_player ON player_byes(player_id);
   `);
 
-  // Run migrations to add new columns to existing tables
-  runMigrations(database);
+    // Run migrations to add new columns to existing tables
+    runMigrations(database);
+  } catch (error: any) {
+    console.error('Error in initializeSchema:', error);
+  }
 }
 
 function runMigrations(database: Database.Database) {
@@ -279,50 +301,35 @@ function runMigrations(database: Database.Database) {
 
   // Migration 6: Places and tournament place_id
   try {
-    database.exec(
-      `INSERT INTO places (name) SELECT 'Online' WHERE NOT EXISTS (SELECT 1 FROM places LIMIT 1)`
-    );
     database.exec(`ALTER TABLE tournaments ADD COLUMN place_id INTEGER REFERENCES places(id)`);
-    database.exec(
-      `UPDATE tournaments SET place_id = (SELECT id FROM places WHERE name = 'Online' LIMIT 1) WHERE place_id IS NULL`
-    );
-    // SQLite does not support ALTER COLUMN to add NOT NULL; app will enforce place_id on create/update
   } catch (error: any) {
     const errorMsg = error.message || '';
     if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
-      console.warn('Migration 6 warning:', errorMsg);
+      console.warn('Migration 6.1 warning:', errorMsg);
     }
   }
 
-  // Migration 7: Cities and place city_id
+  // Migration 7: Cities, Places and city_id
   try {
-    database.exec(
-      `INSERT INTO cities (name) SELECT 'Bogotá' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Bogotá')`
-    );
-    database.exec(
-      `INSERT INTO cities (name) SELECT 'Chía' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Chía')`
-    );
-    database.exec(
-      `INSERT INTO cities (name) SELECT 'Medellín' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Medellín')`
-    );
-    database.exec(
-      `INSERT INTO cities (name) SELECT 'Cali' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Cali')`
-    );
-    database.exec(
-      `INSERT INTO cities (name) SELECT 'Ibagué' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Ibagué')`
-    );
-    database.exec(
-      `INSERT INTO cities (name) SELECT 'Neiva' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE name = 'Neiva')`
-    );
-    database.exec(`ALTER TABLE places ADD COLUMN city_id INTEGER REFERENCES cities(id)`);
-    database.exec(
-      `UPDATE places SET city_id = (SELECT id FROM cities WHERE name = 'Bogotá' LIMIT 1) WHERE city_id IS NULL`
-    );
+    let hasCityId = false;
+    try {
+      const columns = database.pragma(`table_info(places)`) as any[];
+      if (columns.some((col) => col.name === 'city_id')) {
+        hasCityId = true;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    if (!hasCityId) {
+      database.exec(`ALTER TABLE places ADD COLUMN city_id INTEGER REFERENCES cities(id)`);
+    }
+
+    // Migration 7 just ensures city_id exists in places
+    console.log(`[DB] Migration 7: Ensuring city_id exists in places`);
   } catch (error: any) {
     const errorMsg = error.message || '';
-    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
-      console.warn('Migration 7 warning:', errorMsg);
-    }
+    console.warn('Migration 7 warning:', errorMsg);
   }
 
   // Migration 8: Offline Mode - Sync Queue and UUIDs
@@ -454,6 +461,373 @@ function runMigrations(database: Database.Database) {
     console.log(`🎉 Migration 10 complete: Added ${addedColumns} missing UUID columns.`);
   } else {
     console.log('ℹ️ Migration 10: All columns already exist.');
+  }
+
+  // Migration 11: Add pairing_algorithm to tournament_configs
+  try {
+    database.exec(
+      `ALTER TABLE tournament_configs ADD COLUMN pairing_algorithm TEXT DEFAULT 'greedy' CHECK(pairing_algorithm IN ('greedy', 'backtracking'))`
+    );
+    console.log('✅ [Migration 11] Added pairing_algorithm to tournament_configs');
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('⚠️ [Migration 11] Warning:', errorMsg);
+    }
+  }
+
+  // Migration 12: Buchholz / bye handling mode
+  try {
+    database.exec(
+      `ALTER TABLE tournament_configs ADD COLUMN buchholz_bye_mode TEXT DEFAULT 'legacy' CHECK(buchholz_bye_mode IN ('legacy', 'n_minus_1', 'legacy_virtual_avg', 'n_minus_1_virtual_avg'))`
+    );
+    console.log('✅ [Migration 12] Added buchholz_bye_mode to tournament_configs');
+  } catch (error: any) {
+    const errorMsg = error.message || '';
+    if (!errorMsg.includes('duplicate column name') && !errorMsg.includes('duplicate column')) {
+      console.warn('⚠️ [Migration 12] Warning:', errorMsg);
+    }
+  }
+
+  // Migration 13: Relax buchholz_bye_mode CHECK (add virtual_worst modes; SQLite cannot widen CHECK in place)
+  try {
+    const applied = database
+      .prepare(`SELECT 1 FROM sync_meta WHERE key = 'migration_13_buchholz_bye_mode'`)
+      .get() as { 1: number } | undefined;
+    if (applied) {
+      console.log('ℹ️ Migration 13: buchholz_bye_mode already relaxed');
+    } else {
+      const cols = database.pragma('table_info(tournament_configs)') as {
+        cid: number;
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+        pk: number;
+      }[];
+      if (cols.length === 0) {
+        console.warn('⚠️ Migration 13: tournament_configs missing, skip');
+      } else {
+        const sorted = [...cols].sort((a, b) => a.cid - b.cid);
+        const colDefs = sorted
+          .map((c) => {
+            if (c.name === 'buchholz_bye_mode') {
+              return `"buchholz_bye_mode" TEXT DEFAULT 'legacy'`;
+            }
+            if (c.name === 'tournament_id') {
+              return `"tournament_id" INTEGER NOT NULL UNIQUE`;
+            }
+            let line = `"${c.name}" ${c.type || 'TEXT'}`;
+            if (c.pk) line += ' PRIMARY KEY AUTOINCREMENT';
+            else if (c.notnull) line += ' NOT NULL';
+            if (c.dflt_value != null && c.dflt_value !== undefined && String(c.dflt_value) !== '') {
+              line += ` DEFAULT ${c.dflt_value}`;
+            }
+            return line;
+          })
+          .join(',\n');
+        const colNames = sorted.map((c) => `"${c.name}"`).join(', ');
+        database.exec('BEGIN IMMEDIATE');
+        database.exec(`
+          CREATE TABLE tournament_configs__m13 (
+            ${colDefs},
+            FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+          )
+        `);
+        database.exec(
+          `INSERT INTO tournament_configs__m13 (${colNames}) SELECT ${colNames} FROM tournament_configs`
+        );
+        database.exec('DROP TABLE tournament_configs');
+        database.exec('ALTER TABLE tournament_configs__m13 RENAME TO tournament_configs');
+        database.exec(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_configs_uuid ON tournament_configs(uuid)`
+        );
+        database
+          .prepare(
+            `INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES ('migration_13_buchholz_bye_mode', '1', CURRENT_TIMESTAMP)`
+          )
+          .run();
+        database.exec('COMMIT');
+        console.log('✅ [Migration 13] Relaxed buchholz_bye_mode (virtual_worst supported)');
+      }
+    }
+  } catch (error: any) {
+    try {
+      database.exec('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    console.warn('⚠️ [Migration 13] Warning:', error?.message || error);
+  }
+
+  // Migration 14: Knockout phase (competition_format, rounds.phase, match series, game_number)
+  try {
+    const applied = database
+      .prepare(`SELECT 1 FROM sync_meta WHERE key = 'migration_14_knockout'`)
+      .get() as { 1: number } | undefined;
+    if (applied) {
+      console.log('ℹ️ Migration 14: knockout columns already applied');
+    } else {
+      database.exec('BEGIN IMMEDIATE');
+
+      try {
+        database.exec(
+          `ALTER TABLE tournaments ADD COLUMN competition_format TEXT NOT NULL DEFAULT 'swiss'`
+        );
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(`ALTER TABLE tournaments ADD COLUMN knockout_phase_started_at TEXT`);
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(`ALTER TABLE tournament_configs ADD COLUMN knockout_size INTEGER DEFAULT 8`);
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(
+          `ALTER TABLE tournament_configs ADD COLUMN knockout_seeding TEXT DEFAULT 'standard_bracket'`
+        );
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(
+          `ALTER TABLE tournament_configs ADD COLUMN knockout_series TEXT DEFAULT 'best_of_1'`
+        );
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(`ALTER TABLE tournament_configs ADD COLUMN swiss_standings_snapshot TEXT`);
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(`ALTER TABLE rounds ADD COLUMN phase TEXT NOT NULL DEFAULT 'swiss'`);
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(`ALTER TABLE rounds ADD COLUMN knockout_stage TEXT`);
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(`ALTER TABLE matches ADD COLUMN knockout_bracket_slot INTEGER`);
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(`ALTER TABLE matches ADD COLUMN series_target_wins INTEGER DEFAULT 1`);
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(
+          `ALTER TABLE matches ADD COLUMN series_winner_id INTEGER REFERENCES players(id)`
+        );
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(`ALTER TABLE matches ADD COLUMN is_knockout INTEGER NOT NULL DEFAULT 0`);
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+      try {
+        database.exec(`ALTER TABLE matches ADD COLUMN series_meta TEXT`);
+      } catch (e: any) {
+        if (!String(e.message || '').includes('duplicate column')) throw e;
+      }
+
+      // Rebuild match_results with game_number and UNIQUE(match_id, player_id, game_number)
+      const mrCols = database.pragma('table_info(match_results)') as {
+        name: string;
+      }[];
+      const hasGameNumber = mrCols.some((c) => c.name === 'game_number');
+      if (!hasGameNumber) {
+        database.exec(`
+          CREATE TABLE match_results__m14 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT,
+            match_id INTEGER NOT NULL,
+            player_id INTEGER NOT NULL,
+            position INTEGER NOT NULL,
+            points INTEGER NOT NULL,
+            tournament_points REAL NOT NULL,
+            game_number INTEGER NOT NULL DEFAULT 1,
+            UNIQUE(match_id, player_id, game_number),
+            FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+            FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+          )
+        `);
+        database.exec(`
+          INSERT INTO match_results__m14 (id, uuid, match_id, player_id, position, points, tournament_points, game_number)
+          SELECT id, uuid, match_id, player_id, position, points, tournament_points, 1
+          FROM match_results
+        `);
+        database.exec('DROP TABLE match_results');
+        database.exec('ALTER TABLE match_results__m14 RENAME TO match_results');
+        database.exec(
+          `CREATE INDEX IF NOT EXISTS idx_match_results_match ON match_results(match_id)`
+        );
+        database.exec(
+          `CREATE INDEX IF NOT EXISTS idx_match_results_player ON match_results(player_id)`
+        );
+      }
+
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS tournament_knockout_seeds (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          uuid TEXT,
+          tournament_id INTEGER NOT NULL,
+          player_id INTEGER NOT NULL,
+          seed INTEGER NOT NULL,
+          UNIQUE(tournament_id, player_id),
+          UNIQUE(tournament_id, seed),
+          FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+          FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+        )
+      `);
+      database.exec(
+        `CREATE INDEX IF NOT EXISTS idx_ko_seeds_tournament ON tournament_knockout_seeds(tournament_id)`
+      );
+
+      database
+        .prepare(
+          `INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES ('migration_14_knockout', '1', CURRENT_TIMESTAMP)`
+        )
+        .run();
+      database.exec('COMMIT');
+      console.log('✅ [Migration 14] Knockout phase schema applied');
+    }
+  } catch (error: any) {
+    try {
+      database.exec('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    console.warn('⚠️ [Migration 14] Warning:', error?.message || error);
+  }
+
+  // Migration 15: KO config (bronze, match starter, alternate starter, match stage)
+  try {
+    const applied = database
+      .prepare(`SELECT 1 FROM sync_meta WHERE key = 'migration_15_ko_config'`)
+      .get() as { 1: number } | undefined;
+    if (applied) {
+      console.log('ℹ️ Migration 15: KO config columns already applied');
+    } else {
+      const addCol = (sql: string) => {
+        try {
+          database.exec(sql);
+        } catch (e: any) {
+          if (!String(e.message || '').includes('duplicate column')) throw e;
+        }
+      };
+      addCol(
+        `ALTER TABLE tournament_configs ADD COLUMN knockout_play_bronze_match INTEGER NOT NULL DEFAULT 0`
+      );
+      addCol(
+        `ALTER TABLE tournament_configs ADD COLUMN knockout_match_starter TEXT NOT NULL DEFAULT 'higher_swiss_seed'`
+      );
+      addCol(
+        `ALTER TABLE tournament_configs ADD COLUMN knockout_series_alternate_starter INTEGER NOT NULL DEFAULT 0`
+      );
+      addCol(`ALTER TABLE matches ADD COLUMN knockout_match_stage TEXT`);
+      database
+        .prepare(
+          `INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES ('migration_15_ko_config', '1', CURRENT_TIMESTAMP)`
+        )
+        .run();
+      console.log('✅ [Migration 15] KO config columns applied');
+    }
+  } catch (error: any) {
+    console.warn('⚠️ [Migration 15] Warning:', error?.message || error);
+  }
+
+  // Migration 16: Swiss match starter + KO series starter mode
+  try {
+    const applied = database
+      .prepare(`SELECT 1 FROM sync_meta WHERE key = 'migration_16_starter_config'`)
+      .get() as { 1: number } | undefined;
+    if (applied) {
+      console.log('ℹ️ Migration 16: starter config columns already applied');
+    } else {
+      const addCol = (sql: string) => {
+        try {
+          database.exec(sql);
+        } catch (e: any) {
+          if (!String(e.message || '').includes('duplicate column')) throw e;
+        }
+      };
+      addCol(
+        `ALTER TABLE tournament_configs ADD COLUMN swiss_match_starter TEXT NOT NULL DEFAULT 'higher_ranked'`
+      );
+      addCol(
+        `ALTER TABLE tournament_configs ADD COLUMN knockout_series_starter_mode TEXT NOT NULL DEFAULT 'alternate'`
+      );
+      database.exec(`
+        UPDATE tournament_configs
+        SET knockout_series_starter_mode = CASE
+          WHEN knockout_series_alternate_starter = 1 THEN 'previous_loser'
+          ELSE 'alternate'
+        END
+      `);
+      database
+        .prepare(
+          `INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES ('migration_16_starter_config', '1', CURRENT_TIMESTAMP)`
+        )
+        .run();
+      console.log('✅ [Migration 16] Swiss/KO starter config columns applied');
+    }
+  } catch (error: any) {
+    console.warn('⚠️ [Migration 16] Warning:', error?.message || error);
+  }
+
+  // Final Step: Default Data Initialization (Ensuring all columns exist)
+  try {
+    console.log(`[DB] Configuring final default cities and places (Online/Offline)`);
+
+    // Cleanup: Remove any other cities/places if they exist (to ensure a fresh state)
+    // We do this at the very end to be sure columns exist
+    database.exec(`DELETE FROM places WHERE name NOT IN ('Online', 'Offline')`);
+    database.exec(`DELETE FROM cities WHERE name NOT IN ('Online', 'Offline')`);
+
+    const defaultCities = [
+      { name: 'Online', uuid: '00000000-0000-0000-0000-000000000001' },
+      { name: 'Offline', uuid: '00000000-0000-0000-0000-000000000002' },
+    ];
+    for (const city of defaultCities) {
+      database.exec(
+        `INSERT INTO cities (name, uuid) SELECT '${city.name}', '${city.uuid}' WHERE NOT EXISTS (SELECT 1 FROM cities WHERE uuid = '${city.uuid}')`
+      );
+    }
+
+    // Insert Places linked to those Cities with fixed UUIDs
+    database.exec(
+      `INSERT INTO places (name, city_id, uuid, city_uuid) 
+       SELECT 'Online', id, '00000000-0000-0000-0000-100000000001', '00000000-0000-0000-0000-000000000001' 
+       FROM cities WHERE uuid = '00000000-0000-0000-0000-000000000001' 
+       AND NOT EXISTS (SELECT 1 FROM places WHERE uuid = '00000000-0000-0000-0000-100000000001')`
+    );
+    database.exec(
+      `INSERT INTO places (name, city_id, uuid, city_uuid) 
+       SELECT 'Offline', id, '00000000-0000-0000-0000-100000000002', '00000000-0000-0000-0000-000000000002' 
+       FROM cities WHERE uuid = '00000000-0000-0000-0000-000000000002' 
+       AND NOT EXISTS (SELECT 1 FROM places WHERE uuid = '00000000-0000-0000-0000-100000000002')`
+    );
+
+    // Final fix for loose tournaments
+    database.exec(
+      `UPDATE tournaments SET place_id = (SELECT id FROM places WHERE name = 'Online' LIMIT 1) WHERE place_id IS NULL`
+    );
+  } catch (error: any) {
+    console.error('❌ Final Initialization failed:', error.message);
   }
 
   // Force wal checkpoint to ensure changes are written

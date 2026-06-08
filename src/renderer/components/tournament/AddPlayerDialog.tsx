@@ -7,6 +7,7 @@ import Button from '../common/Button';
 import PlayerSearch from '../common/PlayerSearch';
 import Input from '../common/Input';
 
+import { useTranslation } from 'react-i18next';
 import { calculateNumberOfRounds } from '../../utils/tournament';
 
 interface AddPlayerDialogProps {
@@ -28,6 +29,7 @@ export default function AddPlayerDialog({
   currentRoundsVal,
   isUnstarted,
 }: AddPlayerDialogProps) {
+  const { t } = useTranslation();
   const [isNewPlayerMode, setIsNewPlayerMode] = useState(false);
   const [newPlayerData, setNewPlayerData] = useState({
     name: '',
@@ -49,7 +51,7 @@ export default function AddPlayerDialog({
       if (isUnstarted) {
         if (
           !confirm(
-            `Alcanzaste un nivel superior de jugadores. Se agregará una nueva ronda al torneo (pasarán a ser ${newCalculatedRounds}). ¿Aceptar?`
+            t('tournaments.registration.rounds_increase_confirm', { rounds: newCalculatedRounds })
           )
         ) {
           return false;
@@ -58,7 +60,7 @@ export default function AddPlayerDialog({
       } else {
         if (
           !confirm(
-            `Atención: Agregar este jugador superará el límite del bracket y forzará la generación de una ronda nueva recomendada al final (Serán ${newCalculatedRounds} rondas). No se recomienda hacer esto, y de hacerlo, procura ingresar a otra persona más (2 en total) para evitar byes. ¿Deseas arriesgarte y continuar?`
+            t('tournaments.registration.rounds_bracket_warning', { rounds: newCalculatedRounds })
           )
         ) {
           return false;
@@ -88,10 +90,10 @@ export default function AddPlayerDialog({
       }
     } catch (error: any) {
       if (error.message?.includes('UNIQUE constraint')) {
-        alert('Este jugador ya está inscrito en el torneo');
+        alert(t('tournaments.registration.already_registered'));
       } else {
         console.error('Error adding player:', error);
-        alert('Error al agregar el jugador');
+        alert(t('tournaments.registration.register_error'));
       }
     } finally {
       setIsLoading(false);
@@ -100,7 +102,7 @@ export default function AddPlayerDialog({
 
   const handleCreateAndAdd = async () => {
     if (!newPlayerData.name.trim()) {
-      alert('El nombre es requerido');
+      alert(t('tournaments.form.name_req'));
       return;
     }
     try {
@@ -122,7 +124,7 @@ export default function AddPlayerDialog({
       }
     } catch (error) {
       console.error('Error creating player:', error);
-      alert('Error al crear el jugador');
+      alert(t('tournaments.registration.create_error'));
     } finally {
       setIsLoading(false);
     }
@@ -132,20 +134,20 @@ export default function AddPlayerDialog({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Agregar Jugador al Torneo"
+      title={t('tournaments.registration.add_player_title')}
       footer={
         isNewPlayerMode ? (
           <>
             <Button variant="secondary" onClick={() => setIsNewPlayerMode(false)}>
-              Volver a Búsqueda
+              {t('tournaments.registration.back_to_search')}
             </Button>
             <Button onClick={handleCreateAndAdd} isLoading={isLoading}>
-              Crear e Inscribir
+              {t('tournaments.registration.create_and_enroll')}
             </Button>
           </>
         ) : (
           <Button variant="secondary" onClick={onClose}>
-            Cerrar
+            {t('common.close')}
           </Button>
         )
       }
@@ -153,30 +155,30 @@ export default function AddPlayerDialog({
       {isNewPlayerMode ? (
         <div className="space-y-4">
           <Input
-            label="Nombre *"
+            label={t('players.form.name')}
             value={newPlayerData.name}
             onChange={(e) => setNewPlayerData({ ...newPlayerData, name: e.target.value })}
             required
           />
           <Input
-            label="BGA Username"
+            label={t('players.form.bga_username')}
             value={newPlayerData.bga_username}
             onChange={(e) => setNewPlayerData({ ...newPlayerData, bga_username: e.target.value })}
           />
           <Input
-            label="Teléfono"
+            label={t('players.form.phone')}
             type="tel"
             value={newPlayerData.phone}
             onChange={(e) => setNewPlayerData({ ...newPlayerData, phone: e.target.value })}
           />
           <Input
-            label="Correo Electrónico"
+            label={t('players.form.email')}
             type="email"
             value={newPlayerData.email}
             onChange={(e) => setNewPlayerData({ ...newPlayerData, email: e.target.value })}
           />
           <Input
-            label="Edad"
+            label={t('players.form.age')}
             type="number"
             value={newPlayerData.age}
             onChange={(e) => setNewPlayerData({ ...newPlayerData, age: e.target.value })}
@@ -185,15 +187,17 @@ export default function AddPlayerDialog({
       ) : (
         <div className="space-y-4 min-h-[300px]">
           <div className="flex justify-between items-center">
-            <p className="text-gray-600 dark:text-gray-400">Buscar jugador existente:</p>
+            <p className="text-gray-600 dark:text-gray-400">
+              {t('tournaments.registration.search_existing')}
+            </p>
             <Button size="sm" onClick={() => setIsNewPlayerMode(true)}>
-              Crear Nuevo Jugador
+              {t('tournaments.registration.create_new')}
             </Button>
           </div>
           <PlayerSearch
             onSelect={handleSelectPlayer}
             excludeIds={existingPlayerIds}
-            placeholder="Buscar por nombre..."
+            placeholder={t('tournaments.registration.search_placeholder')}
           />
         </div>
       )}

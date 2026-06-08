@@ -10,6 +10,7 @@ import Input from '../common/Input';
 import { Column } from '../common/Table';
 import { calculateNumberOfRounds } from '../../utils/tournament';
 import RoundsConfirmationModal from './RoundsConfirmationModal';
+import { useTranslation } from 'react-i18next';
 
 interface PlayerRegistrationProps {
   /** When null, draft mode: players come from draftPlayers/onDraftPlayersChange (no DB writes until parent creates tournament). */
@@ -30,6 +31,7 @@ export default function PlayerRegistration({
   draftPlayers = [],
   onDraftPlayersChange,
 }: PlayerRegistrationProps) {
+  const { t } = useTranslation();
   const [dbPlayers, setDbPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isNewPlayerModalOpen, setIsNewPlayerModalOpen] = useState(false);
@@ -54,11 +56,11 @@ export default function PlayerRegistration({
       setDbPlayers(data);
     } catch (error) {
       console.error('Error loading tournament players:', error);
-      alert('Error al cargar los jugadores');
+      alert(t('tournaments.registration.load_error'));
     } finally {
       setIsLoading(false);
     }
-  }, [tournamentId]);
+  }, [tournamentId, t]);
 
   useEffect(() => {
     if (!isDraftMode && tournamentId) {
@@ -79,7 +81,7 @@ export default function PlayerRegistration({
     if (!player.id) return;
     if (isDraftMode) {
       if (draftPlayers.some((p) => p.id === player.id)) {
-        alert('Este jugador ya está en la lista');
+        alert(t('tournaments.registration.already_in_list'));
         return;
       }
       onDraftPlayersChange?.([...draftPlayers, player]);
@@ -90,10 +92,10 @@ export default function PlayerRegistration({
       loadPlayers();
     } catch (error: any) {
       if (error.message?.includes('UNIQUE constraint')) {
-        alert('Este jugador ya está inscrito en el torneo');
+        alert(t('tournaments.registration.already_registered'));
       } else {
         console.error('Error registering player:', error);
-        alert('Error al inscribir el jugador');
+        alert(t('tournaments.registration.register_error'));
       }
     }
   };
@@ -101,24 +103,24 @@ export default function PlayerRegistration({
   const handleRemovePlayer = async (player: Player) => {
     if (!player.id) return;
     if (isDraftMode) {
-      if (confirm(`¿Quitar a ${player.name} de la lista?`)) {
+      if (confirm(t('tournaments.registration.remove_draft_confirm', { name: player.name }))) {
         onDraftPlayersChange?.(draftPlayers.filter((p) => p.id !== player.id));
       }
       return;
     }
-    if (!confirm(`¿Estás seguro de eliminar a ${player.name} del torneo?`)) return;
+    if (!confirm(t('tournaments.registration.remove_confirm', { name: player.name }))) return;
     try {
       await DatabaseService.removePlayerFromTournament(tournamentId, player.id);
       loadPlayers();
     } catch (error) {
       console.error('Error removing player:', error);
-      alert('Error al eliminar el jugador');
+      alert(t('tournaments.registration.remove_error'));
     }
   };
 
   const handleCreateAndAdd = async () => {
     if (!newPlayerData.name.trim()) {
-      alert('El nombre es requerido');
+      alert(t('tournaments.form.name_req'));
       return;
     }
     try {
@@ -147,26 +149,26 @@ export default function PlayerRegistration({
       setNewPlayerData({ name: '', bga_username: '', phone: '', email: '', age: '' });
     } catch (error) {
       console.error('Error creating player:', error);
-      alert('Error al crear el jugador');
+      alert(t('tournaments.registration.create_error'));
     }
   };
 
   const columns: Column<Player>[] = [
     {
       key: 'name',
-      header: 'Nombre',
+      header: t('players.name'),
     },
     {
       key: 'bga_username',
-      header: 'BGA Username',
+      header: t('players.bga_username'),
       render: (player) => player.bga_username || '-',
     },
     {
       key: 'actions',
-      header: 'Acciones',
+      header: t('common.actions'),
       render: (player) => (
         <Button variant="danger" size="sm" onClick={() => handleRemovePlayer(player)}>
-          Eliminar
+          {t('common.delete')}
         </Button>
       ),
     },
@@ -178,40 +180,47 @@ export default function PlayerRegistration({
     <div className="flex flex-col overflow-hidden gap-4">
       {/* Search section: always on top so dropdown appears above table headers (AC-008) */}
       <div className="flex-none relative z-[100] overflow-visible">
-        <h3 className="text-lg font-medium mb-4">Inscribir Jugadores</h3>
+        <h3 className="text-lg font-medium mb-4">{t('tournaments.registration.title')}</h3>
         <div className="flex space-x-2">
           <div className="flex-1 min-w-0 pl-2">
             <PlayerSearch
               onSelect={handleSelectPlayer}
               excludeIds={registeredIds}
-              placeholder="Buscar jugador existente..."
+              placeholder={t('tournaments.registration.search_placeholder')}
             />
           </div>
-          <Button onClick={() => setIsNewPlayerModalOpen(true)}>Nuevo Jugador</Button>
+          <Button onClick={() => setIsNewPlayerModalOpen(true)}>
+            {t('tournaments.registration.new_player')}
+          </Button>
         </div>
       </div>
 
       {/* Table section: fixed max height so only this area scrolls, modal stays same size */}
       <div className="flex-none flex flex-col overflow-hidden relative z-0 min-h-0">
         <div className="flex justify-between items-center mb-2 flex-none">
-          <h3 className="text-lg font-medium">Jugadores Inscritos ({players.length})</h3>
+          <h3 className="text-lg font-medium">
+            {t('tournaments.registration.registered_count', { count: players.length })}
+          </h3>
           {players.length >= 2 && (
             <div className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
               <span className="text-sm font-medium text-primary-800 dark:text-primary-200">
-                Rondas calculadas: <strong>{calculatedRounds}</strong>
+                {t('tournaments.registration.calculated_rounds')}:{' '}
+                <strong>{calculatedRounds}</strong>
               </span>
             </div>
           )}
         </div>
         <div className="max-h-[40vh] min-h-[120px] flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg">
           {isLoading ? (
-            <p className="text-center py-8 text-gray-500 dark:text-gray-400">Cargando...</p>
+            <p className="text-center py-8 text-gray-500 dark:text-gray-400">
+              {t('common.loading')}
+            </p>
           ) : (
             <Table
               columns={columns}
               data={players}
               keyExtractor={(player) => player.id || Math.random()}
-              emptyMessage="No hay jugadores inscritos. Busca o crea un jugador para inscribirlo."
+              emptyMessage={t('tournaments.registration.empty_msg')}
               scrollableBody
             />
           )}
@@ -222,7 +231,7 @@ export default function PlayerRegistration({
       <div className="flex-none flex justify-end items-center gap-2 pt-2">
         {onCancel && (
           <Button variant="secondary" onClick={onCancel}>
-            Cancelar
+            {t('common.cancel')}
           </Button>
         )}
         <Button
@@ -230,7 +239,7 @@ export default function PlayerRegistration({
           variant="primary"
           disabled={players.length < 2}
         >
-          Continuar ({players.length} jugadores)
+          {t('tournaments.registration.continue_with_count', { count: players.length })}
         </Button>
       </div>
 
@@ -249,42 +258,44 @@ export default function PlayerRegistration({
       <Modal
         isOpen={isNewPlayerModalOpen}
         onClose={() => setIsNewPlayerModalOpen(false)}
-        title="Nuevo Jugador"
+        title={t('tournaments.registration.new_player')}
         footer={
           <>
             <Button variant="secondary" onClick={() => setIsNewPlayerModalOpen(false)}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
-            <Button onClick={handleCreateAndAdd}>Crear e Inscribir</Button>
+            <Button onClick={handleCreateAndAdd}>
+              {t('tournaments.registration.create_and_register')}
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
-            label="Nombre *"
+            label={`${t('players.name')} *`}
             value={newPlayerData.name}
             onChange={(e) => setNewPlayerData({ ...newPlayerData, name: e.target.value })}
             required
           />
           <Input
-            label="BGA Username"
+            label={t('players.bga_username')}
             value={newPlayerData.bga_username}
             onChange={(e) => setNewPlayerData({ ...newPlayerData, bga_username: e.target.value })}
           />
           <Input
-            label="Teléfono"
+            label={t('players.phone')}
             type="tel"
             value={newPlayerData.phone}
             onChange={(e) => setNewPlayerData({ ...newPlayerData, phone: e.target.value })}
           />
           <Input
-            label="Correo Electrónico"
+            label={t('players.email')}
             type="email"
             value={newPlayerData.email}
             onChange={(e) => setNewPlayerData({ ...newPlayerData, email: e.target.value })}
           />
           <Input
-            label="Edad"
+            label={t('players.age')}
             type="number"
             value={newPlayerData.age}
             onChange={(e) => {

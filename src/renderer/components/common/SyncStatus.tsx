@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SyncService } from '../../services/syncService';
 
 export default function SyncStatus() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState({
     isSyncing: false,
     isOnline: navigator.onLine,
@@ -45,18 +47,31 @@ export default function SyncStatus() {
   }, []);
 
   if (!status.isConfigured) {
-    // Hide if Supabase not configured or just minimal indicator?
-    // Let's show a "Local Mode" indicator
     return (
       <div
         className="flex items-center text-xs text-gray-500 dark:text-gray-400 px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800"
-        title="Modo Offline (Solo Local)"
+        title={t('sync_status.local_mode_title')}
       >
         <span className="mr-1">💾</span>
-        <span className="hidden sm:inline">Local</span>
+        <span className="hidden sm:inline">{t('sync_status.local_mode')}</span>
       </div>
     );
   }
+
+  const networkTooltip = [
+    status.isOnline ? t('sync_status.internet_connected') : t('sync_status.internet_disconnected'),
+    `${t('sync_status.browser')}: ${navigator.onLine ? t('sync_status.online') : t('sync_status.offline')}`,
+    `${t('sync_status.supabase')}: ${status.isOnline ? t('sync_status.online') : t('sync_status.offline')}`,
+    `${t('sync_status.last_check')}: ${lastCheck.toLocaleTimeString()}`,
+  ].join('\n');
+
+  const syncTooltip = !status.isOnline
+    ? t('sync_status.no_internet')
+    : status.isSyncing
+      ? t('sync_status.syncing')
+      : queueSize > 0
+        ? t('sync_status.pending', { count: queueSize })
+        : t('sync_status.synced');
 
   return (
     <div className="flex items-center space-x-2 text-sm">
@@ -67,10 +82,7 @@ export default function SyncStatus() {
             ? 'text-green-500 bg-green-50 dark:bg-green-900/20'
             : 'text-red-500 bg-red-50 dark:bg-red-900/20'
         }`}
-        title={`${status.isOnline ? 'Internet: Conectado' : 'Internet: Desconectado'}
-Navegador: ${navigator.onLine ? 'Online' : 'Offline'}
-Supabase: ${status.isOnline ? 'Online' : 'Offline'}
-Última revisión: ${lastCheck.toLocaleTimeString()}`}
+        title={networkTooltip}
       >
         {status.isOnline ? (
           <svg
@@ -123,15 +135,7 @@ Supabase: ${status.isOnline ? 'Online' : 'Offline'}
                 ? 'bg-yellow-50 text-yellow-600 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
                 : 'bg-green-50 text-green-600 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
         }`}
-        title={
-          !status.isOnline
-            ? 'Sin conexión a internet'
-            : status.isSyncing
-              ? 'Sincronizando cambios...'
-              : queueSize > 0
-                ? `${queueSize} cambios pendientes`
-                : 'Sincronizado'
-        }
+        title={syncTooltip}
       >
         <span className={`mr-1.5 ${status.isSyncing ? 'animate-spin' : ''}`}>
           {!status.isOnline ? (
@@ -191,11 +195,11 @@ Supabase: ${status.isOnline ? 'Online' : 'Offline'}
         <span className="font-medium text-xs hidden sm:inline">
           {!status.isOnline
             ? queueSize > 0
-              ? `Pendiente (${queueSize})`
-              : 'Offline'
+              ? t('sync_status.pending_label', { count: queueSize })
+              : t('sync_status.offline')
             : status.isSyncing
-              ? 'Sincronizando...'
-              : 'Sync OK'}
+              ? t('sync_status.syncing_label')
+              : t('sync_status.sync_ok')}
         </span>
       </div>
 
@@ -204,9 +208,9 @@ Supabase: ${status.isOnline ? 'Online' : 'Offline'}
         <button
           onClick={() => SyncService.sync()} // Trigger manual sync
           className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 text-xs underline"
-          title="Forzar sincronización ahora"
+          title={t('sync_status.force_sync')}
         >
-          {queueSize > 0 ? 'Subir ahora' : 'Sincronizar'}
+          {queueSize > 0 ? t('sync_status.push_now') : t('sync_status.sync_action')}
         </button>
       )}
     </div>

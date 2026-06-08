@@ -96,8 +96,12 @@ export function setupIpcHandlers() {
       });
 
       if (canceled || !filePath) {
+        // Restore focus to renderer after dialog closes
+        event.sender.focus();
         return { success: false, canceled: true };
       }
+      // Restore focus to renderer after dialog closes
+      event.sender.focus();
 
       try {
         if (type === 'excel') {
@@ -175,6 +179,8 @@ export function setupIpcHandlers() {
       filters: filters || [{ name: 'All Files', extensions: ['*'] }],
       properties: ['openFile'],
     });
+    // Restore focus to renderer after dialog closes
+    event.sender.focus();
 
     if (canceled || filePaths.length === 0) {
       return { success: false, canceled: true };

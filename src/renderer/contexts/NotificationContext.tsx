@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 
 export interface Notification {
   id: string;
@@ -18,25 +18,32 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const addNotification = (notification: Omit<Notification, 'id'>) => {
-    const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-    const newNotification = { ...notification, id };
-
-    setNotifications((prev) => [...prev, newNotification]);
-
-    // Auto remove after duration (default 5 seconds)
-    const duration = notification.duration || 5000;
-    setTimeout(() => {
-      removeNotification(id);
-    }, duration);
-  };
-
-  const removeNotification = (id: string) => {
+  const removeNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
+  }, []);
+
+  const addNotification = useCallback(
+    (notification: Omit<Notification, 'id'>) => {
+      const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+      const newNotification = { ...notification, id };
+
+      setNotifications((prev) => [...prev, newNotification]);
+
+      const duration = notification.duration || 5000;
+      setTimeout(() => {
+        removeNotification(id);
+      }, duration);
+    },
+    [removeNotification]
+  );
+
+  const value = useMemo(
+    () => ({ notifications, addNotification, removeNotification }),
+    [notifications, addNotification, removeNotification]
+  );
 
   return (
-    <NotificationContext.Provider value={{ notifications, addNotification, removeNotification }}>
+    <NotificationContext.Provider value={value}>
       {children}
       <NotificationContainer notifications={notifications} onRemove={removeNotification} />
     </NotificationContext.Provider>

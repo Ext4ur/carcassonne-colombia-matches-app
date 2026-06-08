@@ -1,21 +1,53 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
-import { Tournament, PlayerStanding } from '../types/tournament';
+import { Tournament, PlayerStanding, normalizeBuchholzByeMode } from '../types/tournament';
+import { getBuchholzModeMeta } from '../utils/buchholzModeMeta';
+import {
+  formatPlayerStandingHeadToHeadText,
+  hasPlayerStandingHeadToHeadAnnotations,
+} from '../utils/headToHeadDisplay';
+import {
+  formatStandingTiebreakForExport,
+  getStandingsExportTiebreakColumns,
+  tiebreakHeaderForExport,
+} from '../utils/standingTiebreakExport';
+
+import i18n from '../i18n/config';
 
 export class ReportService {
   static async generateTournamentExcel(tournamentId: number): Promise<any> {
-    // const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const standings = await this.getStandings(tournamentId);
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-    // const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const modeMeta = getBuchholzModeMeta(normalizeBuchholzByeMode(config?.buchholz_bye_mode));
+    const modeLabel = i18n.t(modeMeta.modeLabelI18nKey);
+    const virtualRule = modeMeta.usesVirtualOpponent
+      ? modeMeta.virtualKind === 'field_avg'
+        ? i18n.t('tournaments.reports.virtual_rule_avg')
+        : i18n.t('tournaments.reports.virtual_rule_worst')
+      : i18n.t('tournaments.reports.virtual_rule_none');
 
-    // Sheet 1: Leaderboard
-    const leaderboardHeaders = ['Posición', 'Jugador', 'Puntos Totales', 'Victorias'];
+    // Sheet 1: Leaderboard (+ columnas de desempate activas, alineadas con la UI)
+    const tiebreakCols = getStandingsExportTiebreakColumns(config?.tiebreak_criteria);
+    const tReport = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+    const tiebreakHeaders = tiebreakCols.map((c) => tiebreakHeaderForExport(c, tReport));
+    const leaderboardHeaders = [
+      i18n.t('tournaments.reports.position'),
+      i18n.t('tournaments.reports.player'),
+      i18n.t('tournaments.reports.total_points'),
+      i18n.t('tournaments.reports.wins'),
+      i18n.t('tournaments.reports.buchholz_mode'),
+      i18n.t('tournaments.reports.virtual_opponent'),
+      ...tiebreakHeaders,
+    ];
     const leaderboardRows = standings.map((s, index) => [
       index + 1,
       s.player_name,
       s.total_points.toFixed(2),
       s.wins,
+      modeLabel,
+      virtualRule,
+      ...tiebreakCols.map((c) => formatStandingTiebreakForExport(s, c.id, tReport)),
     ]);
 
     // Sheet 2: Results by Round
@@ -23,7 +55,7 @@ export class ReportService {
     for (const round of rounds) {
       const matches = await DatabaseService.getRoundMatches(round.id!);
       roundResults.push({
-        round: `Ronda ${round.round_number}`,
+        round: `${i18n.t('tournaments.reports.round')} ${round.round_number}`,
         matches: await Promise.all(
           matches.map(async (match) => {
             const results = await DatabaseService.getMatchResults(match.id!, tournamentId);
@@ -43,12 +75,12 @@ export class ReportService {
     }
 
     const roundHeaders = [
-      'Ronda',
-      'Partida',
-      'Jugador',
-      'Posición',
-      'Puntos Partida',
-      'Puntos Torneo',
+      i18n.t('tournaments.reports.round'),
+      i18n.t('tournaments.reports.match'),
+      i18n.t('tournaments.reports.player'),
+      i18n.t('tournaments.reports.position'),
+      i18n.t('tournaments.reports.match_points'),
+      i18n.t('tournaments.reports.tournament_points'),
     ];
     const roundRows: any[] = [];
     for (const roundData of roundResults) {
@@ -67,31 +99,41 @@ export class ReportService {
     }
 
     // Sheet 3: Statistics
-    const statsHeaders = ['Estadística', 'Valor'];
+    const statsHeaders = [
+      i18n.t('tournaments.reports.stat_name'),
+      i18n.t('tournaments.reports.stat_value'),
+    ];
     const statsRows = [
-      ['Total Jugadores', standings.length],
-      ['Total Rondas', rounds.length],
-      ['Total Partidas', rounds.reduce((sum, r) => sum + (r as any).match_count || 0, 0)],
+      [i18n.t('tournaments.reports.total_players'), standings.length],
+      [i18n.t('tournaments.reports.total_rounds'), rounds.length],
       [
-        'Puntos Promedio',
-        (standings.reduce((sum, s) => sum + s.total_points, 0) / standings.length).toFixed(2),
+        i18n.t('tournaments.reports.total_matches'),
+        rounds.reduce((sum, r) => sum + (r as any).match_count || 0, 0),
       ],
+      [
+        i18n.t('tournaments.reports.avg_points'),
+        (standings.reduce((sum, s) => sum + s.total_points, 0) / (standings.length || 1)).toFixed(
+          2
+        ),
+      ],
+      [i18n.t('tournaments.reports.buchholz_mode'), modeLabel],
+      [i18n.t('tournaments.reports.virtual_opponent'), virtualRule],
     ];
 
     return {
       sheets: [
         {
-          name: 'Leaderboard',
+          name: i18n.t('tournaments.reports.sheet_standings'),
           headers: leaderboardHeaders,
           rows: leaderboardRows,
         },
         {
-          name: 'Resultados por Ronda',
+          name: i18n.t('tournaments.reports.sheet_matches'),
           headers: roundHeaders,
           rows: roundRows,
         },
         {
-          name: 'Estadísticas',
+          name: i18n.t('tournaments.reports.sheet_stats'),
           headers: statsHeaders,
           rows: statsRows,
         },
@@ -99,23 +141,44 @@ export class ReportService {
     };
   }
 
-  static async generateTournamentCSV(tournamentId: number): Promise<any> {
-    const standings = await this.getStandings(tournamentId);
+  static async generateTournamentCSV(
+    tournamentId: number,
+    type: 'csv-standings' | 'csv-matches' | 'csv-stats'
+  ): Promise<any> {
+    const excelData = await this.generateTournamentExcel(tournamentId);
 
-    const headers = ['Posición', 'Jugador', 'Puntos Totales', 'Victorias'];
-    const rows = standings.map((s, index) => ({
-      Posición: index + 1,
-      Jugador: s.player_name,
-      'Puntos Totales': s.total_points.toFixed(2),
-      Victorias: s.wins,
-    }));
+    let sheet: { headers: string[]; rows: any[] };
+    if (type === 'csv-standings') {
+      sheet = excelData.sheets[0];
+    } else if (type === 'csv-matches') {
+      sheet = excelData.sheets[1];
+    } else {
+      sheet = excelData.sheets[2];
+    }
 
-    return { headers, rows };
+    // Convert arrays back to objects for CSV serialization using the headers as keys
+    const rows = sheet.rows.map((rowArr: any[]) => {
+      const obj: any = {};
+      sheet.headers.forEach((header: string, i: number) => {
+        obj[header] = rowArr[i];
+      });
+      return obj;
+    });
+
+    return { headers: sheet.headers, rows };
   }
 
   static async generateTournamentPDF(tournamentId: number): Promise<string> {
     const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const standings = await this.getStandings(tournamentId);
+    const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const modeMeta = getBuchholzModeMeta(normalizeBuchholzByeMode(config?.buchholz_bye_mode));
+    const modeLabel = i18n.t(modeMeta.modeLabelI18nKey);
+    const virtualRule = modeMeta.usesVirtualOpponent
+      ? modeMeta.virtualKind === 'field_avg'
+        ? i18n.t('tournaments.reports.virtual_rule_avg')
+        : i18n.t('tournaments.reports.virtual_rule_worst')
+      : i18n.t('tournaments.reports.virtual_rule_none');
     const top3 = standings.slice(0, 3);
 
     // Create HTML content for PDF
@@ -139,7 +202,9 @@ export class ReportService {
         </head>
         <body>
           <h1>${tournament.name}</h1>
-          <p>Fecha: ${new Date(tournament.date).toLocaleDateString()}</p>
+          <p>${i18n.t('tournaments.reports.export_pdf_date')}: ${new Date(tournament.date).toLocaleDateString(i18n.language)}</p>
+          <p>${i18n.t('tournaments.reports.buchholz_mode')}: ${modeLabel}</p>
+          <p>${i18n.t('tournaments.reports.virtual_opponent')}: ${virtualRule}</p>
           
           <div class="podium">
             ${
@@ -170,15 +235,15 @@ export class ReportService {
                 : ''
             }
           </div>
-
-          <h2>Leaderboard Completo</h2>
+ 
+          <h2>${i18n.t('tournaments.reports.export_pdf_leaderboard')}</h2>
           <table>
             <thead>
               <tr>
-                <th>Posición</th>
-                <th>Jugador</th>
-                <th>Puntos</th>
-                <th>Victorias</th>
+                <th>${i18n.t('tournaments.reports.position')}</th>
+                <th>${i18n.t('tournaments.reports.player')}</th>
+                <th>${i18n.t('tournaments.reports.total_points_short')}</th>
+                <th>${i18n.t('tournaments.reports.wins')}</th>
               </tr>
             </thead>
             <tbody>
@@ -207,11 +272,22 @@ export class ReportService {
     const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
     const standings = await this.getStandings(tournamentId);
     const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const modeMeta = getBuchholzModeMeta(normalizeBuchholzByeMode(config?.buchholz_bye_mode));
+    const modeLabel = i18n.t(modeMeta.modeLabelI18nKey);
+    const virtualRule = modeMeta.usesVirtualOpponent
+      ? modeMeta.virtualKind === 'field_avg'
+        ? i18n.t('tournaments.reports.virtual_rule_avg')
+        : i18n.t('tournaments.reports.virtual_rule_worst')
+      : i18n.t('tournaments.reports.virtual_rule_none');
     const tiebreakCriteria = config?.tiebreak_criteria || [];
     const top4 = standings.slice(0, 4);
 
     // Helper to get tiebreak value display
     const getTiebreakDisplay = (standing: PlayerStanding, criterionId: string): string => {
+      if (criterionId === 'head_to_head') {
+        return formatPlayerStandingHeadToHeadText(standing, (key, opts) => i18n.t(key, opts));
+      }
+
       const value = standing.tiebreak_values[criterionId];
       if (value === undefined || value === null) return '';
 
@@ -221,14 +297,6 @@ export class ReportService {
         return `${value.toFixed(1)} 📊`;
       } else if (criterionId === 'opponent_points_drop_best_worst') {
         return `${value.toFixed(1)} 📈`;
-      } else if (criterionId === 'head_to_head') {
-        // For head-to-head, show the result
-        if (value > 0) {
-          return '✅ Directo';
-        } else if (value < 0) {
-          return '❌ Directo';
-        }
-        return '';
       } else if (criterionId === 'point_difference') {
         return value > 0 ? `+${value.toFixed(0)} 📉` : `${value.toFixed(0)} 📉`;
       }
@@ -248,6 +316,12 @@ export class ReportService {
       if (position === 0) {
         for (const criterion of tiebreakCriteria) {
           if (!criterion.enabled || criterion.id === 'wins') continue;
+          if (criterion.id === 'head_to_head') {
+            if (hasPlayerStandingHeadToHeadAnnotations(standing)) {
+              relevant.push(getTiebreakDisplay(standing, 'head_to_head'));
+            }
+            continue;
+          }
           const display = getTiebreakDisplay(standing, criterion.id);
           if (display && display.trim() !== '') {
             relevant.push(display);
@@ -263,6 +337,13 @@ export class ReportService {
       // Check each criterion in order (excluding wins which is already shown)
       for (const criterion of tiebreakCriteria) {
         if (!criterion.enabled || criterion.id === 'wins') continue;
+
+        if (criterion.id === 'head_to_head') {
+          if (hasPlayerStandingHeadToHeadAnnotations(standing)) {
+            relevant.push(getTiebreakDisplay(standing, 'head_to_head'));
+          }
+          continue;
+        }
 
         const currentValue = standing.tiebreak_values[criterion.id];
 
@@ -310,6 +391,13 @@ export class ReportService {
               color: #6b7280;
               margin-bottom: 40px;
               font-size: 1.2em;
+            }
+            .buchholz-meta {
+              text-align: center;
+              color: #4b5563;
+              margin-top: -20px;
+              margin-bottom: 30px;
+              font-size: 1em;
             }
             .podium { 
               display: flex; 
@@ -370,13 +458,15 @@ export class ReportService {
             }
             .tiebreak-item {
               margin: 3px 0;
+              white-space: pre-line;
             }
           </style>
         </head>
         <body>
           <div class="container">
             <h1>${tournament.name}</h1>
-            <div class="date">${new Date(tournament.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            <div class="date">${new Date(tournament.date).toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            <div class="buchholz-meta">${i18n.t('tournaments.reports.buchholz_mode')}: ${modeLabel} · ${i18n.t('tournaments.reports.virtual_opponent')}: ${virtualRule}</div>
             
             <div class="podium">
               ${
@@ -460,14 +550,9 @@ export class ReportService {
     return htmlContent;
   }
 
-  private static async getStandings(tournamentId: number): Promise<PlayerStanding[]> {
-    const { SwissPairingService } = await import('./swiss');
-    const config = await DatabaseService.getTournamentConfig(tournamentId);
-    return await SwissPairingService.calculateStandings(
-      tournamentId,
-      config?.tiebreak_criteria || [],
-      undefined,
-      config?.player_display_mode
-    );
+  /** Clasificación con valores de desempate (p. ej. informes, respaldo JSON). */
+  static async getStandings(tournamentId: number): Promise<PlayerStanding[]> {
+    const { computeKnockoutFinalStandingsForTournament } = await import('./knockoutStandings');
+    return computeKnockoutFinalStandingsForTournament(tournamentId);
   }
 }

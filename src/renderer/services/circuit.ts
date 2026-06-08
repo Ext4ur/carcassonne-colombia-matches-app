@@ -1,10 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
 import { SwissPairingService } from './swiss';
 import { CircuitStandings } from '../types/circuit';
 
 import { getCircuitPointsByRank } from '../utils/circuitScoring';
-
 /** Data for "posición por parada" chart: evolution of each player's position at each stop. */
 export interface CircuitPositionEvolution {
   stops: string[];
@@ -25,6 +23,19 @@ export interface CircuitPointsEvolution {
   }>;
 }
 
+interface CircuitExcelData {
+  sheets: Array<{
+    name: string;
+    headers: string[];
+    rows: (string | number)[][];
+  }>;
+}
+
+interface CircuitCSVData {
+  headers: string[];
+  rows: Record<string, string | number>[];
+}
+
 export class CircuitService {
   /**
    * Calcula la clasificación general del circuito basada en:
@@ -41,7 +52,7 @@ export class CircuitService {
     let completedTournaments = tournaments.filter((t) => t.status === 'completed');
 
     if (tournamentIds && tournamentIds.length > 0) {
-      completedTournaments = completedTournaments.filter((t) => tournamentIds.includes(t.id));
+      completedTournaments = completedTournaments.filter((t) => tournamentIds.includes(t.id!));
     }
 
     if (completedTournaments.length === 0) {
@@ -64,9 +75,9 @@ export class CircuitService {
     const h2hMatches = new Map<string, number>(); // "minId,maxId" -> score for minId (positive) or maxId (negative)
 
     for (const t of completedTournaments) {
-      const config = await DatabaseService.getTournamentConfig(t.id);
+      const config = await DatabaseService.getTournamentConfig(t.id!);
       const tourStandings = await SwissPairingService.calculateStandings(
-        t.id,
+        t.id!,
         config?.tiebreak_criteria || [],
         undefined,
         config?.player_display_mode
@@ -97,13 +108,14 @@ export class CircuitService {
       });
 
       // 2. Rastrear oponentes y enfrentamientos directos para desempates
-      const rounds = await DatabaseService.getTournamentRounds(t.id);
+      const rounds = await DatabaseService.getTournamentRounds(t.id!);
       for (const r of rounds) {
         if (r.status !== 'completed') continue;
         const matches = await DatabaseService.getRoundMatches(r.id!);
         for (const m of matches) {
           if (m.status !== 'completed') continue;
           const matchWithRes = await DatabaseService.getMatchWithResults(m.id!);
+          if (!matchWithRes) continue;
           const results = matchWithRes.results || [];
           if (results.length < 2) continue;
 
@@ -187,9 +199,9 @@ export class CircuitService {
     for (const t of tournaments) {
       if (t.status !== 'completed') continue;
 
-      const config = await DatabaseService.getTournamentConfig(t.id);
+      const config = await DatabaseService.getTournamentConfig(t.id!);
       const tourStandings = await SwissPairingService.calculateStandings(
-        t.id,
+        t.id!,
         config?.tiebreak_criteria || [],
         undefined,
         config?.player_display_mode
@@ -233,9 +245,9 @@ export class CircuitService {
     for (const t of tournaments) {
       if (t.status !== 'completed') continue;
 
-      const config = await DatabaseService.getTournamentConfig(t.id);
+      const config = await DatabaseService.getTournamentConfig(t.id!);
       const tourStandings = await SwissPairingService.calculateStandings(
-        t.id,
+        t.id!,
         config?.tiebreak_criteria || [],
         undefined,
         config?.player_display_mode
@@ -270,7 +282,7 @@ export class CircuitService {
     return { stops, players };
   }
 
-  static async generateCircuitExcel(circuitId: number): Promise<any> {
+  static async generateCircuitExcel(circuitId: number): Promise<CircuitExcelData> {
     // const circuit = await DatabaseService.getCircuitById(circuitId);
     const standings = (await DatabaseService.getCircuitStandings(circuitId)) as CircuitStandings[];
 
@@ -294,7 +306,7 @@ export class CircuitService {
     };
   }
 
-  static async generateCircuitCSV(circuitId: number): Promise<any> {
+  static async generateCircuitCSV(circuitId: number): Promise<CircuitCSVData> {
     const standings = (await DatabaseService.getCircuitStandings(circuitId)) as CircuitStandings[];
 
     const headers = ['Posición', 'Jugador', 'Puntos Totales', 'Torneos Jugados', 'Victorias'];

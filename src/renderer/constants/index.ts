@@ -23,6 +23,14 @@ export const DEFAULT_TIEBREAK_CRITERIA: TiebreakCriterion[] = [
   { id: 'point_difference', name: 'Suma de diferencia de puntos', enabled: true, order: 5 },
 ];
 
+/** Si no hay criterios guardados (torneos antiguos), usar los por defecto para clasificación y columnas. */
+export function getEffectiveTiebreakCriteria(
+  stored: TiebreakCriterion[] | null | undefined
+): TiebreakCriterion[] {
+  if (stored != null && stored.length > 0) return stored;
+  return DEFAULT_TIEBREAK_CRITERIA;
+}
+
 /**
  * Sistemas de puntuación por defecto según número de jugadores por partida
  */

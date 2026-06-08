@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Tournament, PlayerStanding } from '../../types/tournament';
+import { Tournament, PlayerStanding, BuchholzByeMode } from '../../types/tournament';
 import { Bar } from 'react-chartjs-2';
+import { useTranslation } from 'react-i18next';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -10,32 +11,31 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import { getBuchholzModeMeta } from '../../utils/buchholzModeMeta';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 interface TournamentStatsProps {
   tournament: Tournament;
-  /** Full standings for podium (not filtered). */
   standingsForPodium: PlayerStanding[];
-  /** Filtered standings for charts (victories, tiebreak criteria). */
   standings: PlayerStanding[];
   tiebreakCriteria: any[];
+  buchholzByeMode: BuchholzByeMode;
 }
 
 export default function TournamentStats({
   standingsForPodium,
   standings,
   tiebreakCriteria,
+  buchholzByeMode,
 }: TournamentStatsProps) {
+  const { t } = useTranslation();
+  const modeMeta = getBuchholzModeMeta(buchholzByeMode);
   const top4 = standingsForPodium.slice(0, 4);
-
-  // Get enabled criteria (excluding wins which is already shown)
   const enabledCriteria = tiebreakCriteria.filter((c) => c.enabled && c.id !== 'wins');
-
-  // Paleta sólida para gráficos (sin transparencia)
+  const chartCriteria = enabledCriteria.filter((c) => c.id !== 'head_to_head');
   const CHART_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7'];
 
-  // Chart data for each criterion
   const getCriterionData = (criterionId: string) => {
     const labels = standings.map((s) => s.player_name);
     const data = standings.map((s) => {
@@ -43,7 +43,7 @@ export default function TournamentStats({
       return value !== undefined && value !== null ? value : 0;
     });
     const color =
-      CHART_COLORS[enabledCriteria.findIndex((c) => c.id === criterionId) % CHART_COLORS.length];
+      CHART_COLORS[chartCriteria.findIndex((c) => c.id === criterionId) % CHART_COLORS.length];
     return {
       labels,
       datasets: [
@@ -64,11 +64,12 @@ export default function TournamentStats({
     if (!criterion) return criterionId;
 
     const labels: { [key: string]: string } = {
-      wins: 'Victorias',
-      opponent_points_drop_worst: 'Puntos Oponentes (-peor)',
-      opponent_points_drop_best_worst: 'Puntos Oponentes (-mejor/peor)',
-      head_to_head: 'Enfrentamiento Directo',
-      point_difference: 'Diferencia de Puntos',
+      wins: t('players.wins'),
+      opponent_points: t('stats.opponent_points'),
+      opponent_points_drop_worst: t('stats.opponent_points'),
+      opponent_points_drop_best_worst: t('stats.opponent_points_full'),
+      head_to_head: t('stats.h2h'),
+      point_difference: t('stats.diff'),
     };
     return labels[criterionId] || criterion.name;
   };
@@ -77,7 +78,7 @@ export default function TournamentStats({
     labels: standings.map((s) => s.player_name),
     datasets: [
       {
-        label: 'Victorias',
+        label: t('players.wins'),
         data: standings.map((s) => s.wins),
         backgroundColor: '#3b82f6',
         borderColor: '#2563eb',
@@ -89,9 +90,8 @@ export default function TournamentStats({
 
   return (
     <div className="space-y-6">
-      {/* Podium */}
       <div className="card">
-        <h3 className="text-xl font-bold mb-4">Podio</h3>
+        <h3 className="text-xl font-bold mb-4">{t('stats.podium')}</h3>
         <div className="flex items-end justify-center space-x-4">
           {top4[1] && (
             <div className="flex flex-col items-center">
@@ -132,11 +132,25 @@ export default function TournamentStats({
         </div>
       </div>
 
-      {/* Charts - One for each tiebreak criterion */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Wins chart */}
         <div className="card">
-          <h3 className="text-lg font-bold mb-4">🏆 Distribución de Victorias</h3>
+          <h3 className="text-lg font-bold mb-2">{t('stats.buchholz_mode_title')}</h3>
+          <p className="text-sm text-gray-700 dark:text-gray-300">{t(modeMeta.modeLabelI18nKey)}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            {modeMeta.usesVirtualOpponent
+              ? t('stats.buchholz_virtual_yes')
+              : t('stats.buchholz_virtual_no')}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {modeMeta.virtualKind === 'field_avg'
+              ? t('stats.buchholz_virtual_kind_avg')
+              : modeMeta.virtualKind === 'round_worst'
+                ? t('stats.buchholz_virtual_kind_worst')
+                : t('stats.buchholz_virtual_kind_none')}
+          </p>
+        </div>
+        <div className="card">
+          <h3 className="text-lg font-bold mb-4">🏆 {t('stats.wins_distribution')}</h3>
           <Bar
             data={winsData}
             options={{
@@ -154,8 +168,7 @@ export default function TournamentStats({
           />
         </div>
 
-        {/* Charts for each enabled tiebreak criterion */}
-        {enabledCriteria.map((criterion) => (
+        {chartCriteria.map((criterion) => (
           <div key={criterion.id} className="card">
             <h3 className="text-lg font-bold mb-4">{getCriterionLabel(criterion.id)}</h3>
             <Bar

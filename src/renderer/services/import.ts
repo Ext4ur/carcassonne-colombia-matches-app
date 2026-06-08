@@ -1,85 +1,522 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
 import { Player } from '../types/player';
+import { City } from '../types/city';
+import { Place } from '../types/place';
+import i18n from '../i18n/config';
+import { DEFAULT_TIEBREAK_CRITERIA } from '../constants';
+import { collectPlayersOnlyFromSnapshots } from '../utils/exportImportHelpers';
 
-interface ImportData {
+/**
+ * Respaldo JSON (`ExportService`). `version` ≥ 1.1 puede incluir en cada torneo
+ * `standings_snapshot` (clasificación calculada al exportar); la importación lo ignora
+ * y reconstruye estado desde rondas/partidas. `version` ≥ 1.2 incluye `cities` y `places`.
+ *
+ * Lista `tournaments` puede ser parcial si el archivo fue generado por exportación selectiva.
+ */
+export interface BackupImportData {
   version: string;
   exportDate: string;
   data: {
     players: Player[];
     tournaments: any[];
     circuits: any[];
+    cities?: City[];
+    places?: Place[];
   };
 }
 
+function collectPlayersByOldId(data: BackupImportData): Map<number, Player> {
+  const byId = new Map<number, Player>();
+  for (const p of data.data.players || []) {
+    if (p.id != null) byId.set(p.id, p);
+  }
+  return collectPlayersOnlyFromSnapshots(data.data.tournaments || [], byId);
+}
+
+/** Mapa jugadores solo necesarios para `tournamentIndices` (estructuras anidadas + enriquecer desde lista global exportada). */
+function collectPlayersByOldIdSubset(
+  data: BackupImportData,
+  tournamentIndices: number[]
+): Map<number, Player> {
+  const subset = tournamentIndices.map((i) => data.data.tournaments[i]).filter(Boolean);
+  const trimmed: BackupImportData = {
+    ...data,
+    data: {
+      players: [],
+      tournaments: subset,
+      circuits: [],
+    },
+  };
+  const byId = collectPlayersByOldId(trimmed);
+  for (const p of data.data.players || []) {
+    if (p?.id != null && byId.has(p.id)) {
+      const cur = byId.get(p.id)!;
+      byId.set(p.id, { ...cur, ...p });
+    }
+  }
+  return byId;
+}
+
+export function parseBackupJson(raw: string): BackupImportData {
+  let parsed: BackupImportData;
+  try {
+    parsed = JSON.parse(raw) as BackupImportData;
+  } catch {
+    throw new SyntaxError('INVALID_JSON');
+  }
+  if (
+    !parsed.data ||
+    !Array.isArray(parsed.data.players) ||
+    !Array.isArray(parsed.data.tournaments)
+  ) {
+    throw new Error('BAD_BACKUP_STRUCTURE');
+  }
+  if (!Array.isArray(parsed.data.circuits)) {
+    parsed.data.circuits = [];
+  }
+  if (!Array.isArray(parsed.data.cities)) {
+    parsed.data.cities = [];
+  }
+  if (!Array.isArray(parsed.data.places)) {
+    parsed.data.places = [];
+  }
+  return parsed;
+}
+
+/** Importa ciudades/lugares del backup y devuelve mapa para resolver place_id. */
+async function importCitiesAndPlaces(data: BackupImportData): Promise<Map<string, number>> {
+  const placeKeyToId = new Map<string, number>();
+  const cityNameToId = new Map<string, number>();
+
+  for (const city of data.data.cities ?? []) {
+    const name = String(city.name ?? '').trim();
+    if (!name) continue;
+    const existing = (await DatabaseService.getAllCities()).find((c) => c.name.trim() === name);
+    let cityId = existing?.id;
+    if (!cityId) {
+      cityId = Number(await DatabaseService.createCity({ name }));
+    }
+    cityNameToId.set(name, cityId);
+  }
+
+  for (const exportedCity of data.data.cities ?? []) {
+    if (exportedCity.id != null && exportedCity.name) {
+      const resolved = cityNameToId.get(String(exportedCity.name).trim());
+      if (resolved) cityNameToId.set(`id:${exportedCity.id}`, resolved);
+    }
+  }
+
+  for (const place of data.data.places ?? []) {
+    const name = String(place.name ?? '').trim();
+    if (!name) continue;
+    const cityName = String(place.city_name ?? '').trim();
+    let cityId =
+      (cityName && cityNameToId.get(cityName)) ||
+      (place.city_id != null ? cityNameToId.get(`id:${place.city_id}`) : undefined);
+    if (!cityId) {
+      cityId = (await DatabaseService.getAllCities()).find((c) => c.name === 'Online')?.id;
+    }
+    if (!cityId) continue;
+
+    const allPlaces = await DatabaseService.getAllPlaces();
+    let placeId = allPlaces.find((p) => p.name.trim() === name && p.city_id === cityId)?.id;
+    if (!placeId) {
+      placeId = Number(await DatabaseService.createPlace({ name, city_id: cityId }));
+    }
+    if (cityName) placeKeyToId.set(`${cityName}::${name}`, placeId);
+    placeKeyToId.set(name, placeId);
+  }
+
+  return placeKeyToId;
+}
+
+async function resolvePlaceId(tournament: any, placeMap?: Map<string, number>): Promise<number> {
+  const placeName = tournament.place_name as string | undefined;
+  const cityName = tournament.city_name as string | undefined;
+  if (placeMap && placeName?.trim()) {
+    if (cityName?.trim() && placeMap.has(`${cityName.trim()}::${placeName.trim()}`)) {
+      return placeMap.get(`${cityName.trim()}::${placeName.trim()}`)!;
+    }
+    if (placeMap.has(placeName.trim())) return placeMap.get(placeName.trim())!;
+  }
+  if (placeName) {
+    const places = await DatabaseService.getAllPlaces();
+    const hit = places.find((p) => p.name.trim() === placeName.trim());
+    if (hit?.id) return hit.id;
+  }
+  if (tournament.place_id != null) {
+    const p = await DatabaseService.getPlaceById(Number(tournament.place_id));
+    if (p?.id) return p.id;
+  }
+  return DatabaseService.getDefaultPlaceId();
+}
+
+async function pickUniqueImportName(
+  baseName: string,
+  date: string,
+  placeId: number
+): Promise<string> {
+  let name = `${baseName} (imported)`;
+  let n = 0;
+  for (;;) {
+    const rows = await DatabaseService.getTournamentByNameDateAndPlace(name, date, placeId);
+    if (rows.length === 0) return name;
+    n++;
+    name = `${baseName} (imported ${n})`;
+  }
+}
+
+async function resolvePlayerId(
+  oldId: number,
+  playerByOldId: Map<number, Player>,
+  map: Map<number, number>,
+  stats: { created: number }
+): Promise<number> {
+  if (map.has(oldId)) return map.get(oldId)!;
+  const exported = playerByOldId.get(oldId);
+  if (!exported) {
+    throw new Error(i18n.t('settings.import_missing_player', { id: oldId }));
+  }
+
+  if (exported.bga_username) {
+    const rows = await DatabaseService.getPlayerByBGAUsername(exported.bga_username);
+    if (rows.length > 0) {
+      map.set(oldId, rows[0].id!);
+      return rows[0].id!;
+    }
+  }
+  const byName = await DatabaseService.getPlayersByExactName(exported.name || '');
+  if (byName.length === 1) {
+    map.set(oldId, byName[0].id!);
+    return byName[0].id!;
+  }
+
+  stats.created++;
+  const newId = Number(
+    await DatabaseService.createPlayer({
+      name: exported.name,
+      bga_username: exported.bga_username,
+      phone: exported.phone,
+      email: exported.email,
+      age: exported.age,
+    })
+  );
+  map.set(oldId, newId);
+  return newId;
+}
+
+async function importTournamentDeep(
+  tournament: any,
+  importName: string,
+  placeId: number,
+  circuitId: number | undefined,
+  playerByOldId: Map<number, Player>,
+  playerMap: Map<number, number>,
+  stats: { created: number }
+): Promise<void> {
+  const create = async (cid?: number) =>
+    Number(
+      await DatabaseService.createTournament({
+        name: importName,
+        type: tournament.type === 'circuit' ? 'circuit' : 'qualifier',
+        circuit_id: cid,
+        date: tournament.date,
+        players_per_match: tournament.players_per_match ?? 2,
+        number_of_rounds: tournament.number_of_rounds ?? undefined,
+        place_id: placeId,
+        competition_format: tournament.competition_format ?? 'swiss',
+      })
+    );
+
+  let tournamentId: number;
+  try {
+    tournamentId = await create(circuitId);
+  } catch {
+    tournamentId = await create(undefined);
+  }
+
+  const cfg = tournament.config || {};
+  await DatabaseService.createTournamentConfig({
+    tournament_id: tournamentId,
+    avoid_rematches: cfg.avoid_rematches ?? true,
+    tiebreak_criteria: cfg.tiebreak_criteria ?? DEFAULT_TIEBREAK_CRITERIA,
+    scoring_system: cfg.scoring_system ?? { 1: 1, 2: 0 },
+    bye_selection: cfg.bye_selection ?? 'worst',
+    player_display_mode: cfg.player_display_mode ?? 'per_player',
+    pairing_algorithm: cfg.pairing_algorithm ?? 'greedy',
+    buchholz_bye_mode: cfg.buchholz_bye_mode ?? 'legacy',
+    knockout_size: cfg.knockout_size ?? 8,
+    knockout_seeding: cfg.knockout_seeding ?? 'standard_bracket',
+    knockout_series: cfg.knockout_series ?? 'best_of_1',
+    knockout_play_bronze_match: cfg.knockout_play_bronze_match ?? false,
+    knockout_match_starter: cfg.knockout_match_starter ?? 'higher_swiss_seed',
+    knockout_series_alternate_starter: cfg.knockout_series_alternate_starter ?? false,
+    knockout_series_starter_mode:
+      cfg.knockout_series_starter_mode ??
+      (cfg.knockout_series_alternate_starter ? 'previous_loser' : 'alternate'),
+    swiss_match_starter: cfg.swiss_match_starter ?? 'higher_ranked',
+    swiss_standings_snapshot: cfg.swiss_standings_snapshot ?? null,
+  });
+
+  const rp = (oid: number) => resolvePlayerId(oid, playerByOldId, playerMap, stats);
+
+  for (const tp of tournament.players || []) {
+    if (tp.id == null) continue;
+    const pid = await rp(tp.id);
+    await DatabaseService.registerPlayerToTournament(tournamentId, pid);
+    const active = tp.active !== false;
+    const dr = tp.dropout_round ?? null;
+    if (!active || dr != null) {
+      await DatabaseService.updateTournamentPlayerStatus(tournamentId, pid, {
+        active,
+        dropout_round: dr,
+      });
+    }
+  }
+
+  const rounds = [...(tournament.rounds || [])].sort(
+    (a: any, b: any) => a.round_number - b.round_number
+  );
+
+  for (const round of rounds) {
+    const roundId = Number(
+      await DatabaseService.createRound({
+        tournament_id: tournamentId,
+        round_number: round.round_number,
+        status: round.status || 'pending',
+        phase: round.phase ?? 'swiss',
+        knockout_stage: round.knockout_stage ?? null,
+      })
+    );
+
+    if (round.started_at != null || round.completed_at != null) {
+      await DatabaseService.updateRound(roundId, {
+        started_at: round.started_at,
+        completed_at: round.completed_at,
+      });
+    }
+
+    const matches = [...(round.matches || [])].sort(
+      (a: any, b: any) => a.match_number - b.match_number
+    );
+
+    for (const match of matches) {
+      const results = match.results || [];
+      const isBye = results.length === 1;
+
+      let firstPid: number | undefined;
+      if (match.first_player_id != null) {
+        firstPid = await rp(match.first_player_id);
+      }
+
+      const matchId = Number(
+        await DatabaseService.createMatch({
+          round_id: roundId,
+          match_number: match.match_number,
+          status: 'pending',
+          first_player_id: firstPid,
+          knockout_bracket_slot: match.knockout_bracket_slot ?? undefined,
+          series_target_wins: match.series_target_wins ?? undefined,
+          is_knockout: Boolean(match.is_knockout),
+          series_meta: match.series_meta ?? undefined,
+          knockout_match_stage: match.knockout_match_stage ?? undefined,
+        })
+      );
+
+      if (!isBye) {
+        const pids: number[] = [];
+        if (match.players?.length) {
+          for (const pl of match.players) {
+            if (pl?.id != null) pids.push(await rp(pl.id));
+          }
+        }
+        if (pids.length === 0 && results.length >= 2) {
+          for (const r of results) {
+            pids.push(await rp(r.player_id));
+          }
+        }
+        if (pids.length > 0) {
+          await DatabaseService.setMatchPlayers(matchId, pids);
+        }
+      }
+
+      for (const r of results) {
+        await DatabaseService.createMatchResult({
+          match_id: matchId,
+          player_id: await rp(r.player_id),
+          position: r.position,
+          points: r.points ?? 0,
+          tournament_points: r.tournament_points ?? 0,
+          game_number: r.game_number ?? 1,
+        });
+      }
+
+      if (match.status === 'completed' || isBye) {
+        await DatabaseService.updateMatch(matchId, {
+          status: 'completed',
+          completed_at: match.completed_at || new Date().toISOString(),
+          series_winner_id:
+            match.series_winner_id != null ? await rp(match.series_winner_id) : undefined,
+        });
+      } else if (match.series_winner_id != null) {
+        await DatabaseService.updateMatch(matchId, {
+          series_winner_id: await rp(match.series_winner_id),
+        });
+      }
+    }
+
+    if (round.status === 'completed') {
+      await DatabaseService.updateRound(roundId, {
+        status: 'completed',
+        completed_at: round.completed_at,
+      });
+    }
+  }
+
+  if (tournament.status || tournament.knockout_phase_started_at) {
+    await DatabaseService.updateTournament(tournamentId, {
+      status: tournament.status,
+      knockout_phase_started_at: tournament.knockout_phase_started_at ?? undefined,
+    });
+  }
+
+  for (const seed of tournament.knockout_seeds || []) {
+    if (seed.player_id == null || seed.seed == null) continue;
+    await DatabaseService.addKnockoutSeed(tournamentId, await rp(seed.player_id), seed.seed);
+  }
+}
+
 export class ImportService {
-  static async importAll(): Promise<{ success: boolean; error?: string; summary?: string }> {
+  /** Abre archivo y valida; no modifica BD. */
+  static async pickFileAndParse(): Promise<{
+    success: boolean;
+    canceled?: boolean;
+    importData?: BackupImportData;
+    error?: string;
+  }> {
     try {
-      // Open file dialog
       const result = await window.electronAPI.openFile([
         { name: 'JSON Files', extensions: ['json'] },
       ]);
 
       if (!result.success || result.canceled || !result.data) {
-        return { success: false, error: 'No se seleccionó ningún archivo' };
+        return {
+          success: false,
+          canceled: !!result.canceled,
+          error: i18n.t('settings.import_no_file'),
+        };
       }
 
-      // Parse JSON
-      let importData: ImportData;
       try {
-        importData = JSON.parse(result.data);
-      } catch {
-        return { success: false, error: 'El archivo no es un JSON válido' };
+        const importData = parseBackupJson(result.data);
+        return { success: true, importData };
+      } catch (e: unknown) {
+        const code = e instanceof Error ? e.message : '';
+        if (code === 'BAD_BACKUP_STRUCTURE') {
+          return { success: false, error: i18n.t('settings.import_bad_structure') };
+        }
+        return { success: false, error: i18n.t('settings.import_invalid_json') };
       }
+    } catch (error) {
+      console.error('Error reading import:', error);
+      return { success: false, error: String(error) };
+    }
+  }
 
-      // Validate structure
-      if (
-        !importData.data ||
-        !importData.data.players ||
-        !importData.data.tournaments ||
-        !importData.data.circuits
-      ) {
-        return { success: false, error: 'El archivo no tiene la estructura correcta' };
+  /** Por índice en `data.tournaments`, marca si ya existe igual nombre + fecha + lugar. */
+  static async peekTournamentDuplicates(
+    importData: BackupImportData
+  ): Promise<{ index: number; existsInDb: boolean }[]> {
+    const rows = await Promise.all(
+      importData.data.tournaments.map(async (tournament, index) => {
+        try {
+          const placeId = await resolvePlaceId(tournament);
+          const dup = await DatabaseService.getTournamentByNameDateAndPlace(
+            tournament.name,
+            tournament.date,
+            placeId
+          );
+          return { index, existsInDb: dup.length > 0 };
+        } catch {
+          return { index, existsInDb: false };
+        }
+      })
+    );
+    return rows;
+  }
+
+  /** Importación completa (todos los torneos del archivo). Compatible con llamadas existentes. */
+  static async importAll(): Promise<{ success: boolean; error?: string; summary?: string }> {
+    const picked = await this.pickFileAndParse();
+    if (!picked.success || !picked.importData) {
+      return { success: false, error: picked.error };
+    }
+    const n = picked.importData.data.tournaments.length;
+    const indices = Array.from({ length: n }, (_, i) => i);
+    return this.importSelected(picked.importData, indices);
+  }
+
+  /** Importa solo índices en `data.tournaments`. Duplicados (mismo nombre+fecha+lugar) se importan con nombre único tipo "(imported)" sin prompts. */
+  static async importSelected(
+    importData: BackupImportData,
+    tournamentIndices: number[]
+  ): Promise<{ success: boolean; error?: string; summary?: string }> {
+    try {
+      const uniq = [...new Set(tournamentIndices)].filter(
+        (i) => Number.isInteger(i) && i >= 0 && i < importData.data.tournaments.length
+      );
+      uniq.sort((a, b) => a - b);
+
+      if (uniq.length === 0) {
+        return { success: true, summary: i18n.t('settings.import_summary_none') };
       }
 
       const summary: string[] = [];
+      const playerByOldId = collectPlayersByOldIdSubset(importData, uniq);
+      const playerMap = new Map<number, number>();
+      const playerStats = { created: 0 };
 
-      // Import players
-      let playersImported = 0;
-      for (const player of importData.data.players) {
+      for (const oldId of playerByOldId.keys()) {
         try {
-          // Check if player exists
-          const existing = await DatabaseService.getPlayerByBGAUsername(player.bga_username || '');
-          if (!existing || existing.length === 0) {
-            await DatabaseService.createPlayer({
-              name: player.name,
-              bga_username: player.bga_username,
-              phone: player.phone,
-              email: player.email,
-              age: player.age,
-            });
-            playersImported++;
-          }
+          await resolvePlayerId(oldId, playerByOldId, playerMap, playerStats);
         } catch (error) {
           console.error('Error importing player:', error);
         }
       }
-      if (playersImported > 0) {
-        summary.push(`${playersImported} jugador(es)`);
+
+      if (playerStats.created > 0) {
+        summary.push(i18n.t('settings.import_summary_players', { count: playerStats.created }));
       }
 
-      // Import circuits
+      const placeMap = await importCitiesAndPlaces(importData);
+
+      const circuitOldIdsNeeded = new Set<number>();
+      for (const idx of uniq) {
+        const cid = importData.data.tournaments[idx]?.circuit_id as number | undefined;
+        if (cid != null) circuitOldIdsNeeded.add(cid);
+      }
+
+      const circuitIdMap = new Map<number, number>();
       let circuitsImported = 0;
-      for (const circuit of importData.data.circuits) {
+      for (const circuit of importData.data.circuits || []) {
         try {
+          const oid = circuit.id as number | undefined;
+          if (oid == null || !circuitOldIdsNeeded.has(oid)) continue;
           const existing = await DatabaseService.getCircuitByName(circuit.name);
-          if (!existing) {
-            await DatabaseService.createCircuit({
-              name: circuit.name,
-              description: circuit.description,
-              start_date: circuit.start_date,
-              end_date: circuit.end_date,
-            });
+          if (existing?.id != null) {
+            circuitIdMap.set(oid, existing.id);
+          } else {
+            const newCid = Number(
+              await DatabaseService.createCircuit({
+                name: circuit.name,
+                description: circuit.description,
+                start_date: circuit.start_date,
+                end_date: circuit.end_date,
+                status: circuit.status || 'active',
+              })
+            );
+            circuitIdMap.set(oid, newCid);
             circuitsImported++;
           }
         } catch (error) {
@@ -87,51 +524,50 @@ export class ImportService {
         }
       }
       if (circuitsImported > 0) {
-        summary.push(`${circuitsImported} circuito(s)`);
+        summary.push(i18n.t('settings.import_summary_circuits', { count: circuitsImported }));
       }
 
-      // Import tournaments (simplified - just basic data)
       let tournamentsImported = 0;
-      for (const tournament of importData.data.tournaments) {
+      for (const idx of uniq) {
+        const tournament = importData.data.tournaments[idx];
         try {
-          // Check if tournament exists by name and date
-          const existing = await DatabaseService.getTournamentByNameAndDate(
+          const placeId = await resolvePlaceId(tournament, placeMap);
+          const dup = await DatabaseService.getTournamentByNameDateAndPlace(
             tournament.name,
-            tournament.date
+            tournament.date,
+            placeId
           );
-          if (!existing || existing.length === 0) {
-            const tournamentId = await DatabaseService.createTournament({
-              name: tournament.name,
-              type: tournament.type,
-              circuit_id: tournament.circuit_id,
-              date: tournament.date,
-              players_per_match: tournament.players_per_match,
-              number_of_rounds: tournament.number_of_rounds,
-            });
 
-            // Import config if exists
-            if (tournament.config) {
-              await DatabaseService.createTournamentConfig({
-                tournament_id: tournamentId,
-                avoid_rematches: tournament.config.avoid_rematches,
-                tiebreak_criteria: tournament.config.tiebreak_criteria,
-                scoring_system: tournament.config.scoring_system,
-                bye_selection: tournament.config.bye_selection,
-              });
-            }
-
-            tournamentsImported++;
+          let importName = tournament.name as string;
+          if (dup.length > 0) {
+            importName = await pickUniqueImportName(tournament.name, tournament.date, placeId);
           }
+
+          const oldCid = tournament.circuit_id as number | undefined;
+          const newCid =
+            oldCid != null && circuitIdMap.has(oldCid) ? circuitIdMap.get(oldCid) : undefined;
+
+          await importTournamentDeep(
+            tournament,
+            importName,
+            placeId,
+            newCid,
+            playerByOldId,
+            playerMap,
+            playerStats
+          );
+          tournamentsImported++;
         } catch (error) {
           console.error('Error importing tournament:', error);
         }
       }
+
       if (tournamentsImported > 0) {
-        summary.push(`${tournamentsImported} torneo(s)`);
+        summary.push(i18n.t('settings.import_summary_tournaments', { count: tournamentsImported }));
       }
 
       if (summary.length === 0) {
-        return { success: true, summary: 'No se importaron datos nuevos (ya existían)' };
+        return { success: true, summary: i18n.t('settings.import_summary_none') };
       }
 
       return { success: true, summary: summary.join(', ') };

@@ -1,48 +1,123 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { SyncService } from '../services/syncService';
 
-// Mocks
-const mockExecute = vi.fn();
-const mockQuery = vi.fn();
+// Mocks - Use vi.hoisted to ensure they are available for hoisted vi.mock calls
+const {
+  mockExecute,
+  mockQuery,
+  mockInsert,
+  mockUpdate,
+  mockDelete,
+  mockSelect,
+  mockEq,
+  mockGt,
+  mockIn,
+  mockMaybeSingle,
+  mockLimit,
+  mockOrder,
+  mockFrom,
+} = vi.hoisted(() => ({
+  mockExecute: vi.fn(),
+  mockQuery: vi.fn(),
+  mockInsert: vi.fn(),
+  mockUpdate: vi.fn(),
+  mockDelete: vi.fn(),
+  mockSelect: vi.fn(),
+  mockEq: vi.fn(),
+  mockGt: vi.fn(),
+  mockIn: vi.fn(),
+  mockLimit: vi.fn(),
+  mockOrder: vi.fn(),
+  mockMaybeSingle: vi.fn().mockImplementation(() => Promise.resolve({ data: null, error: null })),
+  mockFrom: vi.fn(),
+}));
 
-// Mock Supabase methods
-const mockInsert = vi.fn();
-const mockUpdate = vi.fn();
-const mockDelete = vi.fn();
-const mockSelect = vi.fn();
-// mockEq and mockSingle are unused in this file, removed to fix lint errors
+vi.mock('../api/clients/SqliteClient', () => ({
+  SqliteClient: vi.fn().mockImplementation(() => ({
+    execute: mockExecute,
+    query: mockQuery,
+  })),
+}));
 
-// Mock SqliteClient
-vi.mock('../api/clients/SqliteClient', () => {
-  return {
-    SqliteClient: vi.fn().mockImplementation(() => ({
-      execute: mockExecute,
-      query: mockQuery,
-    })),
+interface MockChain {
+  insert: (...args: unknown[]) => MockChain;
+  update: (...args: unknown[]) => MockChain;
+  delete: (...args: unknown[]) => MockChain;
+  select: (...args: unknown[]) => MockChain;
+  eq: (...args: unknown[]) => MockChain;
+  gt: (...args: unknown[]) => MockChain;
+  in: (...args: unknown[]) => MockChain;
+  limit: (...args: unknown[]) => MockChain;
+  order: (...args: unknown[]) => MockChain;
+  maybeSingle: (...args: unknown[]) => Promise<{ data: unknown; error: unknown; status: number }>;
+  then: (
+    onFulfilled: (value: { data: unknown; error: unknown; status: number }) => unknown
+  ) => Promise<unknown>;
+}
+
+/** `data` for awaitable queries: array => row list; single object => one row; used by .in() / .then() */
+const createMockChain = (data: unknown = [], error: unknown = null, status = 200): MockChain => {
+  const rows: unknown[] = Array.isArray(data) ? data : data != null ? [data] : [];
+  const chain: MockChain = {
+    insert: (...args: unknown[]) => {
+      mockInsert(...args);
+      return chain;
+    },
+    update: (...args: unknown[]) => {
+      mockUpdate(...args);
+      return chain;
+    },
+    delete: (...args: unknown[]) => {
+      mockDelete(...args);
+      return chain;
+    },
+    select: (...args: unknown[]) => {
+      mockSelect(...args);
+      return chain;
+    },
+    eq: (...args: unknown[]) => {
+      mockEq(...args);
+      return chain;
+    },
+    gt: (...args: unknown[]) => {
+      mockGt(...args);
+      return chain;
+    },
+    in: (...args: unknown[]) => {
+      mockIn(...args);
+      return chain;
+    },
+    limit: (...args: unknown[]) => {
+      mockLimit(...args);
+      return chain;
+    },
+    order: (...args: unknown[]) => {
+      mockOrder(...args);
+      return chain;
+    },
+    maybeSingle: (...args: unknown[]) => {
+      mockMaybeSingle(...args);
+      return Promise.resolve({ data: rows[0] ?? null, error, status });
+    },
+    then: (onFulfilled: (value: { data: unknown; error: unknown; status: number }) => unknown) =>
+      Promise.resolve({ data: rows, error, status }).then(onFulfilled),
   };
+  return chain;
+};
+
+// Helper for mock logic
+mockFrom.mockImplementation(() => {
+  return createMockChain();
 });
 
-// Mock Supabase Client Chain
-// For Pull, we do: await this.supabase.client!.from(table).select('*');
-// So we need to ensure .select returns a promise with { data, error }
-
-const mockFrom = vi.fn().mockReturnValue({
-  select: mockSelect,
-  insert: mockInsert,
-  update: mockUpdate,
-  delete: mockDelete,
-});
-
-vi.mock('../api/clients/SupabaseClient', () => {
-  return {
-    SupabaseClient: vi.fn().mockImplementation(() => ({
-      client: {
-        from: mockFrom,
-      },
-      query: vi.fn(),
-    })),
-  };
-});
+vi.mock('../api/clients/SupabaseClient', () => ({
+  SupabaseClient: vi.fn().mockImplementation(() => ({
+    client: {
+      from: (table: string) => mockFrom(table),
+    },
+    query: vi.fn(),
+  })),
+}));
 
 vi.mock('../api/clients/supabaseConfig', () => ({
   isSupabaseConfigured: vi.fn().mockReturnValue(true),
@@ -52,158 +127,210 @@ vi.mock('../api/clients/supabaseConfig', () => ({
 // Mock Navigator
 const originalNavigator = global.navigator;
 
-describe('SyncService Pull', () => {
-  let SyncService: any;
+// Mock localStorage
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => {
+      store[key] = value.toString();
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+  };
+})();
 
+Object.defineProperty(global, 'localStorage', {
+  value: localStorageMock,
+});
+
+describe('SyncService Pull', () => {
   beforeEach(async () => {
+    SyncService.reset();
+    localStorageMock.clear();
+    vi.stubGlobal('navigator', { onLine: true });
+
+    mockExecute.mockClear();
+    mockQuery.mockClear();
+    mockInsert.mockClear();
+    mockUpdate.mockClear();
+    mockSelect.mockClear();
+    mockEq.mockClear();
+    mockGt.mockClear();
+    mockIn.mockClear();
+    mockLimit.mockClear();
+    mockOrder.mockClear();
+    mockMaybeSingle.mockClear();
+    mockFrom.mockClear();
     vi.clearAllMocks();
-    vi.resetModules();
 
     // Standard mock returns
     mockExecute.mockResolvedValue({ changes: 1 });
-    mockQuery.mockResolvedValue([]); // Default: no pending changes, no local records found
-
-    mockSelect.mockResolvedValue({ data: [], error: null });
-
-    // Mock navigator.onLine
-    Object.defineProperty(global, 'navigator', {
-      value: { onLine: true },
-      writable: true,
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) {
+        return [{ value: '0' }];
+      }
+      return [];
     });
-
-    // Dynamic import
-    const mod = await import('../services/syncService');
-    SyncService = mod.SyncService;
   });
 
   afterEach(() => {
-    if (SyncService) SyncService.stopSync();
+    SyncService.stopSync();
     Object.defineProperty(global, 'navigator', { value: originalNavigator });
+    vi.clearAllMocks();
   });
 
   it('pullChanges inserts remote records if not found locally', async () => {
-    // Mock remote data
-    const remoteData = [{ uuid: 'remote-uuid-1', name: 'New Player', id: 999 }];
-    mockSelect.mockResolvedValue({ data: remoteData, error: null });
+    const remoteRecord = { uuid: 'remote-1', name: 'Remote Player', id: 100 };
+    const logs = [{ id: 1, table_name: 'players', record_uuid: 'remote-1', operation: 'INSERT' }];
 
-    // Mock local lookup: not found by uuid, not found by name
-    // 1. Pending changes lookup -> []
-    // 2. Select by UUID -> []
-    // 3. Select by Name -> []
-    mockQuery
-      .mockResolvedValueOnce([]) // Pending Check
-      .mockResolvedValueOnce([] as any[]) // By UUID check
-      .mockResolvedValueOnce([] as any[]); // By Name check (if triggered)
-
-    // Mock push queue check (empty)
-    // Wait, sync calls pull then push.
-    // We only care about pull logic here. sync() calls pullChanges then pushChanges.
-    // We can call pullChanges via sync or via private method access if exposed or just check calls.
-
-    // We will call sync()
-    // We need to mock push queue to be empty so it doesn't do much
-    mockQuery.mockResolvedValue([]); // Push queue empty (this query happens inside pushChanges)
-
-    // BUT, Query mock is called sequentially.
-    // Sequence inside pullChanges for 1 table (players):
-    // 1. SELECT payload FROM sync_queue WHERE table_name = 'players'...
-    // 2. SELECT * FROM players WHERE uuid = 'remote-uuid-1'
-    // 3. SELECT * FROM players WHERE name = 'New Player'... (Smart Merge check)
-    // 4. INSERT INTO players ...
-
-    // We need 4 iterations of tables (players, tournaments, cities, places).
-    // Let's focus on 'players' table only.
-
-    // We can just verify that INSERT was called with correct SQL.
-
-    // Setup specific mocks for queries to control flow
-    mockQuery.mockImplementation((sql: string) => {
-      if (sql.includes('SELECT payload FROM sync_queue')) return Promise.resolve([]);
-      if (sql.includes('SELECT * FROM players WHERE uuid')) return Promise.resolve([]);
-      if (sql.includes('SELECT * FROM players WHERE name')) return Promise.resolve([]); // Not found by name
-      if (sql.includes('INSERT INTO')) return Promise.resolve({ changes: 1 });
-      if (sql.includes('UPDATE')) return Promise.resolve({ changes: 1 });
-      return Promise.resolve([]);
-    });
-
-    await SyncService.sync();
-
-    // Verify Insert was called for 'players'
-    // We expect: INSERT INTO players (name, uuid) VALUES (?, ?) ...
-    expect(mockExecute).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT INTO players'),
-      expect.arrayContaining(['New Player', 'remote-uuid-1'])
-    );
-  });
-
-  it('pullChanges updates local record if found by UUID', async () => {
-    const remoteData = [{ uuid: 'uuid-1', name: 'Updated Name', id: 999 }];
-    mockSelect.mockResolvedValue({ data: remoteData, error: null });
-
-    mockQuery.mockImplementation((sql: string) => {
-      if (sql.includes('sync_queue')) return Promise.resolve([]);
-      if (sql.includes('WHERE uuid'))
-        return Promise.resolve([{ id: 10, uuid: 'uuid-1', name: 'Old Name' }]);
-      return Promise.resolve([]);
-    });
-
-    await SyncService.sync();
-
-    // Expect Update
-    expect(mockExecute).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE players SET'),
-      expect.arrayContaining(['Updated Name', 'uuid-1'])
-    );
-  });
-
-  it('pullChanges skips update if pending local change exists', async () => {
-    const remoteData = [{ uuid: 'uuid-1', name: 'Remote Name', id: 999 }];
-    mockSelect.mockResolvedValue({ data: remoteData, error: null });
-
-    // Mock pending change
-    mockQuery.mockImplementation((sql: string, params: any[]) => {
-      if (sql.includes('sync_queue') && params && params[0] === 'players') {
-        return Promise.resolve([
-          { payload: JSON.stringify({ uuid: 'uuid-1', name: 'Local Change' }) },
-        ]);
+    // Mock audit logs
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sync_audit_logs') {
+        return createMockChain(logs);
       }
-      return Promise.resolve([]);
+      if (table === 'players') {
+        return createMockChain([remoteRecord]);
+      }
+      return createMockChain();
     });
 
-    await SyncService.sync();
+    // Local check: not found
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('SELECT id FROM players WHERE uuid = ?')) return [];
+      return [];
+    });
 
-    // Should NOT update
-    expect(mockExecute).not.toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE players'),
-      expect.anything()
+    // CAST to any for internal call tracking if needed, but here we use vi.fn mocks anyway
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (SyncService as any).pullChanges();
+
+    // Verify insert - note that 'id' is stripped in insertLocalRecord
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.stringMatching(/INSERT INTO players/i),
+      expect.arrayContaining(['remote-1', 'Remote Player'])
+    );
+  });
+
+  it('pullChanges updates remote records if found locally', async () => {
+    const remoteRecord = { uuid: 'remote-2', name: 'Updated Player', id: 200 };
+    const logs = [{ id: 2, table_name: 'players', record_uuid: 'remote-2', operation: 'UPDATE' }];
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sync_audit_logs') return createMockChain(logs);
+      if (table === 'players') return createMockChain([remoteRecord]);
+      return createMockChain();
+    });
+
+    // Local check: FOUND
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('SELECT id FROM players WHERE uuid = ?')) return [{ id: 5 }];
+      return [];
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (SyncService as any).pullChanges();
+
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.stringMatching(/UPDATE players SET name = \? WHERE uuid = \?/i),
+      ['Updated Player', 'remote-2']
     );
   });
 
   it('pullChanges performs Smart Merge (matches by Name)', async () => {
-    const remoteData = [{ uuid: 'remote-uuid-2', name: 'Common Name', id: 888 }];
-    mockSelect.mockResolvedValue({ data: remoteData, error: null });
+    // remote uuid is 'new-uuid', but name 'Legacy' exists locally with different uuid
+    const remoteRecord = { uuid: 'new-uuid', name: 'Legacy Player', id: 300 };
+    const logs = [{ id: 3, table_name: 'players', record_uuid: 'new-uuid', operation: 'INSERT' }];
 
-    mockQuery.mockImplementation((sql: string) => {
-      if (sql.includes('sync_queue')) return Promise.resolve([]);
-      if (sql.includes('WHERE uuid')) return Promise.resolve([]); // Not found by UUID
-      if (sql.includes('WHERE name'))
-        return Promise.resolve([{ id: 20, uuid: 'local-uuid-2', name: 'Common Name' }]); // Found by Name
-      return Promise.resolve([]);
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sync_audit_logs') return createMockChain(logs);
+      if (table === 'players') return createMockChain([remoteRecord]);
+      return createMockChain();
     });
 
-    await SyncService.sync();
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('SELECT id FROM players WHERE uuid = ?')) return []; // Not found by uuid
+      if (sql.includes('SELECT id FROM players WHERE name = ?')) return [{ id: 10 }]; // FOUND by name
+      return [];
+    });
 
-    // Expect 2 updates:
-    // 1. Update UUID: UPDATE players SET uuid = ? WHERE id = ?
-    expect(mockExecute).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE players SET uuid = ? WHERE id = ?'),
-      ['remote-uuid-2', 20]
-    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (SyncService as any).pullChanges();
 
-    // 2. Update fields: UPDATE players SET ... WHERE uuid = ?
+    // 1. Update UUID
     expect(mockExecute).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE players SET'),
-      expect.arrayContaining(['Common Name', 'remote-uuid-2'])
+      expect.stringMatching(/UPDATE players SET uuid = \? WHERE id = \?/i),
+      ['new-uuid', 10]
     );
+    // 2. Update Data
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.stringMatching(/UPDATE players SET name = \? WHERE uuid = \?/i),
+      ['Legacy Player', 'new-uuid']
+    );
+  });
+
+  it('pullChanges deletes local records', async () => {
+    const logs = [
+      { id: 4, table_name: 'players', record_uuid: 'deleted-uuid', operation: 'DELETE' },
+    ];
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sync_audit_logs') return createMockChain(logs);
+      return createMockChain();
+    });
+
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      return [];
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (SyncService as any).pullChanges();
+
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.stringMatching(/DELETE FROM players WHERE uuid = \?/i),
+      ['deleted-uuid']
+    );
+  });
+
+  it('pullChanges prefetches multiple players with one IN query', async () => {
+    const r1 = { uuid: 'u1', name: 'P1', id: 1 };
+    const r2 = { uuid: 'u2', name: 'P2', id: 2 };
+    const logs = [
+      { id: 1, table_name: 'players', record_uuid: 'u1', operation: 'INSERT' as const },
+      { id: 2, table_name: 'players', record_uuid: 'u2', operation: 'INSERT' as const },
+    ];
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sync_audit_logs') return createMockChain(logs);
+      if (table === 'players') return createMockChain([r1, r2]);
+      return createMockChain();
+    });
+
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('SELECT id FROM players WHERE uuid = ?')) return [];
+      return [];
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (SyncService as any).pullChanges();
+
+    expect(mockIn).toHaveBeenCalled();
+    expect(mockIn.mock.calls[0][0]).toBe('uuid');
+    expect(mockIn.mock.calls[0][1]).toEqual(expect.arrayContaining(['u1', 'u2']));
+    expect(mockEq).not.toHaveBeenCalled();
+
+    const inserts = mockExecute.mock.calls.filter((c) =>
+      String(c[0]).toLowerCase().includes('insert into players')
+    );
+    expect(inserts.length).toBe(2);
   });
 });

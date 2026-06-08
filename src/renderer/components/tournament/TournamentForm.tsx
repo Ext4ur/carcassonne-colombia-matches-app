@@ -8,6 +8,8 @@ import { getLocalDateString } from '../../utils/dateUtils';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
+import { useTranslation } from 'react-i18next';
+import type { CompetitionFormat } from '../../types/knockout';
 
 export interface TournamentFormRef {
   submit: () => void;
@@ -32,6 +34,7 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
   },
   ref
 ) {
+  const { t } = useTranslation();
   const [circuits, setCircuits] = useState<Circuit[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
   const [formData, setFormData] = useState({
@@ -42,6 +45,7 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     players_per_match: tournament?.players_per_match || 2,
     number_of_rounds: tournament?.number_of_rounds?.toString() || '',
     place_id: tournament?.place_id?.toString() || '',
+    competition_format: (tournament?.competition_format || 'swiss') as CompetitionFormat,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -80,23 +84,23 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'El nombre es requerido';
+      newErrors.name = t('tournaments.form.name_req');
     }
 
     if (formData.type === 'circuit' && !formData.circuit_id) {
-      newErrors.circuit_id = 'Debes seleccionar un circuito';
+      newErrors.circuit_id = t('tournaments.form.circuit_req');
     }
 
     if (!formData.date) {
-      newErrors.date = 'La fecha es requerida';
+      newErrors.date = t('tournaments.form.date_req');
     }
 
     if (!formData.place_id) {
-      newErrors.place_id = 'Debes seleccionar un lugar';
+      newErrors.place_id = t('tournaments.form.place_req');
     }
 
     if (formData.players_per_match < 2 || formData.players_per_match > 4) {
-      newErrors.players_per_match = 'Debe ser entre 2 y 4 jugadores';
+      newErrors.players_per_match = t('tournaments.form.players_range');
     }
 
     setErrors(newErrors);
@@ -117,6 +121,7 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       players_per_match: formData.players_per_match,
       number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
       place_id: formData.place_id ? Number(formData.place_id) : undefined,
+      competition_format: formData.competition_format as 'swiss' | 'swiss_knockout',
     });
   };
 
@@ -127,7 +132,7 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
   return (
     <div className="space-y-4">
       <Input
-        label="Nombre del Torneo *"
+        label={t('tournaments.form.name_label')}
         value={formData.name}
         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
         error={errors.name}
@@ -135,24 +140,41 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       />
 
       <Select
-        label="Tipo de Torneo *"
+        label={t('tournaments.form.competition_format_label')}
+        value={formData.competition_format}
+        onChange={(e) =>
+          setFormData({
+            ...formData,
+            competition_format: e.target.value as 'swiss' | 'swiss_knockout',
+          })
+        }
+        options={[
+          { value: 'swiss', label: t('tournaments.form.competition_format.swiss') },
+          {
+            value: 'swiss_knockout',
+            label: t('tournaments.form.competition_format.swiss_knockout'),
+          },
+        ]}
+      />
+
+      <Select
         value={formData.type}
         onChange={(e) =>
           setFormData({ ...formData, type: e.target.value as TournamentType, circuit_id: '' })
         }
         options={[
-          { value: 'qualifier', label: 'Clasificatorio' },
-          { value: 'circuit', label: 'Circuito' },
+          { value: 'qualifier', label: t('tournaments.types.qualifier') },
+          { value: 'circuit', label: t('tournaments.types.circuit') },
         ]}
       />
 
       {formData.type === 'circuit' && (
         <Select
-          label="Circuito *"
+          label={t('tournaments.form.circuit_label')}
           value={formData.circuit_id}
           onChange={(e) => setFormData({ ...formData, circuit_id: e.target.value })}
           options={[
-            { value: '', label: 'Seleccionar circuito...' },
+            { value: '', label: t('tournaments.form.select_circuit') },
             ...circuits
               .filter((c) => c.status !== 'finalized')
               .map((c) => ({ value: c.id!.toString(), label: c.name })),
@@ -162,18 +184,18 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       )}
 
       <Select
-        label="Lugar *"
+        label={t('tournaments.form.place_label')}
         value={formData.place_id}
         onChange={(e) => setFormData({ ...formData, place_id: e.target.value })}
         options={[
-          { value: '', label: 'Seleccionar lugar...' },
+          { value: '', label: t('tournaments.form.select_place') },
           ...places.map((p) => ({ value: p.id!.toString(), label: p.name })),
         ]}
         error={errors.place_id}
       />
 
       <Input
-        label="Fecha *"
+        label={t('tournaments.form.date_label')}
         type="date"
         value={formData.date}
         onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -184,20 +206,20 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       {mode === 'advanced' && (
         <>
           <Select
-            label="Jugadores por Partida *"
+            label={t('tournaments.form.players_label')}
             value={formData.players_per_match.toString()}
             onChange={(e) =>
               setFormData({ ...formData, players_per_match: Number(e.target.value) })
             }
             options={[
-              { value: '2', label: '2 jugadores' },
-              { value: '3', label: '3 jugadores' },
-              { value: '4', label: '4 jugadores' },
+              { value: '2', label: t('tournaments.form.n_players', { count: 2 }) },
+              { value: '3', label: t('tournaments.form.n_players', { count: 3 }) },
+              { value: '4', label: t('tournaments.form.n_players', { count: 4 }) },
             ]}
             error={errors.players_per_match}
           />
           <Input
-            label="Número de Rondas (opcional, se calculará automáticamente si se deja vacío)"
+            label={t('tournaments.form.rounds_label')}
             type="number"
             value={formData.number_of_rounds}
             onChange={(e) => {
@@ -211,14 +233,16 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
                 }
               }
             }}
-            helperText="Se calculará como potencia de 2 según el número de jugadores si se deja vacío"
+            helperText={t('tournaments.form.rounds_help')}
           />
         </>
       )}
 
       {!hideActions && (
         <div className="flex justify-end space-x-2 pt-4">
-          <Button onClick={handleSubmit}>{tournament ? 'Actualizar' : 'Continuar'}</Button>
+          <Button onClick={handleSubmit}>
+            {tournament ? t('common.update') : t('common.continue')}
+          </Button>
         </div>
       )}
     </div>

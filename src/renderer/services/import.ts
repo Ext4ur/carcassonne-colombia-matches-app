@@ -3,8 +3,16 @@ import { DatabaseService } from './database';
 import { Player } from '../types/player';
 import i18n from '../i18n/config';
 import { DEFAULT_TIEBREAK_CRITERIA } from '../constants';
+import { collectPlayersOnlyFromSnapshots } from '../utils/exportImportHelpers';
 
-interface ImportData {
+/**
+ * Respaldo JSON (`ExportService`). `version` ≥ 1.1 puede incluir en cada torneo
+ * `standings_snapshot` (clasificación calculada al exportar); la importación lo ignora
+ * y reconstruye estado desde rondas/partidas.
+ *
+ * Lista `tournaments` puede ser parcial si el archivo fue generado por exportación selectiva.
+ */
+export interface BackupImportData {
   version: string;
   exportDate: string;
   data: {
@@ -14,30 +22,56 @@ interface ImportData {
   };
 }
 
-function collectPlayersByOldId(data: ImportData): Map<number, Player> {
+function collectPlayersByOldId(data: BackupImportData): Map<number, Player> {
   const byId = new Map<number, Player>();
   for (const p of data.data.players || []) {
     if (p.id != null) byId.set(p.id, p);
   }
-  for (const t of data.data.tournaments || []) {
-    for (const p of t.players || []) {
-      if (p?.id != null && !byId.has(p.id)) byId.set(p.id, p);
-    }
-    for (const r of t.rounds || []) {
-      for (const m of r.matches || []) {
-        for (const p of m.players || []) {
-          if (p?.id != null && !byId.has(p.id)) byId.set(p.id, p as Player);
-        }
-        for (const res of m.results || []) {
-          const pid = res.player_id as number | undefined;
-          if (pid != null && !byId.has(pid)) {
-            byId.set(pid, { id: pid, name: `Player ${pid}` } as Player);
-          }
-        }
-      }
+  return collectPlayersOnlyFromSnapshots(data.data.tournaments || [], byId);
+}
+
+/** Mapa jugadores solo necesarios para `tournamentIndices` (estructuras anidadas + enriquecer desde lista global exportada). */
+function collectPlayersByOldIdSubset(
+  data: BackupImportData,
+  tournamentIndices: number[]
+): Map<number, Player> {
+  const subset = tournamentIndices.map((i) => data.data.tournaments[i]).filter(Boolean);
+  const trimmed: BackupImportData = {
+    ...data,
+    data: {
+      players: [],
+      tournaments: subset,
+      circuits: [],
+    },
+  };
+  const byId = collectPlayersByOldId(trimmed);
+  for (const p of data.data.players || []) {
+    if (p?.id != null && byId.has(p.id)) {
+      const cur = byId.get(p.id)!;
+      byId.set(p.id, { ...cur, ...p });
     }
   }
   return byId;
+}
+
+export function parseBackupJson(raw: string): BackupImportData {
+  let parsed: BackupImportData;
+  try {
+    parsed = JSON.parse(raw) as BackupImportData;
+  } catch {
+    throw new SyntaxError('INVALID_JSON');
+  }
+  if (
+    !parsed.data ||
+    !Array.isArray(parsed.data.players) ||
+    !Array.isArray(parsed.data.tournaments)
+  ) {
+    throw new Error('BAD_BACKUP_STRUCTURE');
+  }
+  if (!Array.isArray(parsed.data.circuits)) {
+    parsed.data.circuits = [];
+  }
+  return parsed;
 }
 
 async function resolvePlaceId(tournament: any): Promise<number> {
@@ -256,42 +290,98 @@ async function importTournamentDeep(
 }
 
 export class ImportService {
-  static async importAll(): Promise<{ success: boolean; error?: string; summary?: string }> {
+  /** Abre archivo y valida; no modifica BD. */
+  static async pickFileAndParse(): Promise<{
+    success: boolean;
+    canceled?: boolean;
+    importData?: BackupImportData;
+    error?: string;
+  }> {
     try {
       const result = await window.electronAPI.openFile([
         { name: 'JSON Files', extensions: ['json'] },
       ]);
 
       if (!result.success || result.canceled || !result.data) {
-        return { success: false, error: i18n.t('settings.import_no_file') };
+        return {
+          success: false,
+          canceled: !!result.canceled,
+          error: i18n.t('settings.import_no_file'),
+        };
       }
 
-      let importData: ImportData;
       try {
-        importData = JSON.parse(result.data);
-      } catch {
+        const importData = parseBackupJson(result.data);
+        return { success: true, importData };
+      } catch (e: unknown) {
+        const code = e instanceof Error ? e.message : '';
+        if (code === 'BAD_BACKUP_STRUCTURE') {
+          return { success: false, error: i18n.t('settings.import_bad_structure') };
+        }
         return { success: false, error: i18n.t('settings.import_invalid_json') };
       }
+    } catch (error) {
+      console.error('Error reading import:', error);
+      return { success: false, error: String(error) };
+    }
+  }
 
-      if (
-        !importData.data ||
-        !importData.data.players ||
-        !importData.data.tournaments ||
-        !importData.data.circuits
-      ) {
-        return { success: false, error: i18n.t('settings.import_bad_structure') };
+  /** Por índice en `data.tournaments`, marca si ya existe igual nombre + fecha + lugar. */
+  static async peekTournamentDuplicates(
+    importData: BackupImportData
+  ): Promise<{ index: number; existsInDb: boolean }[]> {
+    const rows = await Promise.all(
+      importData.data.tournaments.map(async (tournament, index) => {
+        try {
+          const placeId = await resolvePlaceId(tournament);
+          const dup = await DatabaseService.getTournamentByNameDateAndPlace(
+            tournament.name,
+            tournament.date,
+            placeId
+          );
+          return { index, existsInDb: dup.length > 0 };
+        } catch {
+          return { index, existsInDb: false };
+        }
+      })
+    );
+    return rows;
+  }
+
+  /** Importación completa (todos los torneos del archivo). Compatible con llamadas existentes. */
+  static async importAll(): Promise<{ success: boolean; error?: string; summary?: string }> {
+    const picked = await this.pickFileAndParse();
+    if (!picked.success || !picked.importData) {
+      return { success: false, error: picked.error };
+    }
+    const n = picked.importData.data.tournaments.length;
+    const indices = Array.from({ length: n }, (_, i) => i);
+    return this.importSelected(picked.importData, indices);
+  }
+
+  /** Importa solo índices en `data.tournaments`. Duplicados (mismo nombre+fecha+lugar) se importan con nombre único tipo "(imported)" sin prompts. */
+  static async importSelected(
+    importData: BackupImportData,
+    tournamentIndices: number[]
+  ): Promise<{ success: boolean; error?: string; summary?: string }> {
+    try {
+      const uniq = [...new Set(tournamentIndices)].filter(
+        (i) => Number.isInteger(i) && i >= 0 && i < importData.data.tournaments.length
+      );
+      uniq.sort((a, b) => a - b);
+
+      if (uniq.length === 0) {
+        return { success: true, summary: i18n.t('settings.import_summary_none') };
       }
 
       const summary: string[] = [];
-      const playerByOldId = collectPlayersByOldId(importData);
+      const playerByOldId = collectPlayersByOldIdSubset(importData, uniq);
       const playerMap = new Map<number, number>();
       const playerStats = { created: 0 };
 
-      for (const player of importData.data.players) {
+      for (const oldId of playerByOldId.keys()) {
         try {
-          if (player.id != null) {
-            await resolvePlayerId(player.id, playerByOldId, playerMap, playerStats);
-          }
+          await resolvePlayerId(oldId, playerByOldId, playerMap, playerStats);
         } catch (error) {
           console.error('Error importing player:', error);
         }
@@ -301,12 +391,18 @@ export class ImportService {
         summary.push(i18n.t('settings.import_summary_players', { count: playerStats.created }));
       }
 
+      const circuitOldIdsNeeded = new Set<number>();
+      for (const idx of uniq) {
+        const cid = importData.data.tournaments[idx]?.circuit_id as number | undefined;
+        if (cid != null) circuitOldIdsNeeded.add(cid);
+      }
+
       const circuitIdMap = new Map<number, number>();
       let circuitsImported = 0;
-      for (const circuit of importData.data.circuits) {
+      for (const circuit of importData.data.circuits || []) {
         try {
           const oid = circuit.id as number | undefined;
-          if (oid == null) continue;
+          if (oid == null || !circuitOldIdsNeeded.has(oid)) continue;
           const existing = await DatabaseService.getCircuitByName(circuit.name);
           if (existing?.id != null) {
             circuitIdMap.set(oid, existing.id);
@@ -332,7 +428,8 @@ export class ImportService {
       }
 
       let tournamentsImported = 0;
-      for (const tournament of importData.data.tournaments) {
+      for (const idx of uniq) {
+        const tournament = importData.data.tournaments[idx];
         try {
           const placeId = await resolvePlaceId(tournament);
           const dup = await DatabaseService.getTournamentByNameDateAndPlace(
@@ -343,13 +440,6 @@ export class ImportService {
 
           let importName = tournament.name as string;
           if (dup.length > 0) {
-            const ok = window.confirm(
-              i18n.t('settings.import_duplicate_prompt', {
-                name: tournament.name,
-                date: tournament.date,
-              })
-            );
-            if (!ok) continue;
             importName = await pickUniqueImportName(tournament.name, tournament.date, placeId);
           }
 

@@ -187,6 +187,81 @@ describe('TiebreakService', () => {
       // flat: opponent 0 + virtual min for empty r2 = 0; [0,0] drop worst -> 0
       expect(v).toBe(0);
     });
+
+    it('legacy_virtual_worst: bye then real match — virtual + opponent so drop-worst keeps real sum', () => {
+      const rounds: Round[] = [
+        { id: 1, tournament_id: 1, round_number: 1, status: 'completed' },
+        { id: 2, tournament_id: 1, round_number: 2, status: 'completed' },
+      ];
+      const roundMatches = [
+        [
+          { id: 101, round_id: 1, match_number: 1, status: 'completed' as const },
+          { id: 102, round_id: 1, match_number: 2, status: 'completed' as const },
+        ],
+        [{ id: 103, round_id: 2, match_number: 1, status: 'completed' as const }],
+      ];
+      const resultsByMatch = {
+        101: [
+          { match_id: 101, player_id: 1, position: 1, points: 100, tournament_points: 1 },
+          { match_id: 101, player_id: 2, position: 2, points: 50, tournament_points: 0 },
+        ],
+        102: [{ match_id: 102, player_id: 5, position: 1, points: 100, tournament_points: 1 }],
+        103: [
+          { match_id: 103, player_id: 5, position: 2, points: 50, tournament_points: 0 },
+          { match_id: 103, player_id: 1, position: 1, points: 100, tournament_points: 1 },
+        ],
+      };
+      const playerTotalPoints = { 1: 2, 2: 0, 5: 1 };
+      const data: TiebreakData = { rounds, roundMatches, resultsByMatch, playerTotalPoints };
+      const v = computeOpp(
+        5,
+        data,
+        { buchholzByeMode: 'legacy_virtual_worst', numberOfRounds: 2, tournamentPointsAverage: 0 },
+        true,
+        false
+      );
+      // R1 bye: virtual min among who played = min(2,0,1)=0; R2 real opp P1 = 2 → [2,0] drop worst → 2
+      expect(v).toBe(2);
+    });
+
+    it('n_minus_1_virtual_worst: bye round uses virtual term not zero-only aggregate', () => {
+      const rounds: Round[] = [
+        { id: 1, tournament_id: 1, round_number: 1, status: 'completed' },
+        { id: 2, tournament_id: 1, round_number: 2, status: 'completed' },
+      ];
+      const roundMatches = [
+        [
+          { id: 101, round_id: 1, match_number: 1, status: 'completed' as const },
+          { id: 102, round_id: 1, match_number: 2, status: 'completed' as const },
+        ],
+        [{ id: 103, round_id: 2, match_number: 1, status: 'completed' as const }],
+      ];
+      const resultsByMatch = {
+        101: [
+          { match_id: 101, player_id: 1, position: 1, points: 100, tournament_points: 1 },
+          { match_id: 101, player_id: 2, position: 2, points: 50, tournament_points: 0 },
+        ],
+        102: [{ match_id: 102, player_id: 5, position: 1, points: 100, tournament_points: 1 }],
+        103: [
+          { match_id: 103, player_id: 5, position: 2, points: 50, tournament_points: 0 },
+          { match_id: 103, player_id: 1, position: 1, points: 100, tournament_points: 1 },
+        ],
+      };
+      const playerTotalPoints = { 1: 2, 2: 0, 5: 1 };
+      const data: TiebreakData = { rounds, roundMatches, resultsByMatch, playerTotalPoints };
+      const v = computeOpp(
+        5,
+        data,
+        {
+          buchholzByeMode: 'n_minus_1_virtual_worst',
+          numberOfRounds: 2,
+          tournamentPointsAverage: 0,
+        },
+        true,
+        false
+      );
+      expect(v).toBe(2);
+    });
   });
 
   describe('getBuchholzVirtualSlots', () => {

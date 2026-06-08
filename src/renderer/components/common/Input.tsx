@@ -1,4 +1,4 @@
-import { InputHTMLAttributes, ChangeEvent, useMemo } from 'react';
+import { InputHTMLAttributes, ChangeEvent, useMemo, forwardRef } from 'react';
 
 interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange'> {
   label?: string;
@@ -10,32 +10,22 @@ interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' 
 
 let inputCounter = 0;
 
-export default function Input({
-  label,
-  error,
-  helperText,
-  className = '',
-  id,
-  type = 'text',
-  onChange,
-  value,
-  ...props
-}: InputProps) {
-  // Use a stable ID that doesn't change on re-renders
+const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { label, error, helperText, className = '', id, type = 'text', onChange, value, ...props },
+  ref
+) {
   const inputId = useMemo(() => {
     if (id) return id;
     inputCounter++;
     return `input-${inputCounter}`;
   }, [id]);
 
-  // Handle number input to only allow integers (no arrows, no decimals)
   const handleNumberChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (onChange) {
       onChange(e);
     }
   };
 
-  // Ensure value is always a string for controlled inputs
   const stringValue = value === undefined || value === null ? '' : String(value);
 
   return (
@@ -49,6 +39,7 @@ export default function Input({
         </label>
       )}
       <input
+        ref={ref}
         id={inputId}
         type={type === 'number' ? 'text' : type}
         className={`input ${error ? 'border-red-500 focus:ring-red-500' : ''} ${type === 'number' ? '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none' : ''} ${className}`}
@@ -62,4 +53,6 @@ export default function Input({
       )}
     </div>
   );
-}
+});
+
+export default Input;

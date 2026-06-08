@@ -52,10 +52,28 @@ describe('ReportService', () => {
       ]);
       (DatabaseService.getTournamentConfig as any).mockResolvedValue({});
 
-      // Standings
+      // Standings (campos mínimos; desempates vacíos si no hay tiebreak_values)
       (SwissPairingService.calculateStandings as any).mockResolvedValue([
-        { player_name: 'P1', total_points: 1, wins: 1 },
-        { player_name: 'P2', total_points: 0, wins: 0 },
+        {
+          player_id: 1,
+          player_name: 'P1',
+          total_points: 1,
+          wins: 1,
+          matches_played: 1,
+          active: true,
+          dropout_round: null,
+          tiebreak_values: {},
+        },
+        {
+          player_id: 2,
+          player_name: 'P2',
+          total_points: 0,
+          wins: 0,
+          matches_played: 1,
+          active: true,
+          dropout_round: null,
+          tiebreak_values: {},
+        },
       ]);
 
       const result = await ReportService.generateTournamentExcel(tId);
@@ -77,6 +95,10 @@ describe('ReportService', () => {
         1,
         'tournaments.config.buchholz_bye_legacy',
         'tournaments.reports.virtual_rule_none',
+        '',
+        '',
+        '',
+        '',
       ]);
 
       // Check detailed results
@@ -92,7 +114,16 @@ describe('ReportService', () => {
       (DatabaseService.getTournamentConfig as any).mockResolvedValue({});
       (DatabaseService.getTournamentRounds as any).mockResolvedValue([]);
       (SwissPairingService.calculateStandings as any).mockResolvedValue([
-        { player_name: 'Winner', total_points: 3.5, wins: 3 },
+        {
+          player_id: 1,
+          player_name: 'Winner',
+          total_points: 3.5,
+          wins: 3,
+          matches_played: 3,
+          active: true,
+          dropout_round: null,
+          tiebreak_values: {},
+        },
       ]);
 
       const result = await ReportService.generateTournamentCSV(tId, 'csv-standings');
@@ -104,6 +135,10 @@ describe('ReportService', () => {
         'tournaments.reports.wins',
         'tournaments.reports.buchholz_mode',
         'tournaments.reports.virtual_opponent',
+        'tiebreaks_short.opponent_points_drop_worst',
+        'tiebreaks_short.opponent_points_drop_best_worst',
+        'tiebreaks_short.head_to_head',
+        'tiebreaks_short.point_difference',
       ]);
       expect(result.rows).toHaveLength(1);
       expect(result.rows[0]).toEqual({
@@ -113,6 +148,10 @@ describe('ReportService', () => {
         'tournaments.reports.wins': 3,
         'tournaments.reports.buchholz_mode': 'tournaments.config.buchholz_bye_legacy',
         'tournaments.reports.virtual_opponent': 'tournaments.reports.virtual_rule_none',
+        'tiebreaks_short.opponent_points_drop_worst': '',
+        'tiebreaks_short.opponent_points_drop_best_worst': '',
+        'tiebreaks_short.head_to_head': '',
+        'tiebreaks_short.point_difference': '',
       });
     });
   });

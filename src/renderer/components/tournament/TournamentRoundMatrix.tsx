@@ -7,7 +7,7 @@ import {
   MatchResultWithPlayer,
   PlayerStanding,
 } from '../../types/tournament';
-import { TiebreakData, TiebreakService } from '../../services/tiebreak';
+import { TiebreakData, TiebreakService, TiebreakCalculateOptions } from '../../services/tiebreak';
 import { getBuchholzModeMeta } from '../../utils/buchholzModeMeta';
 
 interface TournamentRoundMatrixProps {
@@ -26,14 +26,9 @@ export default function TournamentRoundMatrix({
   const [realByPlayerRound, setRealByPlayerRound] = useState<
     Record<number, Record<number, number>>
   >({});
-  const [virtualByPlayerRound, setVirtualByPlayerRound] = useState<
-    Record<number, Record<number, { value: number; kind: 'field_avg' | 'round_worst' }>>
-  >({});
-
-  const standingsTotalsKey = useMemo(
-    () => standings.map((s) => `${s.player_id}:${s.total_points}`).join('|'),
-    [standings]
-  );
+  const [byeKeyList, setByeKeyList] = useState<string[]>([]);
+  const [roundMatrixData, setRoundMatrixData] = useState<TiebreakData | null>(null);
+  const [roundMatrixOpts, setRoundMatrixOpts] = useState<TiebreakCalculateOptions | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -82,19 +77,25 @@ export default function TournamentRoundMatrix({
           resultsByMatch,
           playerTotalPoints,
         };
-        const opts = { buchholzByeMode: mode, numberOfRounds, tournamentPointsAverage: avg };
+        const opts: TiebreakCalculateOptions = {
+          buchholzByeMode: mode,
+          numberOfRounds,
+          tournamentPointsAverage: avg,
+        };
+
+        const byeKeys = TiebreakService.byePlayerRoundKeys(
+          roundsSorted,
+          roundMatchesByRound,
+          resultsByMatch
+        );
 
         const realMap: Record<number, Record<number, number>> = {};
-        const virtualMap: Record<
-          number,
-          Record<number, { value: number; kind: 'field_avg' | 'round_worst' }>
-        > = {};
 
         for (const s of standings) {
           const pid = s.player_id;
           realMap[pid] = {};
-          virtualMap[pid] = {};
           for (let rn = 1; rn <= numberOfRounds; rn++) {
+            if (byeKeys.has(`${pid}:${rn}`)) continue;
             const idx = roundsSorted.findIndex((r) => r.round_number === rn);
             if (
               idx >= 0 &&
@@ -109,13 +110,12 @@ export default function TournamentRoundMatrix({
               );
             }
           }
-          for (const slot of TiebreakService.getBuchholzVirtualSlots(pid, tData, opts)) {
-            virtualMap[pid][slot.roundNumber] = { value: slot.value, kind: slot.kind };
-          }
         }
 
         setRealByPlayerRound(realMap);
-        setVirtualByPlayerRound(virtualMap);
+        setByeKeyList([...byeKeys]);
+        setRoundMatrixData(tData);
+        setRoundMatrixOpts(opts);
       } catch (e) {
         console.error('Error loading round matrix', e);
       } finally {
@@ -123,7 +123,9 @@ export default function TournamentRoundMatrix({
       }
     };
     fetchData();
-  }, [tournamentId, standingsTotalsKey]);
+  }, [tournamentId, standings]);
+
+  const byeSet = useMemo(() => new Set(byeKeyList), [byeKeyList]);
 
   if (loading) return <div className="p-4">{t('common.loading')}</div>;
   const modeMeta = getBuchholzModeMeta(buchholzMode);
@@ -160,26 +162,41 @@ export default function TournamentRoundMatrix({
                   {idx + 1}. {player.player_name}
                 </td>
                 {roundNumbers.map((rn) => {
-                  const real = realByPlayerRound[player.player_id]?.[rn];
-                  const virtual = virtualByPlayerRound[player.player_id]?.[rn];
-                  if (virtual) {
+                  const byeKey = `${player.player_id}:${rn}`;
+                  if (byeSet.has(byeKey) && roundMatrixData && roundMatrixOpts) {
+                    const disp = TiebreakService.getBuchholzVirtualDisplayForByeRound(
+                      rn,
+                      roundMatrixData,
+                      roundMatrixOpts
+                    );
+                    if (disp !== 'legacy') {
+                      return (
+                        <td
+                          key={rn}
+                          className="border border-gray-200 dark:border-gray-700 p-2 text-center font-medium bg-violet-50 dark:bg-violet-950/30 text-violet-800 dark:text-violet-200"
+                          title={
+                            disp.kind === 'field_avg'
+                              ? t('tournaments.detail.matrix_virtual_kind_avg')
+                              : t('tournaments.detail.matrix_virtual_kind_worst')
+                          }
+                        >
+                          <span className="font-semibold">
+                            {t('tournaments.detail.matrix_round_virtual_prefix')}
+                          </span>{' '}
+                          {Number.isInteger(disp.value) ? disp.value : disp.value.toFixed(1)}
+                        </td>
+                      );
+                    }
                     return (
                       <td
                         key={rn}
-                        className="border border-gray-200 dark:border-gray-700 p-2 text-center font-medium bg-violet-50 dark:bg-violet-950/30 text-violet-800 dark:text-violet-200"
-                        title={
-                          virtual.kind === 'field_avg'
-                            ? t('tournaments.detail.matrix_virtual_kind_avg')
-                            : t('tournaments.detail.matrix_virtual_kind_worst')
-                        }
+                        className="border border-gray-200 dark:border-gray-700 p-2 text-center text-xs text-gray-600 dark:text-gray-400"
                       >
-                        <span className="font-semibold">
-                          {t('tournaments.detail.matrix_round_virtual_prefix')}
-                        </span>{' '}
-                        {Number.isInteger(virtual.value) ? virtual.value : virtual.value.toFixed(1)}
+                        {t('tournaments.detail.matrix_bye_no_virtual_short', { round: rn })}
                       </td>
                     );
                   }
+                  const real = realByPlayerRound[player.player_id]?.[rn];
                   if (real !== undefined) {
                     return (
                       <td

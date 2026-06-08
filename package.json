@@ -1,7 +1,7 @@
 {
   "name": "carcassonne-tournament-manager",
   "type": "module",
-  "version": "1.4.3",
+  "version": "1.4.7",
   "description": "Aplicación de gestión de torneos presenciales de Carcassonne Colombia",
   "main": "dist/main/main.js",
   "scripts": {
@@ -38,7 +38,12 @@
     "db:validate": "node scripts/validate-schemas.js",
     "db:check": "npm run db:audit && npm run db:validate",
     "check-translations": "node scripts/check-translations.js",
-    "check-translations:fix": "node scripts/check-translations.js --fix"
+    "check-translations:fix": "node scripts/check-translations.js --fix",
+    "bump-version": "node scripts/bump-version.mjs",
+    "version:patch": "node scripts/bump-version.mjs patch",
+    "version:minor": "node scripts/bump-version.mjs minor",
+    "version:major": "node scripts/bump-version.mjs major",
+    "version:set": "node scripts/bump-version.mjs"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx}": [

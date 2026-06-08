@@ -921,8 +921,8 @@ export class DatabaseService {
   }
 
   /**
-   * Elimina la ronda solo si es la de mayor número, está pending y no hay match_results en sus partidos.
-   * Si no quedan rondas y el torneo estaba in_progress, pasa a draft.
+   * Elimina la ronda solo si es la de mayor número, está pending y no hay resultados de partidas “reales”.
+   * Los bye generan una sola fila en match_results (victoria automática); eso no bloquea el borrado.
    */
   static async deleteLastPendingRoundWithoutResults(
     roundId: number,
@@ -949,9 +949,9 @@ export class DatabaseService {
     if (row.round_number !== row.max_rn) return { deleted: false, reason: 'not_last' };
 
     const cntRows = await this.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM match_results mr
-       JOIN matches m ON mr.match_id = m.id
-       WHERE m.round_id = ?`,
+      `SELECT COUNT(*) AS cnt FROM matches m
+       WHERE m.round_id = ?
+         AND (SELECT COUNT(*) FROM match_results mr WHERE mr.match_id = m.id) >= 2`,
       [roundId]
     );
     if ((cntRows[0]?.cnt ?? 0) > 0) return { deleted: false, reason: 'has_results' };

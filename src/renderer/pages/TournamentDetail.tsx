@@ -32,6 +32,10 @@ import { Place } from '../types/place';
 import { useNotifications } from '../contexts/NotificationContext';
 import { calculateNumberOfRounds } from '../utils/tournament';
 import { formatDateForDisplay } from '../utils/dateUtils';
+import {
+  formatPlayerStandingHeadToHeadText,
+  renderPlayerStandingHeadToHeadCell,
+} from '../utils/headToHeadDisplay';
 import { getEffectiveTiebreakCriteria } from '../constants';
 import { DEFAULT_TIEBREAK_CRITERIA } from '../utils/tiebreak';
 import { getDefaultScoringSystem } from '../utils/scoring';
@@ -165,9 +169,13 @@ export default function TournamentDetail() {
     }
   }, [tournament?.id]);
 
+  /** Evita que una petición antigua de clasificación pise una más reciente (p. ej. tras editar resultados). */
+  const standingsLoadSeqRef = useRef(0);
+
   const loadStandings = useCallback(
     async (preFetchedRounds?: Round[], isCancelled?: () => boolean) => {
       if (!tournament?.id) return;
+      const seq = ++standingsLoadSeqRef.current;
       setIsLoadingStandings(true);
       try {
         const config = await DatabaseService.getTournamentConfig(tournament.id);
@@ -181,9 +189,11 @@ export default function TournamentDetail() {
           config?.player_display_mode
         );
         if (isCancelled?.()) return;
+        if (seq !== standingsLoadSeqRef.current) return;
         setStandings(data || []);
       } catch (error: any) {
         if (isCancelled?.()) return;
+        if (seq !== standingsLoadSeqRef.current) return;
         console.error('Error loading standings:', error);
         addNotification({
           message: error?.message || t('tournaments.detail.stats_error'),
@@ -191,7 +201,9 @@ export default function TournamentDetail() {
         });
         setStandings([]);
       } finally {
-        if (!isCancelled?.()) setIsLoadingStandings(false);
+        if (!isCancelled?.() && seq === standingsLoadSeqRef.current) {
+          setIsLoadingStandings(false);
+        }
       }
     },
     [tournament?.id, addNotification, t]
@@ -247,13 +259,7 @@ export default function TournamentDetail() {
     return () => {
       cancelled = true;
     };
-  }, [
-    isPrestartConfigOpen,
-    tournament?.id,
-    tournament?.number_of_rounds,
-    tournament?.players_per_match,
-    standings.length,
-  ]);
+  }, [isPrestartConfigOpen, tournament, standings.length]);
 
   useEffect(() => {
     if (!tournament) return;
@@ -524,24 +530,24 @@ export default function TournamentDetail() {
     await loadMatchPlayersForMatches(updatedMatches);
     await loadMatchResultsForMatches(updatedMatches, tournament?.id);
 
+    // Siempre recalcular clasificación tras guardar (puntos / Buchholz / H2H / último criterio).
+    await loadStandings();
+
     const allCompleted = updatedMatches.every((m) => m.status === 'completed');
 
-    // If the round was already completed before the edit, just refresh standings and return
-    // (no need to mark the round as completed again or show round-completion notifications)
+    // Ronda ya cerrada: solo actualizamos standings (arriba) y salimos
     if (currentRound.status === 'completed') {
-      await loadStandings();
       return;
     }
 
     if (!allCompleted) return;
 
-    // All matches just got completed — mark round as done and refresh everything
+    // Todas las partidas cerradas: marcar ronda completada y refrescar rondas en UI
     await DatabaseService.updateRound(currentRound.id, {
       status: 'completed',
       completed_at: new Date().toISOString(),
     });
     const roundsAfter = await loadRounds();
-    await loadStandings();
 
     const players = await DatabaseService.getTournamentPlayers(tournament.id);
     const effectiveMaxRounds =
@@ -568,7 +574,8 @@ export default function TournamentDetail() {
     if (!tournament || tournament.status === 'completed' || rounds.length === 0) return false;
     const last = rounds[rounds.length - 1];
     if (!last?.id || last.status !== 'pending' || currentRound?.id !== last.id) return false;
-    return !matches.some((m) => m.id && (matchResultsMap[m.id]?.length ?? 0) > 0);
+    // Bye: solo 1 fila de resultado (auto); no cuenta como “ronda con resultados guardados”.
+    return !matches.some((m) => m.id && (matchResultsMap[m.id]?.length ?? 0) >= 2);
   }, [tournament, rounds, currentRound?.id, matches, matchResultsMap]);
 
   const handlePrestartConfigSave = async (
@@ -769,7 +776,8 @@ export default function TournamentDetail() {
 
   const getTiebreakValue = (standing: PlayerStanding, criterionId: string): string => {
     if (criterionId === 'head_to_head') {
-      return '\u2014';
+      const text = formatPlayerStandingHeadToHeadText(standing, t);
+      return text || '\u2014';
     }
 
     const value = standing.tiebreak_values[criterionId];
@@ -946,7 +954,10 @@ export default function TournamentDetail() {
         key: `tiebreak_${criterion.id}`,
         header: getTiebreakLabel(criterion.id),
         title: criterion.id === 'head_to_head' ? t('stats.h2h_column_hint') : undefined,
-        render: (standing: PlayerStanding) => getTiebreakValue(standing, criterion.id),
+        render: (standing: PlayerStanding) =>
+          criterion.id === 'head_to_head'
+            ? renderPlayerStandingHeadToHeadCell(standing, t)
+            : getTiebreakValue(standing, criterion.id),
       })),
     {
       key: 'starts_count',

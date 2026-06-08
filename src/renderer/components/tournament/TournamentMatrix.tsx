@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { DatabaseService } from '../../services/database';
 import {
   PlayerStanding,
@@ -6,7 +6,7 @@ import {
   Match,
   BuchholzByeMode,
 } from '../../types/tournament';
-import { TiebreakService, TiebreakData, BuchholzVirtualSlot } from '../../services/tiebreak';
+import { TiebreakService, TiebreakData, TiebreakCalculateOptions } from '../../services/tiebreak';
 import { getBuchholzModeMeta } from '../../utils/buchholzModeMeta';
 import { useTranslation } from 'react-i18next';
 
@@ -24,16 +24,11 @@ interface MatrixData {
 export default function TournamentMatrix({ tournamentId, standings }: TournamentMatrixProps) {
   const { t } = useTranslation();
   const [matrixData, setMatrixData] = useState<MatrixData>({});
-  const [virtualSlotsByPlayer, setVirtualSlotsByPlayer] = useState<
-    Record<number, BuchholzVirtualSlot[]>
-  >({});
+  const [byeRoundsByPlayer, setByeRoundsByPlayer] = useState<Record<number, number[]>>({});
+  const [matrixTiebreakData, setMatrixTiebreakData] = useState<TiebreakData | null>(null);
+  const [buchholzOpts, setBuchholzOpts] = useState<TiebreakCalculateOptions | null>(null);
   const [buchholzMode, setBuchholzMode] = useState<BuchholzByeMode>('legacy');
   const [loading, setLoading] = useState(true);
-
-  const standingsTotalsKey = useMemo(
-    () => standings.map((s) => `${s.player_id}:${s.total_points}`).join('|'),
-    [standings]
-  );
 
   useEffect(() => {
     const fetchMatrixData = async () => {
@@ -95,22 +90,32 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
             ? standings.reduce((s, x) => s + x.total_points, 0) / standings.length
             : 0;
 
-        const bOpts = {
+        const bOpts: TiebreakCalculateOptions = {
           buchholzByeMode: mode,
           numberOfRounds,
           tournamentPointsAverage: avg,
         };
 
-        const virtualMap: Record<number, BuchholzVirtualSlot[]> = {};
-        standings.forEach((s) => {
-          virtualMap[s.player_id] = TiebreakService.getBuchholzVirtualSlots(
-            s.player_id,
-            tiebreakData,
-            bOpts
-          );
+        const byeKeys = TiebreakService.byePlayerRoundKeys(
+          roundsSorted,
+          roundMatchesByRound,
+          resultsByMatch
+        );
+        const byeByPlayer: Record<number, number[]> = {};
+        byeKeys.forEach((key) => {
+          const [pidStr, rnStr] = key.split(':');
+          const pid = Number(pidStr);
+          const rn = Number(rnStr);
+          if (!byeByPlayer[pid]) byeByPlayer[pid] = [];
+          byeByPlayer[pid].push(rn);
+        });
+        Object.keys(byeByPlayer).forEach((k) => {
+          byeByPlayer[Number(k)]!.sort((a, b) => a - b);
         });
 
-        setVirtualSlotsByPlayer(virtualMap);
+        setByeRoundsByPlayer(byeByPlayer);
+        setMatrixTiebreakData(tiebreakData);
+        setBuchholzOpts(bOpts);
         setMatrixData(data);
       } catch (error) {
         console.error('Error fetching matrix data:', error);
@@ -120,7 +125,7 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
     };
 
     fetchMatrixData();
-  }, [tournamentId, standingsTotalsKey]);
+  }, [tournamentId, standings]);
 
   if (loading) return <div className="p-4">{t('common.loading')}</div>;
   const modeMeta = getBuchholzModeMeta(buchholzMode);
@@ -208,7 +213,7 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
                 }
               }
 
-              const virtualSlots = virtualSlotsByPlayer[rowPlayer.player_id] ?? [];
+              const byeRounds = byeRoundsByPlayer[rowPlayer.player_id] ?? [];
               return (
                 <tr
                   key={rowPlayer.player_id}
@@ -238,7 +243,7 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
                     if (rowPlayer.player_id === colPlayer.player_id)
                       bgColor = 'bg-gray-100 dark:bg-gray-800';
 
-                    let content: React.ReactNode = '';
+                    let content: ReactNode = '';
                     if (timesPlayed > 0) {
                       if (timesPlayed === 1) {
                         content = points;
@@ -259,35 +264,50 @@ export default function TournamentMatrix({ tournamentId, standings }: Tournament
                     );
                   })}
                   <td className="border border-gray-200 dark:border-gray-700 p-2 text-center align-top bg-violet-50/80 dark:bg-violet-950/20">
-                    {virtualSlots.length === 0 ? (
+                    {byeRounds.length === 0 || !matrixTiebreakData || !buchholzOpts ? (
                       <span className="text-gray-400 dark:text-gray-500">—</span>
                     ) : (
                       <div className="flex flex-col gap-1 items-center">
-                        {virtualSlots.map((slot) => (
-                          <div
-                            key={`${slot.roundNumber}-${slot.kind}`}
-                            className="leading-tight"
-                            title={
-                              slot.kind === 'field_avg'
-                                ? t('tournaments.detail.matrix_virtual_kind_avg')
-                                : t('tournaments.detail.matrix_virtual_kind_worst')
-                            }
-                          >
-                            <span className="font-mono font-semibold">
-                              {Number.isInteger(slot.value)
-                                ? String(slot.value)
-                                : slot.value.toFixed(1)}
-                            </span>
-                            <span className="text-gray-500 dark:text-gray-400 ml-0.5">
-                              R{slot.roundNumber}
-                            </span>
-                            <span className="block text-[10px] text-violet-700 dark:text-violet-300">
-                              {slot.kind === 'field_avg'
-                                ? t('tournaments.detail.matrix_virtual_abbr_avg')
-                                : t('tournaments.detail.matrix_virtual_abbr_worst')}
-                            </span>
-                          </div>
-                        ))}
+                        {byeRounds.map((rn) => {
+                          const disp = TiebreakService.getBuchholzVirtualDisplayForByeRound(
+                            rn,
+                            matrixTiebreakData,
+                            buchholzOpts
+                          );
+                          if (disp === 'legacy') {
+                            return (
+                              <div
+                                key={rn}
+                                className="leading-tight text-[11px] text-gray-600 dark:text-gray-400"
+                              >
+                                {t('tournaments.detail.matrix_bye_no_virtual', { round: rn })}
+                              </div>
+                            );
+                          }
+                          return (
+                            <div
+                              key={rn}
+                              className="leading-tight"
+                              title={
+                                disp.kind === 'field_avg'
+                                  ? t('tournaments.detail.matrix_virtual_kind_avg')
+                                  : t('tournaments.detail.matrix_virtual_kind_worst')
+                              }
+                            >
+                              <span className="font-mono font-semibold">
+                                {Number.isInteger(disp.value)
+                                  ? String(disp.value)
+                                  : disp.value.toFixed(1)}
+                              </span>
+                              <span className="text-gray-500 dark:text-gray-400 ml-0.5">R{rn}</span>
+                              <span className="block text-[10px] text-violet-700 dark:text-violet-300">
+                                {disp.kind === 'field_avg'
+                                  ? t('tournaments.detail.matrix_virtual_abbr_avg')
+                                  : t('tournaments.detail.matrix_virtual_abbr_worst')}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </td>

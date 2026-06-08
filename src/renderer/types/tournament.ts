@@ -125,4 +125,8 @@ export interface PlayerStanding {
   matches_played: number;
   active: boolean;
   dropout_round: number | null;
+  /** Rivales del mismo bloque de empate (pre-H2H) a los que este jugador ganó el directo. */
+  h2h_beat_opponent_names?: string[];
+  /** Rivales del mismo bloque de empate a los que este jugador perdió el directo. */
+  h2h_lost_opponent_names?: string[];
 }

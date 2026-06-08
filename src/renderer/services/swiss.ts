@@ -46,6 +46,238 @@ function combinationsOf<T>(arr: T[], k: number): T[][] {
   return out;
 }
 
+/** Contexto para comparar dos filas de clasificación (misma lógica que el sort). */
+export type StandingsPairCompareContext = {
+  criteria: TiebreakCriterion[];
+  resultsByMatch: Record<number, MatchResult[]>;
+  /**
+   * Firmas pre-H2H donde, dentro del grupo empatado, todos tienen el mismo número de victorias
+   * directas entre sí (p. ej. ciclo 3: 1-1-1). El H2H por parejas no es transitivo → se pasa al
+   * siguiente criterio.
+   */
+  headToHeadInconclusiveSignatures?: Set<string>;
+  /** Victorias directas de cada jugador contra el resto de su grupo pre-H2H (mismo signature). */
+  intraGroupHeadToHeadWins?: Map<number, number>;
+};
+
+/** Criterios habilitados en el orden configurado (`order`); misma cadena que el desempate en clasificación. */
+export function enabledTiebreakCriteriaInOrder(criteria: TiebreakCriterion[]): TiebreakCriterion[] {
+  return [...criteria].filter((c) => c.enabled).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+/** Victorias en mesas compartidas (mejor posición = victoria en esa mesa). */
+export function mutualHeadToHeadWins(
+  playerIdA: number,
+  playerIdB: number,
+  resultsByMatch: Record<number, MatchResult[]>
+): { winsA: number; winsB: number } {
+  let winsA = 0;
+  let winsB = 0;
+  Object.values(resultsByMatch).forEach((results) => {
+    const resA = results.find((r: MatchResult) => r.player_id === playerIdA);
+    const resB = results.find((r: MatchResult) => r.player_id === playerIdB);
+    if (resA && resB) {
+      if (resA.position < resB.position) winsA++;
+      else if (resB.position < resA.position) winsB++;
+    }
+  });
+  return { winsA, winsB };
+}
+
+/**
+ * Firma de empate en el mismo punto en que el ordenador usa el H2H: activo, victorias y valores de
+ * criterios habilitados que van **antes** de `head_to_head` por `order`. No incluye criterios posteriores
+ * (p. ej. `point_difference`), porque si el sort llegó a H2H es que ya iban empatados sin esos.
+ */
+export function preHeadToHeadTieSignature(
+  s: PlayerStanding,
+  criteria: TiebreakCriterion[]
+): string {
+  const sorted = enabledTiebreakCriteriaInOrder(criteria);
+  const parts: string[] = [s.active ? '1' : '0', String(s.wins)];
+  for (const c of sorted) {
+    if (c.id === 'wins') continue;
+    if (c.id === 'head_to_head') break;
+    parts.push(String(s.tiebreak_values[c.id] ?? 0));
+  }
+  return parts.join('|');
+}
+
+/**
+ * Agrupa por `preHeadToHeadTieSignature` y detecta empates “reales” en H2H dentro del grupo
+ * (mismo récord de victorias directas mutuas), p. ej. rock-paper-scissors entre tres.
+ */
+export function buildHeadToHeadClusterMeta(
+  standings: PlayerStanding[],
+  criteria: TiebreakCriterion[],
+  resultsByMatch: Record<number, MatchResult[]>
+): Pick<
+  StandingsPairCompareContext,
+  'headToHeadInconclusiveSignatures' | 'intraGroupHeadToHeadWins'
+> {
+  const intraGroupHeadToHeadWins = new Map<number, number>();
+  const headToHeadInconclusiveSignatures = new Set<string>();
+
+  const bySig = new Map<string, PlayerStanding[]>();
+  for (const s of standings) {
+    const sig = preHeadToHeadTieSignature(s, criteria);
+    if (!bySig.has(sig)) bySig.set(sig, []);
+    bySig.get(sig)!.push(s);
+  }
+
+  for (const [sig, group] of bySig) {
+    if (group.length < 2) continue;
+    const ids = group.map((g) => g.player_id);
+    for (const p of ids) {
+      let w = 0;
+      for (const q of ids) {
+        if (q === p) continue;
+        const { winsA, winsB } = mutualHeadToHeadWins(p, q, resultsByMatch);
+        if (winsA > winsB) w++;
+      }
+      intraGroupHeadToHeadWins.set(p, w);
+    }
+    const counts = ids.map((id) => intraGroupHeadToHeadWins.get(id) ?? 0);
+    if (counts.length > 0 && counts.every((c) => c === counts[0])) {
+      headToHeadInconclusiveSignatures.add(sig);
+    }
+  }
+
+  return { headToHeadInconclusiveSignatures, intraGroupHeadToHeadWins };
+}
+
+/**
+ * Comparador: negativo si `a` va antes que `b` en la clasificación.
+ * Tras activo y victorias, aplica criterios habilitados según su `order` (no el orden del array).
+ */
+export function compareStandingsPair(
+  a: PlayerStanding,
+  b: PlayerStanding,
+  ctx: StandingsPairCompareContext
+): number {
+  if (a.active !== b.active) {
+    return a.active ? -1 : 1;
+  }
+  if (b.wins !== a.wins) {
+    return b.wins - a.wins;
+  }
+  for (const criterion of enabledTiebreakCriteriaInOrder(ctx.criteria)) {
+    if (criterion.id === 'wins') continue;
+
+    if (criterion.id === 'head_to_head') {
+      const sigA = preHeadToHeadTieSignature(a, ctx.criteria);
+      const sigB = preHeadToHeadTieSignature(b, ctx.criteria);
+      if (sigA === sigB && ctx.headToHeadInconclusiveSignatures?.has(sigA)) {
+        continue;
+      }
+      if (sigA === sigB && ctx.intraGroupHeadToHeadWins?.size) {
+        const wa = ctx.intraGroupHeadToHeadWins.get(a.player_id) ?? 0;
+        const wb = ctx.intraGroupHeadToHeadWins.get(b.player_id) ?? 0;
+        if (wa !== wb) {
+          return wb - wa;
+        }
+      }
+      const { winsA, winsB } = mutualHeadToHeadWins(a.player_id, b.player_id, ctx.resultsByMatch);
+      if (winsA !== winsB) {
+        return winsB - winsA;
+      }
+    } else {
+      const valA = a.tiebreak_values[criterion.id] || 0;
+      const valB = b.tiebreak_values[criterion.id] || 0;
+      if (valA !== valB) {
+        return valB - valA;
+      }
+    }
+  }
+  return a.player_id - b.player_id;
+}
+
+/** Primer criterio (id) en el que difieren `a` vs `b`, o null si empate total en el ordenamiento. */
+export function explainFirstDifferingStandingsCriterion(
+  a: PlayerStanding,
+  b: PlayerStanding,
+  ctx: StandingsPairCompareContext
+): string | null {
+  if (a.active !== b.active) {
+    return 'active';
+  }
+  if (b.wins !== a.wins) {
+    return 'wins';
+  }
+  for (const criterion of enabledTiebreakCriteriaInOrder(ctx.criteria)) {
+    if (criterion.id === 'wins') continue;
+
+    if (criterion.id === 'head_to_head') {
+      const sigA = preHeadToHeadTieSignature(a, ctx.criteria);
+      const sigB = preHeadToHeadTieSignature(b, ctx.criteria);
+      if (sigA === sigB && ctx.headToHeadInconclusiveSignatures?.has(sigA)) {
+        continue;
+      }
+      if (sigA === sigB && ctx.intraGroupHeadToHeadWins?.size) {
+        const wa = ctx.intraGroupHeadToHeadWins.get(a.player_id) ?? 0;
+        const wb = ctx.intraGroupHeadToHeadWins.get(b.player_id) ?? 0;
+        if (wa !== wb) {
+          return 'head_to_head';
+        }
+      }
+      const { winsA, winsB } = mutualHeadToHeadWins(a.player_id, b.player_id, ctx.resultsByMatch);
+      if (winsA !== winsB) {
+        return 'head_to_head';
+      }
+    } else {
+      const valA = a.tiebreak_values[criterion.id] || 0;
+      const valB = b.tiebreak_values[criterion.id] || 0;
+      if (valA !== valB) {
+        return criterion.id;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Para cada bloque consecutivo con el mismo empate pre-H2H, anota contra quién ganó / perdió
+ * el directo dentro del bloque (p. ej. triple empate cíclico: cada uno con un ganó y un perdió).
+ */
+export function annotateHeadToHeadGroupDisplay(
+  sorted: PlayerStanding[],
+  ctx: StandingsPairCompareContext
+): void {
+  const { criteria, resultsByMatch } = ctx;
+  const indexOfPlayer = (playerId: number) => sorted.findIndex((s) => s.player_id === playerId);
+
+  let start = 0;
+  while (start < sorted.length) {
+    const sig0 = preHeadToHeadTieSignature(sorted[start]!, criteria);
+    let end = start + 1;
+    while (end < sorted.length && preHeadToHeadTieSignature(sorted[end]!, criteria) === sig0) {
+      end++;
+    }
+    const cluster = sorted.slice(start, end);
+    if (cluster.length >= 2) {
+      for (const p of cluster) {
+        const beatIds: number[] = [];
+        const lostIds: number[] = [];
+        for (const q of cluster) {
+          if (q.player_id === p.player_id) continue;
+          const { winsA, winsB } = mutualHeadToHeadWins(p.player_id, q.player_id, resultsByMatch);
+          if (winsA > winsB) beatIds.push(q.player_id);
+          else if (winsB > winsA) lostIds.push(q.player_id);
+        }
+        const byStandingsOrder = (idA: number, idB: number) =>
+          indexOfPlayer(idA) - indexOfPlayer(idB);
+        beatIds.sort(byStandingsOrder);
+        lostIds.sort(byStandingsOrder);
+        const beatNames = beatIds.map((id) => sorted.find((s) => s.player_id === id)!.player_name);
+        const lostNames = lostIds.map((id) => sorted.find((s) => s.player_id === id)!.player_name);
+        if (beatNames.length) p.h2h_beat_opponent_names = beatNames;
+        if (lostNames.length) p.h2h_lost_opponent_names = lostNames;
+      }
+    }
+    start = end;
+  }
+}
+
 export class SwissPairingService {
   static async generateFirstRound(tournamentId: number): Promise<void> {
     // Get all registered players
@@ -1012,50 +1244,19 @@ export class SwissPairingService {
       });
     }
 
-    // Sort standings: Active > Wins > enabled tiebreak criteria in user order (no extra total_points step).
-    return Object.values(standings).sort((a, b) => {
-      // 0. Active Status (Active first)
-      if (a.active !== b.active) {
-        return a.active ? -1 : 1;
-      }
-
-      // 1. Wins (first places)
-      if (b.wins !== a.wins) {
-        return b.wins - a.wins;
-      }
-
-      // 2. Configured tiebreakers in order ('wins' already applied above)
-      for (const criterion of criteria) {
-        if (!criterion.enabled) continue;
-        if (criterion.id === 'wins') continue;
-
-        if (criterion.id === 'head_to_head') {
-          // Check matches between a and b
-          let winsA = 0;
-          let winsB = 0;
-          Object.values(resultsByMatch).forEach((results) => {
-            const resA = results.find((r: MatchResult) => r.player_id === a.player_id);
-            const resB = results.find((r: MatchResult) => r.player_id === b.player_id);
-            if (resA && resB) {
-              if (resA.position < resB.position) winsA++;
-              else if (resB.position < resA.position) winsB++;
-            }
-          });
-
-          if (winsA !== winsB) {
-            return winsB - winsA;
-          }
-        } else {
-          const valA = a.tiebreak_values[criterion.id] || 0;
-          const valB = b.tiebreak_values[criterion.id] || 0;
-          if (valA !== valB) {
-            return valB - valA;
-          }
-        }
-      }
-
-      // Stable fallback
-      return a.player_id - b.player_id;
-    });
+    const h2hClusterMeta = buildHeadToHeadClusterMeta(standingsList, criteria, resultsByMatch);
+    const pairCtx: StandingsPairCompareContext = {
+      criteria,
+      resultsByMatch,
+      ...h2hClusterMeta,
+    };
+    const sortedStandings = Object.values(standings).sort((a, b) =>
+      compareStandingsPair(a, b, pairCtx)
+    );
+    const h2hEnabled = criteria.some((c) => c.enabled && c.id === 'head_to_head');
+    if (h2hEnabled) {
+      annotateHeadToHeadGroupDisplay(sortedStandings, pairCtx);
+    }
+    return sortedStandings;
   }
 }

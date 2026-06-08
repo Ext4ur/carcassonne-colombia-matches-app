@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DatabaseService } from '../../services/database';
 import { Match } from '../../types/tournament';
 import { Player } from '../../types/player';
@@ -36,6 +36,15 @@ export default function MatchResultForm({
   >([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const firstPointsInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isLoadingData || tournamentStatus === 'completed' || roundStatus === 'completed') return;
+    const id = requestAnimationFrame(() => {
+      firstPointsInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [isLoadingData, match.id, tournamentStatus, roundStatus]);
 
   const loadData = useCallback(async () => {
     setIsLoadingData(true);
@@ -265,6 +274,7 @@ export default function MatchResultForm({
                 </label>
                 <div className="relative">
                   <Input
+                    ref={index === 0 ? firstPointsInputRef : undefined}
                     type="number"
                     value={
                       result && result.points !== undefined && result.points !== null

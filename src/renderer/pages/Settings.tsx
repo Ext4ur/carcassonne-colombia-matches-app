@@ -1,9 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import Button from '../components/common/Button';
-import { ExportService } from '../services/export';
-import { ImportService } from '../services/import';
+import { ExportService, isExportSubsetError } from '../services/export';
+import { ImportService, type BackupImportData } from '../services/import';
+import { DatabaseService } from '../services/database';
+import { Tournament } from '../types/tournament';
+import BackupExportModal from '../components/settings/BackupExportModal';
+import BackupImportModal from '../components/settings/BackupImportModal';
 import DatabaseStatus from '../components/common/DatabaseStatus';
 import { useTranslation } from 'react-i18next';
 import Select from '../components/common/Select';
@@ -17,6 +21,7 @@ import {
   readQuickTournamentDefaults,
   writeQuickTournamentDefaults,
 } from '../utils/quickTournamentDefaults';
+import packageJson from '../../../package.json';
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
@@ -24,10 +29,36 @@ export default function Settings() {
   const { addNotification } = useNotifications();
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportList, setExportList] = useState<Tournament[]>([]);
+  const [exportCheckedIds, setExportCheckedIds] = useState<Set<number>>(new Set());
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [pendingImportData, setPendingImportData] = useState<BackupImportData | null>(null);
+  /** índices de data.tournaments */
+  const [importCheckedIndices, setImportCheckedIndices] = useState<Set<number>>(new Set());
+  const [importDupByIndex, setImportDupByIndex] = useState<Map<number, boolean>>(new Map());
+  const [appVersion, setAppVersion] = useState<string>(packageJson.version);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const v = await window.electronAPI.getVersion();
+        const resolved = (v && String(v).trim()) || packageJson.version;
+        if (!cancelled) setAppVersion(resolved);
+      } catch {
+        if (!cancelled) setAppVersion(packageJson.version);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [quickDefaultsPpm, setQuickDefaultsPpm] = useState(2);
   const [quickDefaultsVersion, setQuickDefaultsVersion] = useState(0);
 
   const quickDefaultsFormConfig: TournamentConfig = useMemo(() => {
+    void quickDefaultsVersion;
     const stored = readQuickTournamentDefaults();
     const ppm = quickDefaultsPpm;
     return {
@@ -88,38 +119,115 @@ export default function Settings() {
     return saved === 'true';
   });
 
-  const handleExport = async () => {
+  const openExportModal = async () => {
     try {
-      setIsExporting(true);
-      await ExportService.exportAll();
-      addNotification({
-        message: t('settings.errors.export_success'),
-        type: 'success',
-      });
+      const list = await DatabaseService.getAllTournaments();
+      setExportList(list);
+      setExportCheckedIds(new Set(list.map((x) => x.id!).filter((id): id is number => id != null)));
+      setExportModalOpen(true);
     } catch (error) {
-      console.error('Error exporting:', error);
+      console.error('Error listing tournaments:', error);
       addNotification({
         message: t('settings.errors.export_error'),
         type: 'error',
       });
+    }
+  };
+
+  const toggleExportId = (id: number) => {
+    setExportCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleExportConfirmed = async () => {
+    if (exportCheckedIds.size === 0) {
+      addNotification({ message: t('settings.export_no_selection'), type: 'warning' });
+      return;
+    }
+    try {
+      setIsExporting(true);
+      await ExportService.exportSubset(Array.from(exportCheckedIds));
+      setExportModalOpen(false);
+      addNotification({
+        message: t('settings.errors.export_success'),
+        type: 'success',
+      });
+    } catch (error: unknown) {
+      console.error('Error exporting:', error);
+      const msg = isExportSubsetError(error)
+        ? t('settings.export_no_selection')
+        : t('settings.errors.export_error');
+      addNotification({ message: msg, type: 'error' });
     } finally {
       setIsExporting(false);
     }
   };
 
-  const handleImport = async () => {
+  const startImportFlow = async () => {
     try {
       setIsImporting(true);
-      const result = await ImportService.importAll();
+      const picked = await ImportService.pickFileAndParse();
+      if (!picked.success || !picked.importData) {
+        if (!picked.canceled) {
+          addNotification({
+            message: picked.error || t('settings.errors.import_error'),
+            type: 'error',
+          });
+        }
+        return;
+      }
+      const dupRows = await ImportService.peekTournamentDuplicates(picked.importData);
+      const dupMap = new Map(dupRows.map((r) => [r.index, r.existsInDb]));
+      const n = picked.importData.data.tournaments.length;
+      setPendingImportData(picked.importData);
+      setImportDupByIndex(dupMap);
+      setImportCheckedIndices(new Set(Array.from({ length: n }, (_, i) => i)));
+      setImportModalOpen(true);
+    } catch (error) {
+      console.error('Error importing:', error);
+      addNotification({
+        message: t('settings.errors.import_error'),
+        type: 'error',
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const toggleImportIndex = (idx: number) => {
+    setImportCheckedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  const handleImportConfirmed = async () => {
+    if (!pendingImportData) {
+      addNotification({ message: t('settings.import_pick_file_first'), type: 'warning' });
+      return;
+    }
+    const indices = Array.from(importCheckedIndices).sort((a, b) => a - b);
+    if (indices.length === 0) {
+      addNotification({ message: t('settings.import_no_selection'), type: 'warning' });
+      return;
+    }
+    try {
+      setIsImporting(true);
+      const result = await ImportService.importSelected(pendingImportData, indices);
+      setImportModalOpen(false);
+      setPendingImportData(null);
       if (result.success) {
         addNotification({
           message: t('settings.errors.import_success', { summary: result.summary }),
           type: 'success',
         });
-        // Reload page to show imported data
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        setTimeout(() => window.location.reload(), 1500);
       } else {
         addNotification({
           message: result.error || t('settings.errors.import_error'),
@@ -265,7 +373,7 @@ export default function Settings() {
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                 {t('settings.export_desc')}
               </p>
-              <Button onClick={handleExport} isLoading={isExporting} variant="primary">
+              <Button onClick={openExportModal} isLoading={isExporting} variant="primary">
                 {t('settings.export_btn')}
               </Button>
             </div>
@@ -274,22 +382,58 @@ export default function Settings() {
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                 {t('settings.import_desc')}
               </p>
-              <Button onClick={handleImport} isLoading={isImporting} variant="secondary">
+              <Button onClick={startImportFlow} isLoading={isImporting} variant="secondary">
                 {t('settings.import_btn')}
               </Button>
             </div>
           </div>
         </div>
 
+        <BackupExportModal
+          isOpen={exportModalOpen}
+          onClose={() => setExportModalOpen(false)}
+          tournaments={exportList}
+          checkedIds={exportCheckedIds}
+          onToggleId={toggleExportId}
+          onSelectAll={() =>
+            setExportCheckedIds(new Set(exportList.map((x) => x.id!).filter(Boolean)))
+          }
+          onSelectNone={() => setExportCheckedIds(new Set())}
+          onConfirm={handleExportConfirmed}
+          isExporting={isExporting}
+        />
+
+        <BackupImportModal
+          isOpen={importModalOpen}
+          onAbort={() => {
+            setImportModalOpen(false);
+            setPendingImportData(null);
+          }}
+          pendingImportData={pendingImportData}
+          checkedIndices={importCheckedIndices}
+          duplicateByIndex={importDupByIndex}
+          onToggleIndex={toggleImportIndex}
+          onSelectAll={() => {
+            const n = pendingImportData?.data.tournaments.length ?? 0;
+            setImportCheckedIndices(new Set(Array.from({ length: n }, (_, i) => i)));
+          }}
+          onSelectNone={() => setImportCheckedIndices(new Set())}
+          onConfirm={handleImportConfirmed}
+          isImporting={isImporting}
+        />
+
         {/* About */}
         <div className="card">
           <h2 className="text-xl font-bold mb-4">{t('settings.about')}</h2>
           <div className="space-y-2">
             <p className="font-semibold text-gray-800 dark:text-gray-200">
-              Carcassonne Tournament Manager v1.3
+              {t('settings.app_name', { version: appVersion })}
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               {t('settings.developed_by')} <strong>Ext4ur</strong>
+              <span className="text-gray-500 dark:text-gray-500">
+                {t('settings.developed_by_version_suffix', { version: appVersion })}
+              </span>
             </p>
             <div className="flex space-x-6 mt-4">
               <a

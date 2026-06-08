@@ -63,5 +63,8 @@ export function buildQuickConfigDraft(playersPerMatch: number): Partial<Tourname
     player_display_mode: stored?.player_display_mode ?? 'per_player',
     pairing_algorithm: stored?.pairing_algorithm ?? 'greedy',
     buchholz_bye_mode: normalizeBuchholzByeMode(stored?.buchholz_bye_mode),
+    knockout_size: 8,
+    knockout_seeding: 'standard_bracket',
+    knockout_series: 'best_of_1',
   };
 }

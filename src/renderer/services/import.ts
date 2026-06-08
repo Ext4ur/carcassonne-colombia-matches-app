@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DatabaseService } from './database';
 import { Player } from '../types/player';
+import { City } from '../types/city';
+import { Place } from '../types/place';
 import i18n from '../i18n/config';
 import { DEFAULT_TIEBREAK_CRITERIA } from '../constants';
 import { collectPlayersOnlyFromSnapshots } from '../utils/exportImportHelpers';
@@ -8,7 +10,7 @@ import { collectPlayersOnlyFromSnapshots } from '../utils/exportImportHelpers';
 /**
  * Respaldo JSON (`ExportService`). `version` ≥ 1.1 puede incluir en cada torneo
  * `standings_snapshot` (clasificación calculada al exportar); la importación lo ignora
- * y reconstruye estado desde rondas/partidas.
+ * y reconstruye estado desde rondas/partidas. `version` ≥ 1.2 incluye `cities` y `places`.
  *
  * Lista `tournaments` puede ser parcial si el archivo fue generado por exportación selectiva.
  */
@@ -19,6 +21,8 @@ export interface BackupImportData {
     players: Player[];
     tournaments: any[];
     circuits: any[];
+    cities?: City[];
+    places?: Place[];
   };
 }
 
@@ -71,11 +75,71 @@ export function parseBackupJson(raw: string): BackupImportData {
   if (!Array.isArray(parsed.data.circuits)) {
     parsed.data.circuits = [];
   }
+  if (!Array.isArray(parsed.data.cities)) {
+    parsed.data.cities = [];
+  }
+  if (!Array.isArray(parsed.data.places)) {
+    parsed.data.places = [];
+  }
   return parsed;
 }
 
-async function resolvePlaceId(tournament: any): Promise<number> {
+/** Importa ciudades/lugares del backup y devuelve mapa para resolver place_id. */
+async function importCitiesAndPlaces(data: BackupImportData): Promise<Map<string, number>> {
+  const placeKeyToId = new Map<string, number>();
+  const cityNameToId = new Map<string, number>();
+
+  for (const city of data.data.cities ?? []) {
+    const name = String(city.name ?? '').trim();
+    if (!name) continue;
+    const existing = (await DatabaseService.getAllCities()).find((c) => c.name.trim() === name);
+    let cityId = existing?.id;
+    if (!cityId) {
+      cityId = Number(await DatabaseService.createCity({ name }));
+    }
+    cityNameToId.set(name, cityId);
+  }
+
+  for (const exportedCity of data.data.cities ?? []) {
+    if (exportedCity.id != null && exportedCity.name) {
+      const resolved = cityNameToId.get(String(exportedCity.name).trim());
+      if (resolved) cityNameToId.set(`id:${exportedCity.id}`, resolved);
+    }
+  }
+
+  for (const place of data.data.places ?? []) {
+    const name = String(place.name ?? '').trim();
+    if (!name) continue;
+    const cityName = String(place.city_name ?? '').trim();
+    let cityId =
+      (cityName && cityNameToId.get(cityName)) ||
+      (place.city_id != null ? cityNameToId.get(`id:${place.city_id}`) : undefined);
+    if (!cityId) {
+      cityId = (await DatabaseService.getAllCities()).find((c) => c.name === 'Online')?.id;
+    }
+    if (!cityId) continue;
+
+    const allPlaces = await DatabaseService.getAllPlaces();
+    let placeId = allPlaces.find((p) => p.name.trim() === name && p.city_id === cityId)?.id;
+    if (!placeId) {
+      placeId = Number(await DatabaseService.createPlace({ name, city_id: cityId }));
+    }
+    if (cityName) placeKeyToId.set(`${cityName}::${name}`, placeId);
+    placeKeyToId.set(name, placeId);
+  }
+
+  return placeKeyToId;
+}
+
+async function resolvePlaceId(tournament: any, placeMap?: Map<string, number>): Promise<number> {
   const placeName = tournament.place_name as string | undefined;
+  const cityName = tournament.city_name as string | undefined;
+  if (placeMap && placeName?.trim()) {
+    if (cityName?.trim() && placeMap.has(`${cityName.trim()}::${placeName.trim()}`)) {
+      return placeMap.get(`${cityName.trim()}::${placeName.trim()}`)!;
+    }
+    if (placeMap.has(placeName.trim())) return placeMap.get(placeName.trim())!;
+  }
   if (placeName) {
     const places = await DatabaseService.getAllPlaces();
     const hit = places.find((p) => p.name.trim() === placeName.trim());
@@ -161,6 +225,7 @@ async function importTournamentDeep(
         players_per_match: tournament.players_per_match ?? 2,
         number_of_rounds: tournament.number_of_rounds ?? undefined,
         place_id: placeId,
+        competition_format: tournament.competition_format ?? 'swiss',
       })
     );
 
@@ -181,6 +246,17 @@ async function importTournamentDeep(
     player_display_mode: cfg.player_display_mode ?? 'per_player',
     pairing_algorithm: cfg.pairing_algorithm ?? 'greedy',
     buchholz_bye_mode: cfg.buchholz_bye_mode ?? 'legacy',
+    knockout_size: cfg.knockout_size ?? 8,
+    knockout_seeding: cfg.knockout_seeding ?? 'standard_bracket',
+    knockout_series: cfg.knockout_series ?? 'best_of_1',
+    knockout_play_bronze_match: cfg.knockout_play_bronze_match ?? false,
+    knockout_match_starter: cfg.knockout_match_starter ?? 'higher_swiss_seed',
+    knockout_series_alternate_starter: cfg.knockout_series_alternate_starter ?? false,
+    knockout_series_starter_mode:
+      cfg.knockout_series_starter_mode ??
+      (cfg.knockout_series_alternate_starter ? 'previous_loser' : 'alternate'),
+    swiss_match_starter: cfg.swiss_match_starter ?? 'higher_ranked',
+    swiss_standings_snapshot: cfg.swiss_standings_snapshot ?? null,
   });
 
   const rp = (oid: number) => resolvePlayerId(oid, playerByOldId, playerMap, stats);
@@ -209,6 +285,8 @@ async function importTournamentDeep(
         tournament_id: tournamentId,
         round_number: round.round_number,
         status: round.status || 'pending',
+        phase: round.phase ?? 'swiss',
+        knockout_stage: round.knockout_stage ?? null,
       })
     );
 
@@ -238,6 +316,11 @@ async function importTournamentDeep(
           match_number: match.match_number,
           status: 'pending',
           first_player_id: firstPid,
+          knockout_bracket_slot: match.knockout_bracket_slot ?? undefined,
+          series_target_wins: match.series_target_wins ?? undefined,
+          is_knockout: Boolean(match.is_knockout),
+          series_meta: match.series_meta ?? undefined,
+          knockout_match_stage: match.knockout_match_stage ?? undefined,
         })
       );
 
@@ -265,6 +348,7 @@ async function importTournamentDeep(
           position: r.position,
           points: r.points ?? 0,
           tournament_points: r.tournament_points ?? 0,
+          game_number: r.game_number ?? 1,
         });
       }
 
@@ -272,6 +356,12 @@ async function importTournamentDeep(
         await DatabaseService.updateMatch(matchId, {
           status: 'completed',
           completed_at: match.completed_at || new Date().toISOString(),
+          series_winner_id:
+            match.series_winner_id != null ? await rp(match.series_winner_id) : undefined,
+        });
+      } else if (match.series_winner_id != null) {
+        await DatabaseService.updateMatch(matchId, {
+          series_winner_id: await rp(match.series_winner_id),
         });
       }
     }
@@ -284,8 +374,16 @@ async function importTournamentDeep(
     }
   }
 
-  if (tournament.status) {
-    await DatabaseService.updateTournament(tournamentId, { status: tournament.status });
+  if (tournament.status || tournament.knockout_phase_started_at) {
+    await DatabaseService.updateTournament(tournamentId, {
+      status: tournament.status,
+      knockout_phase_started_at: tournament.knockout_phase_started_at ?? undefined,
+    });
+  }
+
+  for (const seed of tournament.knockout_seeds || []) {
+    if (seed.player_id == null || seed.seed == null) continue;
+    await DatabaseService.addKnockoutSeed(tournamentId, await rp(seed.player_id), seed.seed);
   }
 }
 
@@ -391,6 +489,8 @@ export class ImportService {
         summary.push(i18n.t('settings.import_summary_players', { count: playerStats.created }));
       }
 
+      const placeMap = await importCitiesAndPlaces(importData);
+
       const circuitOldIdsNeeded = new Set<number>();
       for (const idx of uniq) {
         const cid = importData.data.tournaments[idx]?.circuit_id as number | undefined;
@@ -431,7 +531,7 @@ export class ImportService {
       for (const idx of uniq) {
         const tournament = importData.data.tournaments[idx];
         try {
-          const placeId = await resolvePlaceId(tournament);
+          const placeId = await resolvePlaceId(tournament, placeMap);
           const dup = await DatabaseService.getTournamentByNameDateAndPlace(
             tournament.name,
             tournament.date,

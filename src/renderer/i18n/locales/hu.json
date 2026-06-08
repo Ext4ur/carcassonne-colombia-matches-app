@@ -376,7 +376,7 @@
       "sync_disabled_msg": "Felhőalapú szinkronizálás letiltva"
     },
     "export_btn": "Adatok exportálása",
-    "export_desc": "JSON biztonsági mentés: válassza ki, mely versenyek kerüljenek bele (alapértelmezés: mind). Csak a szükséges játékosok és az azokra hivatkozó sorozatok.",
+    "export_desc": "JSON biztonsági mentés: válassza ki, mely versenyek kerüljenek bele (alapértelmezés: mind). Csak a szükséges játékosok, az azokra hivatkozó sorozatok és a hivatkozott városok/helyszínek.",
     "export_title": "Adatok exportálása",
     "export_modal_title": "Exportálandó versenyek",
     "export_modal_hint": "A nem bejelölt versenyek kimaradnak.",
@@ -549,7 +549,7 @@
       "prestart_settings_title": "Beállítások az első párosítás előtt",
       "prestart_settings_hint": "Párosítás, holtverseny, tervezett fordulók és egyebek",
       "tournament_settings_view_title": "Versenybeállítások (csak megtekintés)",
-      "tournament_settings_readonly_notice": "Már létezik legalább egy generált forduló. Megnézheted ezeket a beállításokat, de nem módosíthatod őket.",
+      "tournament_settings_readonly_notice": "Svájci fordulók futnak: párosítás és tiebreak csak olvasható. A kieséses beállítások (top N, best-of, kezdő) szerkeszthetők az ágrajz indulásáig.",
       "tournament_settings_view_hint": "Párosítás, holtverseny, Buchholz/bye mód és egyebek megtekintése (csak olvasható)",
       "prestart_config_success": "Beállítások mentve",
       "prestart_config_error": "A beállítások mentése sikertelen",
@@ -661,7 +661,12 @@
       "rounds_label": "Fordulók száma (opcionális, automatikusan számítva, ha üres)",
       "select_circuit": "Válasszon sorozatot...",
       "select_place": "Válasszon helyszínt...",
-      "type_label": "Verseny Típusa *"
+      "type_label": "Verseny Típusa *",
+      "competition_format_label": "Versenyformátum",
+      "competition_format": {
+        "swiss": "Csak svájci",
+        "swiss_knockout": "Svájci + kieséses"
+      }
     },
     "match": {
       "close": "Bezárás",
@@ -832,6 +837,80 @@
       "step1": "Verseny Létrehozása - 1. Lépés: Információ",
       "step2": "Verseny Létrehozása - 2. Lépés: Beállítások",
       "step3": "Verseny Létrehozása - 3. Lépés: Regisztráció"
+    }
+  },
+  "knockout": {
+    "start_phase": "Kieséses fázis indítása",
+    "started": "Kieséses fázis elindítva",
+    "start_error": "Nem sikerült elindítani a kieséses fázist",
+    "generate_next_round": "Következő kieséses kör",
+    "round_created": "Kieséses kör létrehozva",
+    "format_required_hint": "Válaszd a «Svájci + kiesés» formátumot az ágrajz beállításához (top N, best-of, kezdő).",
+    "config_title": "Kieséses beállítások",
+    "size_label": "Bracket mérete (top N)",
+    "size_option": "Top {{count}}",
+    "size_fallback_help": "Ha kevesebb aktív játékos van, mint a beállított top N, a legnagyobb lehetséges ágrajzra csökken (pl. Top 8 + 6 játékos → 4 fős ágrajz).",
+    "size_player_limit_help": "A lehetőségek a {{count}} regisztrált játékosra korlátozódnak. Ha kevesebb aktív játékos van a KO indulásakor, az ágrajz automatikusan igazodik.",
+    "qualifiers_configured": "Kiesésre jut: Top {{count}}",
+    "qualifiers_effective": "{{active}} aktív játékossal {{count}} fős ágrajz lesz",
+    "series_label": "Mérkőzésformátum",
+    "series": {
+      "best_of_1": "Egy játszma",
+      "best_of_3": "Három játszmából kettő (ugyanabban a körben)",
+      "complete": "Sorozat lezárva",
+      "in_progress": "Sorozat folyamatban",
+      "games_detail": "{{count}} játszma megtekintése",
+      "encounter": "Párharc"
+    },
+    "save_config": "KO beállítások mentése",
+    "config_saved": "Kieséses beállítások mentve",
+    "config_hint": "A kieséses fázis indításáig szerkeszthető.",
+    "edit_in_settings": "A kieséses ágrajz beállítása:",
+    "bronze_match_label": "Harmadik helyért játszma",
+    "match_starter_label": "Kezdő játékos (1. játszma)",
+    "alternate_starter_label": "Váltakozó kezdés sorozatban (best-of-3+)",
+    "series_starter_mode_label": "Váltakozás (2+ játszma)",
+    "series_starter_mode": {
+      "previous_loser": "Az előző vesztes kezd",
+      "alternate": "Játékosváltás",
+      "random": "Véletlen"
+    },
+    "option_yes": "Igen",
+    "option_no": "Nem",
+    "match_starter": {
+      "higher_swiss_seed": "Jobb svájci kiemelés",
+      "random": "Véletlen"
+    },
+    "view": {
+      "live": "Aktuális tabella",
+      "final": "Végső tabella",
+      "swiss_frozen": "Svájci (befagyasztva)",
+      "bracket": "Ágrajz"
+    },
+    "stage": {
+      "round_of_16": "Nyolcaddöntő",
+      "quarterfinal": "Negyeddöntő",
+      "semifinal": "Elődöntő",
+      "final": "Döntő",
+      "third_place": "Harmadik hely"
+    },
+    "bracket": {
+      "empty": "Még nincs kieséses ágrajz adat.",
+      "winner": "Győztes: {{name}}",
+      "games_played": "{{count}} játszma",
+      "final_title": "Döntő"
+    },
+    "match": {
+      "game_n": "{{n}}. játszma a párharcban"
+    }
+  },
+  "swiss": {
+    "starter": {
+      "config_title": "Kezdő játékos (svájci fázis)",
+      "match_label": "Ki kezdi a játszmát",
+      "match_help": "Minden svájci forduló generálásakor érvényes.",
+      "higher_ranked": "Jobb helyezésű",
+      "random": "Véletlen"
     }
   }
 }

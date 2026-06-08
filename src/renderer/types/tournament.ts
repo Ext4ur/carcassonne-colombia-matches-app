@@ -3,6 +3,32 @@ export type TournamentStatus = 'draft' | 'in_progress' | 'completed';
 export type RoundStatus = 'pending' | 'in_progress' | 'completed';
 export type MatchStatus = 'pending' | 'completed';
 
+import type {
+  CompetitionFormat,
+  KnockoutMatchStarter,
+  KnockoutSeriesStarterMode,
+  KnockoutSeeding,
+  KnockoutSeries,
+  KnockoutSize,
+  KnockoutStage,
+  KnockoutMatchStage,
+  RoundPhase,
+  SwissMatchStarter,
+} from './knockout';
+
+export type {
+  CompetitionFormat,
+  KnockoutMatchStarter,
+  KnockoutMatchStage,
+  KnockoutSeriesStarterMode,
+  KnockoutSeeding,
+  KnockoutSeries,
+  KnockoutSize,
+  KnockoutStage,
+  RoundPhase,
+  SwissMatchStarter,
+};
+
 export interface Tournament {
   id?: number;
   name: string;
@@ -12,6 +38,10 @@ export interface Tournament {
   status: TournamentStatus;
   players_per_match: number;
   number_of_rounds?: number;
+  /** Formato de competición: suizo solo o suizo + eliminatoria. */
+  competition_format?: CompetitionFormat;
+  /** ISO timestamp cuando se inició la fase eliminatoria (null = aún en suizo o sin KO). */
+  knockout_phase_started_at?: string | null;
   /** Required; default place is "Online". */
   place_id: number;
   /** From JOIN with places; for list/detail display. */
@@ -61,6 +91,18 @@ export interface TournamentConfig {
   pairing_algorithm?: 'greedy' | 'backtracking';
   /** Opponent-score tiebreaks: flat list vs per-round N−1 cut; optional virtual bye term = mean field points. */
   buchholz_bye_mode?: BuchholzByeMode;
+  /** Solo si competition_format = swiss_knockout. Top N (potencia de 2). Editable hasta iniciar KO. */
+  knockout_size?: KnockoutSize;
+  knockout_seeding?: KnockoutSeeding;
+  knockout_series?: KnockoutSeries;
+  knockout_play_bronze_match?: boolean;
+  knockout_match_starter?: KnockoutMatchStarter;
+  /** @deprecated Usar knockout_series_starter_mode */
+  knockout_series_alternate_starter?: boolean;
+  knockout_series_starter_mode?: KnockoutSeriesStarterMode;
+  swiss_match_starter?: SwissMatchStarter;
+  /** JSON congelado al iniciar KO (clasificación suizo). */
+  swiss_standings_snapshot?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -81,6 +123,8 @@ export interface Round {
   tournament_id: number;
   round_number: number;
   status: RoundStatus;
+  phase?: RoundPhase;
+  knockout_stage?: KnockoutStage | null;
   started_at?: string;
   completed_at?: string;
 }
@@ -92,6 +136,15 @@ export interface Match {
   status: MatchStatus;
   first_player_id?: number;
   completed_at?: string;
+  /** Orden dentro del cuadro en esa ronda KO (1-based). */
+  knockout_bracket_slot?: number | null;
+  /** Victorias necesarias para ganar el cruce (1 o 2). */
+  series_target_wins?: number | null;
+  /** Ganador del cruce cuando la serie está cerrada. */
+  series_winner_id?: number | null;
+  is_knockout?: boolean;
+  series_meta?: string | null;
+  knockout_match_stage?: KnockoutMatchStage | null;
 }
 
 export interface MatchResult {
@@ -101,6 +154,8 @@ export interface MatchResult {
   position: number;
   points: number;
   tournament_points: number;
+  /** Partida dentro de un cruce best-of-N (default 1). */
+  game_number?: number;
 }
 
 export interface MatchWithResults extends Match {

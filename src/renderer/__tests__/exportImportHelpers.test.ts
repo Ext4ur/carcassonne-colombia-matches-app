@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Player } from '../types/player';
+import { parseBackupJson } from '../services/import';
 import {
   collectPlayerIdsFromTournamentSnapshots,
   collectPlayersOnlyFromSnapshots,
@@ -60,5 +61,25 @@ describe('collectPlayersOnlyFromSnapshots', () => {
     );
     expect(map.get(1)?.name).toBe('Global');
     expect(map.get(99)?.name).toBe('Player 99');
+  });
+});
+
+describe('parseBackupJson v1.2', () => {
+  it('acepta cities y places opcionales', () => {
+    const parsed = parseBackupJson(
+      JSON.stringify({
+        version: '1.2',
+        exportDate: '2026-01-01',
+        data: {
+          players: [],
+          tournaments: [],
+          circuits: [],
+          cities: [{ id: 1, name: 'Bogotá' }],
+          places: [{ id: 10, name: 'Café Meeple', city_id: 1, city_name: 'Bogotá' }],
+        },
+      })
+    );
+    expect(parsed.data.cities).toHaveLength(1);
+    expect(parsed.data.places?.[0]?.city_name).toBe('Bogotá');
   });
 });

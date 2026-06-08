@@ -9,6 +9,7 @@ import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
 import { useTranslation } from 'react-i18next';
+import type { CompetitionFormat } from '../../types/knockout';
 
 export interface TournamentFormRef {
   submit: () => void;
@@ -44,6 +45,7 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     players_per_match: tournament?.players_per_match || 2,
     number_of_rounds: tournament?.number_of_rounds?.toString() || '',
     place_id: tournament?.place_id?.toString() || '',
+    competition_format: (tournament?.competition_format || 'swiss') as CompetitionFormat,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -119,6 +121,7 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       players_per_match: formData.players_per_match,
       number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
       place_id: formData.place_id ? Number(formData.place_id) : undefined,
+      competition_format: formData.competition_format as 'swiss' | 'swiss_knockout',
     });
   };
 
@@ -137,7 +140,24 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       />
 
       <Select
-        label={t('tournaments.form.type_label')}
+        label={t('tournaments.form.competition_format_label')}
+        value={formData.competition_format}
+        onChange={(e) =>
+          setFormData({
+            ...formData,
+            competition_format: e.target.value as 'swiss' | 'swiss_knockout',
+          })
+        }
+        options={[
+          { value: 'swiss', label: t('tournaments.form.competition_format.swiss') },
+          {
+            value: 'swiss_knockout',
+            label: t('tournaments.form.competition_format.swiss_knockout'),
+          },
+        ]}
+      />
+
+      <Select
         value={formData.type}
         onChange={(e) =>
           setFormData({ ...formData, type: e.target.value as TournamentType, circuit_id: '' })

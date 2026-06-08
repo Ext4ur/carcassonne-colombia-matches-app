@@ -11,7 +11,6 @@ import {
   getStandingsExportTiebreakColumns,
   tiebreakHeaderForExport,
 } from '../utils/standingTiebreakExport';
-import { getEffectiveTiebreakCriteria } from '../constants';
 
 import i18n from '../i18n/config';
 
@@ -553,13 +552,7 @@ export class ReportService {
 
   /** Clasificación con valores de desempate (p. ej. informes, respaldo JSON). */
   static async getStandings(tournamentId: number): Promise<PlayerStanding[]> {
-    const { SwissPairingService } = await import('./swiss');
-    const config = await DatabaseService.getTournamentConfig(tournamentId);
-    return await SwissPairingService.calculateStandings(
-      tournamentId,
-      getEffectiveTiebreakCriteria(config?.tiebreak_criteria),
-      undefined,
-      config?.player_display_mode
-    );
+    const { computeKnockoutFinalStandingsForTournament } = await import('./knockoutStandings');
+    return computeKnockoutFinalStandingsForTournament(tournamentId);
   }
 }

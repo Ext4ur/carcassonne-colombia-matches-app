@@ -24,6 +24,7 @@ import { Player } from '../types/player';
 import { Circuit } from '../types/circuit';
 import { City } from '../types/city';
 import { Place } from '../types/place';
+import { normalizeKnockoutSeriesStarterMode } from '../types/knockout';
 
 export class DatabaseService {
   // Always use local SQLite client for read/write
@@ -563,6 +564,7 @@ export class DatabaseService {
     players_per_match: number;
     number_of_rounds?: number;
     place_id?: number;
+    competition_format?: 'swiss' | 'swiss_knockout';
   }) {
     if (tournament.circuit_id) {
       const circuit = await this.getCircuitById(tournament.circuit_id);
@@ -574,8 +576,8 @@ export class DatabaseService {
 
     const uuid = self.crypto.randomUUID();
     const result = await this.execute(
-      `INSERT INTO tournaments (uuid, name, type, circuit_id, date, players_per_match, number_of_rounds, place_id) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tournaments (uuid, name, type, circuit_id, date, players_per_match, number_of_rounds, place_id, competition_format) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         uuid,
         tournament.name,
@@ -585,6 +587,7 @@ export class DatabaseService {
         tournament.players_per_match,
         tournament.number_of_rounds || null,
         placeId,
+        tournament.competition_format || 'swiss',
       ]
     );
 
@@ -603,6 +606,7 @@ export class DatabaseService {
       number_of_rounds: tournament.number_of_rounds,
       circuit_uuid: circuitUuid,
       place_uuid: placeUuid,
+      competition_format: tournament.competition_format || 'swiss',
     });
 
     dbCache.invalidate(dbCache.LIST_KEYS.tournaments);
@@ -640,6 +644,10 @@ export class DatabaseService {
     if (updates.players_per_match !== undefined)
       payload.players_per_match = updates.players_per_match;
     if (updates.number_of_rounds !== undefined) payload.number_of_rounds = updates.number_of_rounds;
+    if (updates.competition_format !== undefined)
+      payload.competition_format = updates.competition_format;
+    if (updates.knockout_phase_started_at !== undefined)
+      payload.knockout_phase_started_at = updates.knockout_phase_started_at;
 
     updateStatements.push('updated_at = CURRENT_TIMESTAMP');
     params.push(id);
@@ -693,6 +701,18 @@ export class DatabaseService {
         player_display_mode: results[0].player_display_mode || 'per_player',
         pairing_algorithm: results[0].pairing_algorithm || 'greedy',
         buchholz_bye_mode: normalizeBuchholzByeMode(results[0].buchholz_bye_mode),
+        knockout_size: results[0].knockout_size ?? 8,
+        knockout_seeding: results[0].knockout_seeding || 'standard_bracket',
+        knockout_series: results[0].knockout_series || 'best_of_1',
+        knockout_play_bronze_match: Boolean(results[0].knockout_play_bronze_match),
+        knockout_match_starter: results[0].knockout_match_starter || 'higher_swiss_seed',
+        knockout_series_alternate_starter: Boolean(results[0].knockout_series_alternate_starter),
+        knockout_series_starter_mode: normalizeKnockoutSeriesStarterMode(
+          results[0].knockout_series_starter_mode,
+          Boolean(results[0].knockout_series_alternate_starter)
+        ),
+        swiss_match_starter: results[0].swiss_match_starter || 'higher_ranked',
+        swiss_standings_snapshot: results[0].swiss_standings_snapshot ?? null,
       };
     }
     dbCache.set(`tournament:${tournamentId}:config`, config);
@@ -708,14 +728,23 @@ export class DatabaseService {
     player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
     pairing_algorithm?: 'greedy' | 'backtracking';
     buchholz_bye_mode?: BuchholzByeMode;
+    knockout_size?: number;
+    knockout_seeding?: string;
+    knockout_series?: string;
+    knockout_play_bronze_match?: boolean;
+    knockout_match_starter?: string;
+    knockout_series_alternate_starter?: boolean;
+    knockout_series_starter_mode?: string;
+    swiss_match_starter?: string;
+    swiss_standings_snapshot?: string | null;
   }) {
     const uuid = self.crypto.randomUUID();
     const tournamentUuid = await this.getUuid('tournaments', config.tournament_id);
     const buchholzMode = normalizeBuchholzByeMode(config.buchholz_bye_mode);
 
     await this.execute(
-      `INSERT INTO tournament_configs (uuid, tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection, player_display_mode, pairing_algorithm, buchholz_bye_mode) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tournament_configs (uuid, tournament_id, avoid_rematches, tiebreak_criteria, scoring_system, bye_selection, player_display_mode, pairing_algorithm, buchholz_bye_mode, knockout_size, knockout_seeding, knockout_series, knockout_play_bronze_match, knockout_match_starter, knockout_series_alternate_starter, knockout_series_starter_mode, swiss_match_starter) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         uuid,
         config.tournament_id,
@@ -726,6 +755,15 @@ export class DatabaseService {
         config.player_display_mode || 'per_player',
         config.pairing_algorithm || 'greedy',
         buchholzMode,
+        config.knockout_size ?? 8,
+        config.knockout_seeding || 'standard_bracket',
+        config.knockout_series || 'best_of_1',
+        config.knockout_play_bronze_match ? 1 : 0,
+        config.knockout_match_starter || 'higher_swiss_seed',
+        config.knockout_series_alternate_starter ? 1 : 0,
+        config.knockout_series_starter_mode ??
+          normalizeKnockoutSeriesStarterMode(undefined, config.knockout_series_alternate_starter),
+        config.swiss_match_starter || 'higher_ranked',
       ]
     );
 
@@ -739,6 +777,16 @@ export class DatabaseService {
       player_display_mode: config.player_display_mode,
       pairing_algorithm: config.pairing_algorithm || 'greedy',
       buchholz_bye_mode: buchholzMode,
+      knockout_size: config.knockout_size ?? 8,
+      knockout_seeding: config.knockout_seeding || 'standard_bracket',
+      knockout_series: config.knockout_series || 'best_of_1',
+      knockout_play_bronze_match: Boolean(config.knockout_play_bronze_match),
+      knockout_match_starter: config.knockout_match_starter || 'higher_swiss_seed',
+      knockout_series_alternate_starter: Boolean(config.knockout_series_alternate_starter),
+      knockout_series_starter_mode:
+        config.knockout_series_starter_mode ??
+        normalizeKnockoutSeriesStarterMode(undefined, config.knockout_series_alternate_starter),
+      swiss_match_starter: config.swiss_match_starter || 'higher_ranked',
     });
 
     dbCache.invalidateTournament(config.tournament_id);
@@ -754,6 +802,15 @@ export class DatabaseService {
       player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
       pairing_algorithm?: 'greedy' | 'backtracking';
       buchholz_bye_mode?: BuchholzByeMode;
+      knockout_size?: number;
+      knockout_seeding?: string;
+      knockout_series?: string;
+      knockout_play_bronze_match?: boolean;
+      knockout_match_starter?: string;
+      knockout_series_alternate_starter?: boolean;
+      knockout_series_starter_mode?: string;
+      swiss_match_starter?: string;
+      swiss_standings_snapshot?: string | null;
     }
   ) {
     // Determine config UUID via tournament configs?
@@ -807,6 +864,53 @@ export class DatabaseService {
       params.push(m);
       payload.buchholz_bye_mode = m;
     }
+    if (config.knockout_size !== undefined) {
+      updates.push('knockout_size = ?');
+      params.push(config.knockout_size);
+      payload.knockout_size = config.knockout_size;
+    }
+    if (config.knockout_seeding !== undefined) {
+      updates.push('knockout_seeding = ?');
+      params.push(config.knockout_seeding);
+      payload.knockout_seeding = config.knockout_seeding;
+    }
+    if (config.knockout_series !== undefined) {
+      updates.push('knockout_series = ?');
+      params.push(config.knockout_series);
+      payload.knockout_series = config.knockout_series;
+    }
+    if (config.knockout_play_bronze_match !== undefined) {
+      updates.push('knockout_play_bronze_match = ?');
+      params.push(config.knockout_play_bronze_match ? 1 : 0);
+      payload.knockout_play_bronze_match = config.knockout_play_bronze_match;
+    }
+    if (config.knockout_match_starter !== undefined) {
+      updates.push('knockout_match_starter = ?');
+      params.push(config.knockout_match_starter);
+      payload.knockout_match_starter = config.knockout_match_starter;
+    }
+    if (config.knockout_series_alternate_starter !== undefined) {
+      updates.push('knockout_series_alternate_starter = ?');
+      params.push(config.knockout_series_alternate_starter ? 1 : 0);
+      payload.knockout_series_alternate_starter = config.knockout_series_alternate_starter;
+    }
+    if (config.knockout_series_starter_mode !== undefined) {
+      updates.push('knockout_series_starter_mode = ?');
+      params.push(config.knockout_series_starter_mode);
+      payload.knockout_series_starter_mode = config.knockout_series_starter_mode;
+      payload.knockout_series_alternate_starter =
+        config.knockout_series_starter_mode === 'previous_loser';
+    }
+    if (config.swiss_match_starter !== undefined) {
+      updates.push('swiss_match_starter = ?');
+      params.push(config.swiss_match_starter);
+      payload.swiss_match_starter = config.swiss_match_starter;
+    }
+    if (config.swiss_standings_snapshot !== undefined) {
+      updates.push('swiss_standings_snapshot = ?');
+      params.push(config.swiss_standings_snapshot);
+      payload.swiss_standings_snapshot = config.swiss_standings_snapshot;
+    }
 
     if (updates.length === 0) return;
 
@@ -851,14 +955,23 @@ export class DatabaseService {
     tournament_id: number;
     round_number: number;
     status?: 'pending' | 'in_progress' | 'completed';
+    phase?: 'swiss' | 'knockout';
+    knockout_stage?: string | null;
   }) {
     const uuid = self.crypto.randomUUID();
     const tournamentUuid = await this.getUuid('tournaments', round.tournament_id);
 
     const result = await this.execute(
-      `INSERT INTO rounds (uuid, tournament_id, round_number, status) 
-       VALUES (?, ?, ?, ?)`,
-      [uuid, round.tournament_id, round.round_number, round.status || 'pending']
+      `INSERT INTO rounds (uuid, tournament_id, round_number, status, phase, knockout_stage) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        uuid,
+        round.tournament_id,
+        round.round_number,
+        round.status || 'pending',
+        round.phase || 'swiss',
+        round.knockout_stage ?? null,
+      ]
     );
 
     await SyncService.addToQueue('rounds', 'INSERT', {
@@ -866,6 +979,8 @@ export class DatabaseService {
       round_number: round.round_number,
       status: round.status || 'pending',
       tournament_uuid: tournamentUuid,
+      phase: round.phase || 'swiss',
+      knockout_stage: round.knockout_stage ?? null,
     });
 
     dbCache.invalidateTournament(round.tournament_id);
@@ -1004,6 +1119,11 @@ export class DatabaseService {
     match_number: number;
     status?: 'pending' | 'completed';
     first_player_id?: number;
+    knockout_bracket_slot?: number;
+    series_target_wins?: number;
+    is_knockout?: boolean;
+    series_meta?: string;
+    knockout_match_stage?: string | null;
   }) {
     const uuid = self.crypto.randomUUID();
     const roundUuid = await this.getUuid('rounds', match.round_id);
@@ -1012,14 +1132,19 @@ export class DatabaseService {
       : null;
 
     const result = await this.execute(
-      `INSERT INTO matches (uuid, round_id, match_number, status, first_player_id) 
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO matches (uuid, round_id, match_number, status, first_player_id, knockout_bracket_slot, series_target_wins, is_knockout, series_meta, knockout_match_stage) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         uuid,
         match.round_id,
         match.match_number,
         match.status || 'pending',
         match.first_player_id || null,
+        match.knockout_bracket_slot ?? null,
+        match.series_target_wins ?? 1,
+        match.is_knockout ? 1 : 0,
+        match.series_meta ?? null,
+        match.knockout_match_stage ?? null,
       ]
     );
 
@@ -1029,6 +1154,11 @@ export class DatabaseService {
       status: match.status || 'pending',
       round_uuid: roundUuid,
       first_player_uuid: firstPlayerUuid,
+      knockout_bracket_slot: match.knockout_bracket_slot ?? null,
+      series_target_wins: match.series_target_wins ?? 1,
+      is_knockout: Boolean(match.is_knockout),
+      series_meta: match.series_meta ?? null,
+      knockout_match_stage: match.knockout_match_stage ?? null,
     });
 
     return result.lastInsertRowid;
@@ -1040,6 +1170,8 @@ export class DatabaseService {
       status?: 'pending' | 'completed';
       completed_at?: string;
       first_player_id?: number;
+      series_winner_id?: number | null;
+      series_meta?: string | null;
     }
   ) {
     const uuid = await this.getUuid('matches', id);
@@ -1063,6 +1195,18 @@ export class DatabaseService {
       updates.push('first_player_id = ?');
       params.push(match.first_player_id);
       payload.first_player_uuid = await this.getUuid('players', match.first_player_id);
+    }
+    if (match.series_winner_id !== undefined) {
+      updates.push('series_winner_id = ?');
+      params.push(match.series_winner_id);
+      payload.series_winner_uuid = match.series_winner_id
+        ? await this.getUuid('players', match.series_winner_id)
+        : null;
+    }
+    if (match.series_meta !== undefined) {
+      updates.push('series_meta = ?');
+      params.push(match.series_meta);
+      payload.series_meta = match.series_meta;
     }
 
     if (updates.length === 0) return;
@@ -1160,7 +1304,7 @@ export class DatabaseService {
           FROM match_results mr
           JOIN players p ON mr.player_id = p.id
           WHERE mr.match_id = ?
-          ORDER BY mr.position
+          ORDER BY COALESCE(mr.game_number, 1), mr.position
         `,
         [matchId]
       );
@@ -1171,7 +1315,7 @@ export class DatabaseService {
         FROM match_results mr
         JOIN players p ON mr.player_id = p.id
         WHERE mr.match_id = ?
-        ORDER BY mr.position
+        ORDER BY COALESCE(mr.game_number, 1), mr.position
       `,
       [matchId]
     );
@@ -1208,7 +1352,7 @@ export class DatabaseService {
         FROM match_results mr
         JOIN players p ON mr.player_id = p.id
         WHERE mr.match_id IN (${placeholders})
-        ORDER BY mr.match_id, mr.position
+        ORDER BY mr.match_id, COALESCE(mr.game_number, 1), mr.position
       `,
       matchIds
     );
@@ -1238,14 +1382,16 @@ export class DatabaseService {
     position: number;
     points: number;
     tournament_points: number;
+    game_number?: number;
   }) {
     const uuid = self.crypto.randomUUID();
     const matchUuid = await this.getUuid('matches', result.match_id);
     const playerUuid = await this.getUuid('players', result.player_id);
+    const gameNumber = result.game_number ?? 1;
 
     const res = await this.execute(
-      `INSERT INTO match_results (uuid, match_id, player_id, position, points, tournament_points) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO match_results (uuid, match_id, player_id, position, points, tournament_points, game_number) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         uuid,
         result.match_id,
@@ -1253,6 +1399,7 @@ export class DatabaseService {
         result.position,
         result.points,
         result.tournament_points,
+        gameNumber,
       ]
     );
 
@@ -1272,6 +1419,7 @@ export class DatabaseService {
       position: result.position,
       points: result.points,
       tournament_points: result.tournament_points,
+      game_number: gameNumber,
     });
 
     return res;
@@ -1307,6 +1455,69 @@ export class DatabaseService {
       }
     }
     return res;
+  }
+
+  static async deleteMatchResultsForGame(matchId: number, gameNumber: number) {
+    const results = await this.query<{ uuid: string }>(
+      'SELECT uuid FROM match_results WHERE match_id = ? AND game_number = ?',
+      [matchId, gameNumber]
+    );
+    await this.execute('DELETE FROM match_results WHERE match_id = ? AND game_number = ?', [
+      matchId,
+      gameNumber,
+    ]);
+    for (const r of results) {
+      if (r.uuid) {
+        await SyncService.addToQueue('match_results', 'DELETE', { uuid: r.uuid });
+      }
+    }
+  }
+
+  // ==========================================
+  // Knockout seeds
+  // ==========================================
+  static async getKnockoutSeeds(tournamentId: number) {
+    return this.query<{ player_id: number; seed: number; name: string }>(
+      `SELECT ks.player_id, ks.seed, p.name
+       FROM tournament_knockout_seeds ks
+       JOIN players p ON p.id = ks.player_id
+       WHERE ks.tournament_id = ?
+       ORDER BY ks.seed`,
+      [tournamentId]
+    );
+  }
+
+  static async addKnockoutSeed(tournamentId: number, playerId: number, seed: number) {
+    const uuid = self.crypto.randomUUID();
+    const tournamentUuid = await this.getUuid('tournaments', tournamentId);
+    const playerUuid = await this.getUuid('players', playerId);
+    await this.execute(
+      `INSERT INTO tournament_knockout_seeds (uuid, tournament_id, player_id, seed) VALUES (?, ?, ?, ?)`,
+      [uuid, tournamentId, playerId, seed]
+    );
+    await SyncService.addToQueue('tournament_knockout_seeds', 'INSERT', {
+      uuid,
+      tournament_uuid: tournamentUuid,
+      player_uuid: playerUuid,
+      seed,
+    });
+    dbCache.invalidateTournament(tournamentId);
+  }
+
+  static async clearKnockoutSeeds(tournamentId: number) {
+    const rows = await this.query<{ uuid: string }>(
+      'SELECT uuid FROM tournament_knockout_seeds WHERE tournament_id = ?',
+      [tournamentId]
+    );
+    await this.execute('DELETE FROM tournament_knockout_seeds WHERE tournament_id = ?', [
+      tournamentId,
+    ]);
+    for (const r of rows) {
+      if (r.uuid) {
+        await SyncService.addToQueue('tournament_knockout_seeds', 'DELETE', { uuid: r.uuid });
+      }
+    }
+    dbCache.invalidateTournament(tournamentId);
   }
 
   // ==========================================

@@ -97,6 +97,7 @@ export default function Tournaments() {
       players_per_match: tournamentData.players_per_match || 2,
       number_of_rounds: tournamentData.number_of_rounds,
       place_id: tournamentData.place_id,
+      competition_format: tournamentData.competition_format || 'swiss',
     });
     if (mode === 'quick') {
       setConfigDraft(buildQuickConfigDraft(tournamentData.players_per_match || 2) as ConfigDraft);
@@ -122,7 +123,9 @@ export default function Tournaments() {
       bye_selection: configData.bye_selection || 'worst',
       player_display_mode: configData.player_display_mode ?? 'per_player',
       pairing_algorithm: configData.pairing_algorithm ?? 'greedy',
-      buchholz_bye_mode: configData.buchholz_bye_mode ?? 'legacy',
+      knockout_size: configData.knockout_size ?? 8,
+      knockout_seeding: configData.knockout_seeding ?? 'standard_bracket',
+      knockout_series: configData.knockout_series ?? 'best_of_1',
     });
     setWizardStep('registration');
   };
@@ -142,6 +145,7 @@ export default function Tournaments() {
         players_per_match: tournamentDraft.players_per_match || 2,
         number_of_rounds: numberOfRounds,
         place_id: tournamentDraft.place_id,
+        competition_format: tournamentDraft.competition_format || 'swiss',
       });
       if (configDraft) {
         await DatabaseService.createTournamentConfig({
@@ -155,6 +159,9 @@ export default function Tournaments() {
           player_display_mode: configDraft.player_display_mode ?? 'per_player',
           pairing_algorithm: configDraft.pairing_algorithm ?? 'greedy',
           buchholz_bye_mode: configDraft.buchholz_bye_mode ?? 'legacy',
+          knockout_size: configDraft.knockout_size ?? 8,
+          knockout_seeding: configDraft.knockout_seeding ?? 'standard_bracket',
+          knockout_series: configDraft.knockout_series ?? 'best_of_1',
         });
       }
       for (const player of registrationPlayers) {
@@ -370,6 +377,7 @@ export default function Tournaments() {
           <TournamentConfigComponent
             tournamentId={0}
             playersPerMatch={tournamentDraft.players_per_match || 2}
+            showKnockoutOptions={tournamentDraft.competition_format === 'swiss_knockout'}
             onSave={handleConfigSubmit}
             onCancel={() => setWizardStep('form')}
           />

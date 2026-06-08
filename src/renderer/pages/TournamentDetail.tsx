@@ -3,6 +3,20 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DatabaseService } from '../services/database';
 import { SwissPairingService } from '../services/swiss';
+import { RoundGenerationService, KnockoutPairingService } from '../services/roundGeneration';
+import {
+  countSwissRounds,
+  computeSeriesState,
+  isKnockoutPhaseActive,
+  isSeriesMatch,
+  resolveGameStarter,
+  resultsForDisplay,
+} from '../services/knockout';
+import {
+  isKnockoutSize,
+  resolveEffectiveKnockoutSize,
+  type CompetitionFormat,
+} from '../types/knockout';
 import { ReportService } from '../services/reports';
 import {
   Tournament,
@@ -17,6 +31,8 @@ import Table from '../components/common/Table';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import MatchResultForm from '../components/tournament/MatchResultForm';
+import SeriesMatchGroup from '../components/tournament/SeriesMatchGroup';
+import KnockoutBracket, { type BracketRoundColumn } from '../components/tournament/KnockoutBracket';
 import TournamentStats from '../components/tournament/TournamentStats';
 import TournamentMatrix from '../components/tournament/TournamentMatrix';
 import TournamentRoundMatrix from '../components/tournament/TournamentRoundMatrix';
@@ -40,6 +56,8 @@ import { getEffectiveTiebreakCriteria } from '../constants';
 import { DEFAULT_TIEBREAK_CRITERIA } from '../utils/tiebreak';
 import { getDefaultScoringSystem } from '../utils/scoring';
 import { useTranslation } from 'react-i18next';
+import { knockoutStageI18nKey } from '../types/knockout';
+import type { KnockoutSeries } from '../types/knockout';
 
 export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -58,6 +76,9 @@ export default function TournamentDetail() {
   const [showMatrix, setShowMatrix] = useState(false);
   const [matrixView, setMatrixView] = useState<'byOpponent' | 'byRound'>('byOpponent');
   const [isLoadingStandings, setIsLoadingStandings] = useState(false);
+  const [tournamentConfig, setTournamentConfig] = useState<TournamentConfig | null>(null);
+  const [standingsView, setStandingsView] = useState<'live' | 'swiss_frozen' | 'bracket'>('live');
+  const [bracketColumns, setBracketColumns] = useState<BracketRoundColumn[]>([]);
 
   // Preview State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -96,6 +117,8 @@ export default function TournamentDetail() {
   const [prestartConfigLoading, setPrestartConfigLoading] = useState(false);
   const [prestartConfig, setPrestartConfig] = useState<TournamentConfig | null>(null);
   const [prestartNumRounds, setPrestartNumRounds] = useState('1');
+  const [settingsCompetitionFormat, setSettingsCompetitionFormat] =
+    useState<CompetitionFormat>('swiss');
   const [tournamentSettingsModalKey, setTournamentSettingsModalKey] = useState(0);
   const [buchholzByeMode, setBuchholzByeMode] = useState<BuchholzByeMode>('legacy');
 
@@ -173,21 +196,16 @@ export default function TournamentDetail() {
   const standingsLoadSeqRef = useRef(0);
 
   const loadStandings = useCallback(
-    async (preFetchedRounds?: Round[], isCancelled?: () => boolean) => {
+    async (_preFetchedRounds?: Round[], isCancelled?: () => boolean) => {
       if (!tournament?.id) return;
       const seq = ++standingsLoadSeqRef.current;
       setIsLoadingStandings(true);
       try {
         const config = await DatabaseService.getTournamentConfig(tournament.id);
+        setTournamentConfig(config);
         setBuchholzByeMode(normalizeBuchholzByeMode(config?.buchholz_bye_mode));
         if (isCancelled?.()) return;
-        // setTournamentConfig(config || null);
-        const data = await SwissPairingService.calculateStandings(
-          tournament.id,
-          getEffectiveTiebreakCriteria(config?.tiebreak_criteria),
-          preFetchedRounds?.length ? { rounds: preFetchedRounds } : undefined,
-          config?.player_display_mode
-        );
+        const data = await ReportService.getStandings(tournament.id);
         if (isCancelled?.()) return;
         if (seq !== standingsLoadSeqRef.current) return;
         setStandings(data || []);
@@ -260,6 +278,11 @@ export default function TournamentDetail() {
       cancelled = true;
     };
   }, [isPrestartConfigOpen, tournament, standings.length]);
+
+  useEffect(() => {
+    if (!isPrestartConfigOpen || !tournament) return;
+    setSettingsCompetitionFormat(tournament.competition_format ?? 'swiss');
+  }, [isPrestartConfigOpen, tournament?.competition_format, tournamentSettingsModalKey]);
 
   useEffect(() => {
     if (!tournament) return;
@@ -342,16 +365,103 @@ export default function TournamentDetail() {
     }
   };
 
+  const handleStartKnockout = async () => {
+    if (!tournament?.id) return;
+    try {
+      setIsLoading(true);
+      await KnockoutPairingService.startKnockoutPhase(tournament.id);
+      await loadTournament();
+      const roundsData = await loadRounds();
+      const newRound = roundsData[roundsData.length - 1];
+      if (newRound) {
+        setCurrentRound(newRound);
+        await loadMatches(newRound.id);
+      }
+      await loadStandings(roundsData);
+      addNotification({ message: t('knockout.started'), type: 'success' });
+    } catch (error: any) {
+      addNotification({
+        message: error.message || t('knockout.start_error'),
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadBracket = useCallback(async () => {
+    if (!tournament?.id) return;
+    const koRounds = rounds.filter((r) => r.phase === 'knockout');
+    const cols: BracketRoundColumn[] = [];
+    for (const round of koRounds) {
+      if (!round.id) continue;
+      const roundMatches = await DatabaseService.getRoundMatches(round.id);
+      const nodes = await Promise.all(
+        roundMatches.map(async (m) => {
+          const players = await DatabaseService.getMatchPlayers(m.id!);
+          const results = await DatabaseService.getMatchResults(m.id!);
+          const winner = m.series_winner_id
+            ? players.find((p) => p.id === m.series_winner_id)?.name
+            : undefined;
+          let seriesLabel: string | undefined;
+          if ((m.series_target_wins ?? 1) > 1 && players.length === 2) {
+            const pids = [players[0]!.id!, players[1]!.id!] as [number, number];
+            const state = computeSeriesState(m, results, pids);
+            seriesLabel = `${state.winsByPlayer[pids[0]] ?? 0}-${state.winsByPlayer[pids[1]] ?? 0}`;
+          }
+          return {
+            match: m,
+            player1Name: players[0]?.name ?? '—',
+            player2Name: players[1]?.name ?? '—',
+            winnerName: winner,
+            seriesLabel,
+          };
+        })
+      );
+      cols.push({ round, matches: nodes });
+    }
+    setBracketColumns(cols);
+  }, [tournament?.id, rounds, t]);
+
+  useEffect(() => {
+    if (tournament?.knockout_phase_started_at) {
+      loadBracket();
+    }
+  }, [tournament?.knockout_phase_started_at, rounds, loadBracket]);
+
+  const knockoutQualifierInfo = useMemo(() => {
+    if (tournament?.competition_format !== 'swiss_knockout') return null;
+    const configured = tournamentConfig?.knockout_size ?? 8;
+    if (!isKnockoutSize(configured)) return null;
+    const activeCount = standings.filter((s) => s.active).length;
+    const effective = resolveEffectiveKnockoutSize(configured, activeCount);
+    return { configured, effective, activeCount };
+  }, [tournament?.competition_format, tournamentConfig?.knockout_size, standings]);
+
+  const frozenSwissStandings = useMemo((): PlayerStanding[] => {
+    if (!tournamentConfig?.swiss_standings_snapshot) return standings;
+    try {
+      return JSON.parse(tournamentConfig.swiss_standings_snapshot) as PlayerStanding[];
+    } catch {
+      return standings;
+    }
+  }, [tournamentConfig?.swiss_standings_snapshot, standings]);
+
   const handleGenerateNextRoundClick = async () => {
     if (!tournament?.id) return;
 
     // Check if we've reached the maximum number of rounds before proceeding
     const currentRounds = await DatabaseService.getTournamentRounds(tournament.id);
-    const numberOfRounds = tournament.number_of_rounds || 999;
+    const maxSwiss =
+      tournament.number_of_rounds ||
+      (await RoundGenerationService.getEffectiveMaxSwissRounds(tournament));
 
-    if (currentRounds.length >= numberOfRounds) {
+    if (
+      countSwissRounds(currentRounds) >= maxSwiss &&
+      !isKnockoutPhaseActive(tournament, currentRounds)
+    ) {
       addNotification({
-        message: t('tournaments.detail.max_rounds_reached', { max: numberOfRounds }),
+        message: t('tournaments.detail.max_rounds_reached', { max: maxSwiss }),
         type: 'info',
         duration: 5000,
       });
@@ -359,9 +469,33 @@ export default function TournamentDetail() {
       return;
     }
 
+    if (isKnockoutPhaseActive(tournament, currentRounds)) {
+      try {
+        setIsLoading(true);
+        await RoundGenerationService.generateNextRound(tournament.id);
+        const roundsData = await loadRounds();
+        const newRound = roundsData[roundsData.length - 1];
+        if (newRound) {
+          setCurrentRound(newRound);
+          await loadMatches(newRound.id);
+        }
+        await loadStandings(roundsData);
+        await loadBracket();
+        addNotification({ message: t('knockout.round_created'), type: 'success' });
+      } catch (error: any) {
+        addNotification({
+          message: error.message || t('tournaments.detail.round_gen_error'),
+          type: 'error',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     try {
       setIsLoading(true);
-      const data = await SwissPairingService.previewNextRound(tournament.id);
+      const data = await RoundGenerationService.previewNextRound(tournament.id);
       setPreviewData(data);
       setIsPreviewOpen(true);
     } catch (error: any) {
@@ -383,7 +517,7 @@ export default function TournamentDetail() {
 
       const nextRoundNumber = rounds.length + 1;
 
-      await SwissPairingService.createRoundFromPairings(
+      await RoundGenerationService.createRoundFromPairings(
         tournament.id,
         nextRoundNumber,
         previewData.matches
@@ -437,7 +571,7 @@ export default function TournamentDetail() {
         })
       );
 
-      await SwissPairingService.createRoundFromPairings(
+      await RoundGenerationService.createRoundFromPairings(
         tournament.id,
         nextRoundNumber,
         pairingsWithStarts
@@ -480,22 +614,34 @@ export default function TournamentDetail() {
       const matchesData: any[] = [];
 
       for (const match of roundMatches) {
-        const matchResults = await DatabaseService.getMatchResults(match.id!, tournament!.id!);
+        const [matchResults, matchPlayers] = await Promise.all([
+          DatabaseService.getMatchResults(match.id!, tournament!.id!),
+          DatabaseService.getMatchPlayers(match.id!),
+        ]);
+        const displayResults = isSeriesMatch(match)
+          ? matchResults
+          : resultsForDisplay(match, matchResults);
 
-        // Sort results by position (player_name already resolved by getMatchResults with tournament config)
-        const sortedResults = matchResults
+        const sortedResults = displayResults
           .map((result) => ({
             player_id: result.player_id,
-            player_name: result.player_name ?? t('tournaments.detail.unknown_player'),
+            player_name:
+              (result as { player_name?: string }).player_name ??
+              t('tournaments.detail.unknown_player'),
             position: result.position,
             points: result.points,
+            game_number: result.game_number ?? 1,
           }))
           .sort((a, b) => a.position - b.position);
 
         matchesData.push({
           match_number: match.match_number,
-          first_player_id: match.first_player_id,
+          match,
+          players: matchPlayers,
+          allResults: matchResults,
+          first_player_id: resolveGameStarter(match, 1),
           results: sortedResults,
+          isSeries: isSeriesMatch(match),
         });
       }
 
@@ -532,6 +678,10 @@ export default function TournamentDetail() {
 
     // Siempre recalcular clasificación tras guardar (puntos / Buchholz / H2H / último criterio).
     await loadStandings();
+
+    if (tournament.knockout_phase_started_at) {
+      await loadBracket();
+    }
 
     const allCompleted = updatedMatches.every((m) => m.status === 'completed');
 
@@ -589,10 +739,48 @@ export default function TournamentDetail() {
     if (!tournament?.id) return;
     setIsLoading(true);
     try {
-      const n = Math.max(1, Math.min(99, parseInt(String(prestartNumRounds), 10) || 1));
-      await DatabaseService.updateTournament(tournament.id, { number_of_rounds: n });
+      const koNotStarted = !tournament.knockout_phase_started_at;
+
+      if (!tournamentConfigReadOnly) {
+        const n = Math.max(1, Math.min(99, parseInt(String(prestartNumRounds), 10) || 1));
+        await DatabaseService.updateTournament(tournament.id, { number_of_rounds: n });
+      }
+
+      if (
+        koNotStarted &&
+        settingsCompetitionFormat !== (tournament.competition_format ?? 'swiss')
+      ) {
+        await DatabaseService.updateTournament(tournament.id, {
+          competition_format: settingsCompetitionFormat,
+        });
+      }
 
       const existing = await DatabaseService.getTournamentConfig(tournament.id);
+      const configUpdates: Parameters<typeof DatabaseService.updateTournamentConfig>[1] = {};
+
+      if (!tournamentConfigReadOnly) {
+        Object.assign(configUpdates, {
+          avoid_rematches: cfg.avoid_rematches,
+          tiebreak_criteria: cfg.tiebreak_criteria,
+          scoring_system: cfg.scoring_system,
+          bye_selection: cfg.bye_selection,
+          player_display_mode: cfg.player_display_mode,
+          pairing_algorithm: cfg.pairing_algorithm,
+          buchholz_bye_mode: cfg.buchholz_bye_mode,
+        });
+      }
+
+      if (settingsCompetitionFormat === 'swiss_knockout' && koNotStarted) {
+        Object.assign(configUpdates, {
+          knockout_size: cfg.knockout_size,
+          knockout_series: cfg.knockout_series,
+          knockout_play_bronze_match: cfg.knockout_play_bronze_match,
+          knockout_match_starter: cfg.knockout_match_starter,
+          knockout_series_starter_mode: cfg.knockout_series_starter_mode,
+          knockout_series_alternate_starter: cfg.knockout_series_alternate_starter,
+        });
+      }
+
       if (!existing) {
         await DatabaseService.createTournamentConfig({
           tournament_id: tournament.id,
@@ -604,17 +792,15 @@ export default function TournamentDetail() {
           player_display_mode: cfg.player_display_mode ?? 'per_player',
           pairing_algorithm: cfg.pairing_algorithm ?? 'greedy',
           buchholz_bye_mode: cfg.buchholz_bye_mode ?? 'legacy',
+          knockout_size: cfg.knockout_size ?? 8,
+          knockout_series: cfg.knockout_series ?? 'best_of_1',
+          knockout_play_bronze_match: cfg.knockout_play_bronze_match ?? false,
+          knockout_match_starter: cfg.knockout_match_starter ?? 'higher_swiss_seed',
+          knockout_series_starter_mode: cfg.knockout_series_starter_mode ?? 'alternate',
+          knockout_series_alternate_starter: cfg.knockout_series_alternate_starter ?? false,
         });
-      } else {
-        await DatabaseService.updateTournamentConfig(tournament.id, {
-          avoid_rematches: cfg.avoid_rematches,
-          tiebreak_criteria: cfg.tiebreak_criteria,
-          scoring_system: cfg.scoring_system,
-          bye_selection: cfg.bye_selection,
-          player_display_mode: cfg.player_display_mode,
-          pairing_algorithm: cfg.pairing_algorithm,
-          buchholz_bye_mode: cfg.buchholz_bye_mode,
-        });
+      } else if (Object.keys(configUpdates).length > 0) {
+        await DatabaseService.updateTournamentConfig(tournament.id, configUpdates);
       }
 
       addNotification({
@@ -1032,10 +1218,11 @@ export default function TournamentDetail() {
     },
   ];
 
+  const standingsForTable = standingsView === 'swiss_frozen' ? frozenSwissStandings : standings;
   const filteredStandings =
     selectedPlayerIds.length > 0
-      ? standings.filter((s) => selectedPlayerIds.includes(s.player_id))
-      : standings;
+      ? standingsForTable.filter((s) => selectedPlayerIds.includes(s.player_id))
+      : standingsForTable;
 
   // Partidas en las que participan los jugadores seleccionados (por match_players o match_results), de la ronda actual
   const filteredMatches =
@@ -1152,16 +1339,32 @@ export default function TournamentDetail() {
         // Not a bye match, check if players are assigned
         if (players.length === 0) return t('tournaments.detail.unassigned');
 
+        if (isSeriesMatch(match) && players.length === 2) {
+          return (
+            <SeriesMatchGroup
+              match={match}
+              players={players}
+              results={results}
+              getPositionColor={(pos) => getPositionColor(pos, tournament?.players_per_match ?? 2)}
+            />
+          );
+        }
+
+        const gameStarter = resolveGameStarter(match, 1);
+
         // Normal match - show players with position colors
         if (match.status === 'completed') {
-          const results = matchResultsMap[match.id!] || [];
+          const allResults = matchResultsMap[match.id!] || [];
+          const displayResults = isSeriesMatch(match)
+            ? allResults
+            : resultsForDisplay(match, allResults);
           const playersWithResults = players
             .map((p: any) => {
-              const result = results.find((r: any) => r.player_id === p.id);
+              const result = displayResults.find((r: any) => r.player_id === p.id);
               return {
                 ...p,
-                position: result?.position || players.length, // Default to last position if no result
-                points: result?.points, // We get points here to show them
+                position: result?.position || players.length,
+                points: result?.points,
               };
             })
             .sort((a: any, b: any) => a.position - b.position);
@@ -1185,7 +1388,7 @@ export default function TournamentDetail() {
                   {p.points !== undefined && (
                     <span className="text-xs font-semibold ml-0.5 opacity-80">({p.points})</span>
                   )}
-                  {match.first_player_id === p.id && (
+                  {gameStarter != null && Number(gameStarter) === Number(p.id) && (
                     <span
                       className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700 cursor-help"
                       title={t('tournaments.detail.first_player_tooltip')}
@@ -1208,7 +1411,7 @@ export default function TournamentDetail() {
                   <span className="text-gray-300 dark:text-gray-600">{t('common.versus')}</span>
                 )}
                 <span className="font-medium">{p.name}</span>
-                {match.first_player_id === p.id && (
+                {gameStarter != null && Number(gameStarter) === Number(p.id) && (
                   <span
                     className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700 cursor-help"
                     title={t('tournaments.detail.first_player_tooltip')}
@@ -1337,6 +1540,24 @@ export default function TournamentDetail() {
                 </span>
               )}
             </p>
+            {knockoutQualifierInfo && (
+              <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
+                {t('knockout.qualifiers_configured', {
+                  count: knockoutQualifierInfo.configured,
+                })}
+                {knockoutQualifierInfo.effective != null &&
+                  knockoutQualifierInfo.effective < knockoutQualifierInfo.configured && (
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {' '}
+                      —{' '}
+                      {t('knockout.qualifiers_effective', {
+                        count: knockoutQualifierInfo.effective,
+                        active: knockoutQualifierInfo.activeCount,
+                      })}
+                    </span>
+                  )}
+              </p>
+            )}
           </div>
           <div className="flex space-x-2">
             <Button
@@ -1540,8 +1761,57 @@ export default function TournamentDetail() {
 
       {/* Clasificación / standings: mismo filtro que estadísticas y partidas */}
       <div className="card mb-6">
-        <h2 className="text-xl font-bold mb-4">{t('tournaments.standings')}</h2>
-        {isLoadingStandings && standings.length === 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h2 className="text-xl font-bold">{t('tournaments.standings')}</h2>
+          {tournament.competition_format === 'swiss_knockout' &&
+            tournament.knockout_phase_started_at && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={standingsView === 'live' ? 'primary' : 'secondary'}
+                  onClick={() => setStandingsView('live')}
+                >
+                  {tournament.knockout_phase_started_at
+                    ? t('knockout.view.final')
+                    : t('knockout.view.live')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={standingsView === 'swiss_frozen' ? 'primary' : 'secondary'}
+                  onClick={() => setStandingsView('swiss_frozen')}
+                >
+                  {t('knockout.view.swiss_frozen')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={standingsView === 'bracket' ? 'primary' : 'secondary'}
+                  onClick={() => setStandingsView('bracket')}
+                >
+                  {t('knockout.view.bracket')}
+                </Button>
+              </div>
+            )}
+        </div>
+        {tournament.competition_format === 'swiss_knockout' &&
+          !tournament.knockout_phase_started_at &&
+          rounds.length > 0 && (
+            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              {t('knockout.edit_in_settings')}{' '}
+              <button
+                type="button"
+                className="text-blue-600 dark:text-blue-400 underline"
+                onClick={() => {
+                  setTournamentSettingsModalKey((k) => k + 1);
+                  setIsPrestartConfigOpen(true);
+                }}
+              >
+                {t('tournaments.detail.tournament_settings_view_title')}
+              </button>
+            </p>
+          )}
+        {standingsView === 'bracket' ? (
+          <KnockoutBracket columns={bracketColumns} />
+        ) : isLoadingStandings && standingsForTable.length === 0 ? (
           <div className="p-6 text-center text-gray-600 dark:text-gray-400">
             {t('common.loading')}
           </div>
@@ -1604,10 +1874,64 @@ export default function TournamentDetail() {
               </Button>
             ) : (
               (() => {
-                const effectiveMaxRounds = tournament.number_of_rounds || 1;
-                const atLastRound = rounds.length >= effectiveMaxRounds;
-                const allRoundsCompleted = rounds.every((r) => r.status === 'completed');
-                if (atLastRound && allRoundsCompleted) {
+                const isSwissKo = tournament.competition_format === 'swiss_knockout';
+                const koActive = isKnockoutPhaseActive(tournament, rounds);
+                const maxSwiss = tournament.number_of_rounds || 1;
+                const swissCount = countSwissRounds(rounds);
+                const swissRounds = rounds.filter((r) => (r.phase ?? 'swiss') === 'swiss');
+                const allSwissCompleted =
+                  swissRounds.length >= maxSwiss &&
+                  swissRounds.every((r) => r.status === 'completed');
+
+                if (isSwissKo && !koActive && allSwissCompleted) {
+                  return (
+                    <Button
+                      onClick={handleStartKnockout}
+                      variant="success"
+                      isLoading={isLoading}
+                      className="w-full"
+                    >
+                      {t('knockout.start_phase')}
+                    </Button>
+                  );
+                }
+
+                if (koActive) {
+                  const koRounds = rounds.filter((r) => r.phase === 'knockout');
+                  const lastKo = koRounds[koRounds.length - 1];
+                  const koDone =
+                    lastKo?.knockout_stage === 'final' && lastKo.status === 'completed';
+                  if (koDone && rounds.every((r) => r.status === 'completed')) {
+                    return (
+                      <Button
+                        onClick={handleFinalizeTournament}
+                        variant="success"
+                        isLoading={isLoading}
+                        className="w-full"
+                      >
+                        {t('tournaments.detail.finish_tournament')}
+                      </Button>
+                    );
+                  }
+                  if (lastKo?.status === 'completed' && !koDone) {
+                    return (
+                      <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
+                        {t('knockout.generate_next_round')}
+                      </Button>
+                    );
+                  }
+                  if (currentRound?.status !== 'completed') {
+                    return (
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {t('tournaments.detail.complete_current_round')}
+                      </div>
+                    );
+                  }
+                  return null;
+                }
+
+                const atLastSwiss = swissCount >= maxSwiss;
+                if (atLastSwiss && allSwissCompleted && !isSwissKo) {
                   return (
                     <Button
                       onClick={handleFinalizeTournament}
@@ -1619,7 +1943,7 @@ export default function TournamentDetail() {
                     </Button>
                   );
                 }
-                if (atLastRound && !allRoundsCompleted) {
+                if (atLastSwiss && !allSwissCompleted) {
                   return (
                     <Button onClick={() => setShowStats(true)} variant="primary" className="w-full">
                       {t('tournaments.detail.view_results')}
@@ -1663,7 +1987,9 @@ export default function TournamentDetail() {
                 <div className="flex justify-between items-center">
                   <div className="flex-1 cursor-pointer" onClick={() => setCurrentRound(round)}>
                     <span className="font-medium">
-                      {t('tournaments.round_n', { n: round.round_number })}
+                      {round.phase === 'knockout' && round.knockout_stage
+                        ? t(knockoutStageI18nKey(round.knockout_stage))
+                        : t('tournaments.round_n', { n: round.round_number })}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1790,7 +2116,13 @@ export default function TournamentDetail() {
           <MatchResultForm
             match={selectedMatch}
             tournamentId={tournament.id!}
-            playersPerMatch={tournament.players_per_match}
+            playersPerMatch={
+              selectedMatch.is_knockout || currentRound?.phase === 'knockout'
+                ? 2
+                : tournament.players_per_match
+            }
+            isKnockout={Boolean(selectedMatch.is_knockout || currentRound?.phase === 'knockout')}
+            knockoutSeries={(tournamentConfig?.knockout_series as KnockoutSeries) ?? 'best_of_1'}
             tournamentStatus={tournament.status}
             roundStatus={currentRound?.status}
             onSave={handleMatchResultSaved}
@@ -1821,78 +2153,129 @@ export default function TournamentDetail() {
         {selectedRoundResults && tournament && (
           <div className="space-y-4">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-800">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      {t('tournaments.columns.match')}
-                    </th>
-                    {Array.from({ length: tournament.players_per_match }, (_, i) => {
-                      const position = i + 1;
-                      const emoji =
-                        position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
-                      const label =
-                        position === 1
-                          ? t('tournaments.detail.winner')
-                          : position === 2
-                            ? t('tournaments.detail.second_place')
-                            : position === 3
-                              ? t('tournaments.detail.third_place')
-                              : position === 4
-                                ? t('tournaments.detail.fourth_place')
-                                : t('tournaments.detail.fifth_place');
-                      return (
-                        <th
-                          key={position}
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                        >
-                          {emoji} {label}
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {selectedRoundResults.results.map((matchData: any, index: number) => (
-                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {matchData.match_number}
-                      </td>
+              {selectedRoundResults.results.some((m: any) => m.isSeries) ? (
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {t('tournaments.columns.match')}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {t('knockout.series.encounter')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {selectedRoundResults.results.map((matchData: any, index: number) => (
+                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 align-top">
+                          {matchData.match_number}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                          {matchData.isSeries ? (
+                            <SeriesMatchGroup
+                              match={matchData.match}
+                              players={matchData.players ?? []}
+                              results={matchData.allResults ?? []}
+                            />
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {matchData.results.map((r: any) => (
+                                <span key={r.player_id} className="font-medium">
+                                  {r.player_name} ({r.points})
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {t('tournaments.columns.match')}
+                      </th>
                       {Array.from({ length: tournament.players_per_match }, (_, i) => {
                         const position = i + 1;
-                        const result = matchData.results.find((r: any) => r.position === position);
+                        const emoji =
+                          position === 1
+                            ? '🥇'
+                            : position === 2
+                              ? '🥈'
+                              : position === 3
+                                ? '🥉'
+                                : '';
+                        const label =
+                          position === 1
+                            ? t('tournaments.detail.winner')
+                            : position === 2
+                              ? t('tournaments.detail.second_place')
+                              : position === 3
+                                ? t('tournaments.detail.third_place')
+                                : position === 4
+                                  ? t('tournaments.detail.fourth_place')
+                                  : t('tournaments.detail.fifth_place');
                         return (
-                          <td
+                          <th
                             key={position}
-                            className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                           >
-                            {result ? (
-                              <div className="space-y-1">
-                                <div className="font-medium flex items-center gap-1">
-                                  {result.player_name}
-                                  {matchData.first_player_id === result.player_id && (
-                                    <span
-                                      className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
-                                      title={t('tournaments.detail.first_player_tooltip')}
-                                    >
-                                      🎲
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
-                                  {result.points} {t('tournaments.detail.pts')}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 dark:text-gray-600">-</span>
-                            )}
-                          </td>
+                            {emoji} {label}
+                          </th>
                         );
                       })}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {selectedRoundResults.results.map((matchData: any, index: number) => (
+                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {matchData.match_number}
+                        </td>
+                        {Array.from({ length: tournament.players_per_match }, (_, i) => {
+                          const position = i + 1;
+                          const result = matchData.results.find(
+                            (r: any) => r.position === position
+                          );
+                          return (
+                            <td
+                              key={position}
+                              className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100"
+                            >
+                              {result ? (
+                                <div className="space-y-1">
+                                  <div className="font-medium flex items-center gap-1">
+                                    {result.player_name}
+                                    {matchData.first_player_id != null &&
+                                      Number(matchData.first_player_id) ===
+                                        Number(result.player_id) && (
+                                        <span
+                                          className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded border border-blue-200 dark:border-blue-700"
+                                          title={t('tournaments.detail.first_player_tooltip')}
+                                        >
+                                          🎲
+                                        </span>
+                                      )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                                    {result.points} {t('tournaments.detail.pts')}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 dark:text-gray-600">-</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
             <div className="flex justify-end pt-4">
               <Button
@@ -1949,6 +2332,24 @@ export default function TournamentDetail() {
                   {t('tournaments.detail.tournament_settings_readonly_notice')}
                 </p>
               )}
+              <Select
+                label={t('tournaments.form.competition_format_label')}
+                value={settingsCompetitionFormat}
+                disabled={Boolean(tournament.knockout_phase_started_at)}
+                onChange={(e) => setSettingsCompetitionFormat(e.target.value as CompetitionFormat)}
+                options={[
+                  { value: 'swiss', label: t('tournaments.form.competition_format.swiss') },
+                  {
+                    value: 'swiss_knockout',
+                    label: t('tournaments.form.competition_format.swiss_knockout'),
+                  },
+                ]}
+                helperText={
+                  settingsCompetitionFormat !== 'swiss_knockout'
+                    ? t('knockout.format_required_hint')
+                    : undefined
+                }
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   {t('tournaments.form.rounds_label')}
@@ -1963,11 +2364,14 @@ export default function TournamentDetail() {
                 />
               </div>
               <TournamentConfigComponent
-                key={`tournament-settings-${tournamentSettingsModalKey}`}
+                key={`tournament-settings-${tournamentSettingsModalKey}-${settingsCompetitionFormat}`}
                 tournamentId={tournament.id}
                 playersPerMatch={tournament.players_per_match}
                 config={prestartConfig}
                 readOnly={tournamentConfigReadOnly}
+                showKnockoutOptions={settingsCompetitionFormat === 'swiss_knockout'}
+                registeredPlayerCount={standings.length}
+                knockoutReadOnly={Boolean(tournament.knockout_phase_started_at)}
                 cancelLabel={tournamentConfigReadOnly ? t('common.close') : undefined}
                 onSave={handlePrestartConfigSave}
                 onCancel={() => {

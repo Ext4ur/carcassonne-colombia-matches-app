@@ -289,43 +289,6 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="card">
-          <h2 className="text-xl font-bold mb-2">{t('settings.quick_defaults_title')}</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            {t('settings.quick_defaults_desc')}
-          </p>
-          <div className="mb-4 w-full max-w-xs">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              {t('settings.quick_defaults_ppm')}
-            </label>
-            <Select
-              value={String(quickDefaultsPpm)}
-              onChange={(e) => setQuickDefaultsPpm(Number(e.target.value))}
-              options={[
-                { value: '2', label: '2' },
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-              ]}
-            />
-          </div>
-          <div className="max-h-[min(70vh,520px)] overflow-y-auto pr-1 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-            <TournamentConfigComponent
-              key={`quick-def-${quickDefaultsPpm}-${quickDefaultsVersion}`}
-              tournamentId={0}
-              playersPerMatch={quickDefaultsPpm}
-              config={quickDefaultsFormConfig}
-              onSave={handleQuickDefaultsSave}
-              onCancel={() => {}}
-              showCancel={false}
-            />
-          </div>
-          <div className="mt-4">
-            <Button variant="secondary" onClick={handleQuickDefaultsReset}>
-              {t('settings.quick_defaults_reset')}
-            </Button>
-          </div>
-        </div>
-
         {/* Synchronization Settings */}
         <div className="card">
           <h2 className="text-xl font-bold mb-4">{t('settings.sync')}</h2>
@@ -421,6 +384,44 @@ export default function Settings() {
           onConfirm={handleImportConfirmed}
           isImporting={isImporting}
         />
+
+        {/* Quick tournament defaults */}
+        <div className="card">
+          <h2 className="text-xl font-bold mb-2">{t('settings.quick_defaults_title')}</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            {t('settings.quick_defaults_desc')}
+          </p>
+          <div className="mb-4 w-full max-w-xs">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              {t('settings.quick_defaults_ppm')}
+            </label>
+            <Select
+              value={String(quickDefaultsPpm)}
+              onChange={(e) => setQuickDefaultsPpm(Number(e.target.value))}
+              options={[
+                { value: '2', label: '2' },
+                { value: '3', label: '3' },
+                { value: '4', label: '4' },
+              ]}
+            />
+          </div>
+          <div className="max-h-[min(70vh,520px)] overflow-y-auto pr-1 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+            <TournamentConfigComponent
+              key={`quick-def-${quickDefaultsPpm}-${quickDefaultsVersion}`}
+              tournamentId={0}
+              playersPerMatch={quickDefaultsPpm}
+              config={quickDefaultsFormConfig}
+              onSave={handleQuickDefaultsSave}
+              onCancel={() => {}}
+              showCancel={false}
+            />
+          </div>
+          <div className="mt-4">
+            <Button variant="secondary" onClick={handleQuickDefaultsReset}>
+              {t('settings.quick_defaults_reset')}
+            </Button>
+          </div>
+        </div>
 
         {/* About */}
         <div className="card">

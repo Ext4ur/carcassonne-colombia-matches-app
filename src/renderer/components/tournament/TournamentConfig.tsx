@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   TournamentConfig,
   TiebreakCriterion,
@@ -14,11 +14,24 @@ import Button from '../common/Button';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 import BuchholzModeHelpModal from './BuchholzModeHelpModal';
+import { KNOCKOUT_SIZE_OPTIONS } from '../../types/knockout';
+import type {
+  KnockoutMatchStarter,
+  KnockoutSeries,
+  KnockoutSeriesStarterMode,
+  KnockoutSize,
+} from '../../types/knockout';
 
 interface TournamentConfigProps {
   tournamentId: number;
   playersPerMatch: number;
   config?: TournamentConfig;
+  /** Muestra top N y best-of para torneos swiss_knockout. */
+  showKnockoutOptions?: boolean;
+  /** Jugadores inscritos: limita opciones de top N al tamaño del plantel. */
+  registeredPlayerCount?: number;
+  /** Congela campos KO tras iniciar fase eliminatoria (suizo puede seguir readOnly por separado). */
+  knockoutReadOnly?: boolean;
   onSave: (
     config: Partial<TournamentConfig> & {
       bye_selection?: 'worst' | 'random' | 'round_robin';
@@ -45,6 +58,9 @@ export default function TournamentConfigComponent({
   showCancel = true,
   readOnly = false,
   cancelLabel,
+  showKnockoutOptions = false,
+  knockoutReadOnly = false,
+  registeredPlayerCount,
 }: TournamentConfigProps) {
   const { t } = useTranslation();
   const [tiebreakCriteria, setTiebreakCriteria] = useState<TiebreakCriterion[]>(
@@ -67,6 +83,38 @@ export default function TournamentConfigComponent({
     (config as TournamentConfig)?.buchholz_bye_mode ?? 'legacy'
   );
   const [isBuchholzHelpOpen, setIsBuchholzHelpOpen] = useState(false);
+  const [knockoutSize, setKnockoutSize] = useState(String(config?.knockout_size ?? 8));
+  const [knockoutSeries, setKnockoutSeries] = useState<KnockoutSeries>(
+    (config?.knockout_series as KnockoutSeries) ?? 'best_of_1'
+  );
+  const [playBronzeMatch, setPlayBronzeMatch] = useState(
+    config?.knockout_play_bronze_match ?? false
+  );
+  const [matchStarter, setMatchStarter] = useState<KnockoutMatchStarter>(
+    config?.knockout_match_starter ?? 'higher_swiss_seed'
+  );
+  const [seriesStarterMode, setSeriesStarterMode] = useState<KnockoutSeriesStarterMode>(
+    config?.knockout_series_starter_mode ??
+      (config?.knockout_series_alternate_starter ? 'previous_loser' : 'alternate')
+  );
+
+  const koFieldsDisabled = knockoutReadOnly;
+  const canSave = !readOnly || !knockoutReadOnly;
+
+  const availableKnockoutSizes = useMemo((): KnockoutSize[] => {
+    if (!registeredPlayerCount || registeredPlayerCount < 2) {
+      return [...KNOCKOUT_SIZE_OPTIONS];
+    }
+    return KNOCKOUT_SIZE_OPTIONS.filter((n) => n <= registeredPlayerCount);
+  }, [registeredPlayerCount]);
+
+  useEffect(() => {
+    if (!showKnockoutOptions || availableKnockoutSizes.length === 0) return;
+    const current = Number(knockoutSize);
+    if (!availableKnockoutSizes.includes(current as KnockoutSize)) {
+      setKnockoutSize(String(availableKnockoutSizes[availableKnockoutSizes.length - 1]));
+    }
+  }, [availableKnockoutSizes, knockoutSize, showKnockoutOptions]);
 
   const handleDragEnd = (result: any) => {
     if (readOnly) return;
@@ -109,6 +157,17 @@ export default function TournamentConfigComponent({
       player_display_mode: playerDisplayMode,
       pairing_algorithm: pairingAlgorithm,
       buchholz_bye_mode: buchholzByeMode,
+      ...(showKnockoutOptions
+        ? {
+            knockout_size: Number(knockoutSize) as KnockoutSize,
+            knockout_seeding: 'standard_bracket' as const,
+            knockout_series: knockoutSeries,
+            knockout_play_bronze_match: playBronzeMatch,
+            knockout_match_starter: matchStarter,
+            knockout_series_starter_mode: seriesStarterMode,
+            knockout_series_alternate_starter: seriesStarterMode === 'previous_loser',
+          }
+        : {}),
     });
   };
 
@@ -329,13 +388,84 @@ export default function TournamentConfigComponent({
         </div>
       </div>
 
+      {showKnockoutOptions && (
+        <div className="space-y-4 border-t border-gray-200 dark:border-gray-600 pt-4">
+          <h3 className="text-lg font-medium">{t('knockout.config_title')}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label={t('knockout.size_label')}
+              value={knockoutSize}
+              disabled={koFieldsDisabled}
+              onChange={(e) => setKnockoutSize(e.target.value)}
+              options={availableKnockoutSizes.map((n) => ({
+                value: String(n),
+                label: t('knockout.size_option', { count: n }),
+              }))}
+              helperText={
+                registeredPlayerCount && registeredPlayerCount >= 2
+                  ? t('knockout.size_player_limit_help', { count: registeredPlayerCount })
+                  : t('knockout.size_fallback_help')
+              }
+            />
+            <Select
+              label={t('knockout.series_label')}
+              value={knockoutSeries}
+              disabled={koFieldsDisabled}
+              onChange={(e) => setKnockoutSeries(e.target.value as KnockoutSeries)}
+              options={[
+                { value: 'best_of_1', label: t('knockout.series.best_of_1') },
+                { value: 'best_of_3', label: t('knockout.series.best_of_3') },
+              ]}
+            />
+            <Select
+              label={t('knockout.bronze_match_label')}
+              value={playBronzeMatch ? 'yes' : 'no'}
+              disabled={koFieldsDisabled}
+              onChange={(e) => setPlayBronzeMatch(e.target.value === 'yes')}
+              options={[
+                { value: 'no', label: t('knockout.option_no') },
+                { value: 'yes', label: t('knockout.option_yes') },
+              ]}
+            />
+            <Select
+              label={t('knockout.match_starter_label')}
+              value={matchStarter}
+              disabled={koFieldsDisabled}
+              onChange={(e) => setMatchStarter(e.target.value as KnockoutMatchStarter)}
+              options={[
+                {
+                  value: 'higher_swiss_seed',
+                  label: t('knockout.match_starter.higher_swiss_seed'),
+                },
+                { value: 'random', label: t('knockout.match_starter.random') },
+              ]}
+            />
+            <Select
+              label={t('knockout.series_starter_mode_label')}
+              value={seriesStarterMode}
+              disabled={koFieldsDisabled || knockoutSeries === 'best_of_1'}
+              onChange={(e) => setSeriesStarterMode(e.target.value as KnockoutSeriesStarterMode)}
+              options={[
+                {
+                  value: 'previous_loser',
+                  label: t('knockout.series_starter_mode.previous_loser'),
+                },
+                { value: 'alternate', label: t('knockout.series_starter_mode.alternate') },
+                { value: 'random', label: t('knockout.series_starter_mode.random') },
+              ]}
+            />
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t('knockout.config_hint')}</p>
+        </div>
+      )}
+
       <div className="flex justify-end space-x-2 pt-4">
         {showCancel && (
           <Button variant="secondary" onClick={onCancel}>
             {secondaryBtnLabel}
           </Button>
         )}
-        {!readOnly && <Button onClick={handleSubmit}>{t('tournaments.config.save_config')}</Button>}
+        {canSave && <Button onClick={handleSubmit}>{t('tournaments.config.save_config')}</Button>}
       </div>
       <BuchholzModeHelpModal
         isOpen={isBuchholzHelpOpen}

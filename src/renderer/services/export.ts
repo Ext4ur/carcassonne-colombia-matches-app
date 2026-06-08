@@ -4,6 +4,8 @@ import { getLocalDateString } from '../utils/dateUtils';
 import { Tournament } from '../types/tournament';
 import { Circuit } from '../types/circuit';
 import { Player } from '../types/player';
+import { City } from '../types/city';
+import { Place } from '../types/place';
 import { collectPlayerIdsFromTournamentSnapshots } from '../utils/exportImportHelpers';
 
 /** Subconjunto de exportación vacío; usar `instanceof ExportSubsetError` en la UI. */
@@ -24,6 +26,7 @@ export function isExportSubsetError(err: unknown): err is ExportSubsetError {
 async function buildExportedTournamentPayload(tournament: Tournament) {
   const config = await DatabaseService.getTournamentConfig(tournament.id!);
   const tournamentPlayers = await DatabaseService.getTournamentPlayers(tournament.id!);
+  const knockoutSeeds = await DatabaseService.getKnockoutSeeds(tournament.id!);
   const rounds = await DatabaseService.getTournamentRounds(tournament.id!);
 
   const roundsWithData = await Promise.all(
@@ -75,8 +78,27 @@ async function buildExportedTournamentPayload(tournament: Tournament) {
     config,
     players: tournamentPlayers,
     rounds: roundsWithData,
+    knockout_seeds: knockoutSeeds.map((s) => ({ player_id: s.player_id, seed: s.seed })),
     ...(standings_snapshot ? { standings_snapshot } : {}),
   };
+}
+
+async function collectReferencedGeo(tournaments: Tournament[]): Promise<{
+  cities: City[];
+  places: Place[];
+}> {
+  const placeIds = new Set<number>();
+  for (const t of tournaments) {
+    if (t.place_id) placeIds.add(t.place_id);
+  }
+  const [allPlaces, allCities] = await Promise.all([
+    DatabaseService.getAllPlaces(),
+    DatabaseService.getAllCities(),
+  ]);
+  const places = allPlaces.filter((p) => p.id != null && placeIds.has(p.id));
+  const cityIds = new Set(places.map((p) => p.city_id));
+  const cities = allCities.filter((c) => c.id != null && cityIds.has(c.id));
+  return { cities, places };
 }
 
 function buildCircuitsPayload(
@@ -110,14 +132,17 @@ export class ExportService {
 
     const exportedIds = new Set(tournaments.map((t) => t.id!).filter(Boolean));
     const circuitsWithData = buildCircuitsPayload(circuits, tournaments, exportedIds);
+    const geo = await collectReferencedGeo(tournaments);
 
     const exportData = {
-      version: '1.1',
+      version: '1.2',
       exportDate: new Date().toISOString(),
       data: {
         players,
         tournaments: tournamentsWithData,
         circuits: circuitsWithData,
+        cities: geo.cities,
+        places: geo.places,
       },
     };
 
@@ -154,14 +179,17 @@ export class ExportService {
     const players: Player[] = allPlayers.filter((p) => p.id != null && neededIds.has(p.id));
 
     const circuitsWithData = buildCircuitsPayload(circuits, allTournamentsSummaries, idSet);
+    const geo = await collectReferencedGeo(selectedSummaries);
 
     const exportData = {
-      version: '1.1',
+      version: '1.2',
       exportDate: new Date().toISOString(),
       data: {
         players,
         tournaments: tournamentsWithData,
         circuits: circuitsWithData,
+        cities: geo.cities,
+        places: geo.places,
       },
     };
 

@@ -376,7 +376,7 @@
       "sync_disabled_msg": "Cloud synchronization disabled"
     },
     "export_btn": "Export data",
-    "export_desc": "Save a JSON backup and choose which tournaments to include (default: all). Only required players and circuits that reference those tournaments are exported.",
+    "export_desc": "Save a JSON backup and choose which tournaments to include (default: all). Only required players, circuits that reference those tournaments, and referenced cities/places are exported.",
     "export_title": "Export data",
     "export_modal_title": "Tournaments to export",
     "export_modal_hint": "Unchecked tournaments are not included.",
@@ -549,7 +549,7 @@
       "prestart_settings_title": "Configuration before first pairings",
       "prestart_settings_hint": "Pairing, tiebreaks, planned rounds, and more",
       "tournament_settings_view_title": "Tournament settings (view only)",
-      "tournament_settings_readonly_notice": "The first round has been created. You can review these options but they cannot be changed.",
+      "tournament_settings_readonly_notice": "Swiss rounds are in progress: pairing and tiebreak settings are read-only. Knockout settings (top N, best-of, starters) stay editable until the bracket starts.",
       "tournament_settings_view_hint": "View pairing, tiebreaks, Buchholz/bye mode, and more (read only)",
       "prestart_config_success": "Settings saved",
       "prestart_config_error": "Could not save settings",
@@ -661,7 +661,12 @@
       "rounds_label": "Number of Rounds (optional, auto-calculated if left blank)",
       "select_circuit": "Select circuit...",
       "select_place": "Select place...",
-      "type_label": "Tournament Type *"
+      "type_label": "Tournament Type *",
+      "competition_format_label": "Competition format",
+      "competition_format": {
+        "swiss": "Swiss only",
+        "swiss_knockout": "Swiss + knockout"
+      }
     },
     "match": {
       "close": "Close",
@@ -832,6 +837,80 @@
       "step1": "Create Tournament - Step 1: Info",
       "step2": "Create Tournament - Step 2: Config",
       "step3": "Create Tournament - Step 3: Registration"
+    }
+  },
+  "knockout": {
+    "start_phase": "Start knockout phase",
+    "started": "Knockout phase started",
+    "start_error": "Could not start knockout phase",
+    "generate_next_round": "Generate next knockout round",
+    "round_created": "Knockout round created",
+    "format_required_hint": "Choose «Swiss + Knockout» to show and configure the bracket (top N, best-of, starters).",
+    "config_title": "Knockout settings",
+    "size_label": "Bracket size (top N)",
+    "size_option": "Top {{count}}",
+    "size_fallback_help": "If there are fewer active players than the configured top N, the bracket shrinks to the largest feasible size (e.g. Top 8 with 6 players → bracket of 4).",
+    "size_player_limit_help": "Options are limited to the {{count}} registered players. If fewer are active when KO starts, the bracket adjusts automatically.",
+    "qualifiers_configured": "Knockout qualifiers: Top {{count}}",
+    "qualifiers_effective": "with {{active}} active players the bracket will be {{count}}",
+    "series_label": "Match format",
+    "series": {
+      "best_of_1": "Single game",
+      "best_of_3": "Best of 3 (same round)",
+      "complete": "Series complete",
+      "in_progress": "Series in progress",
+      "games_detail": "View {{count}} game(s)",
+      "encounter": "Matchup"
+    },
+    "save_config": "Save knockout settings",
+    "config_saved": "Knockout settings saved",
+    "config_hint": "Editable until the knockout phase starts.",
+    "edit_in_settings": "Configure the knockout bracket in",
+    "bronze_match_label": "Third-place match",
+    "match_starter_label": "Starting player (game 1)",
+    "alternate_starter_label": "Alternate starter in series (best-of-3+)",
+    "series_starter_mode_label": "Alternation (games 2+)",
+    "series_starter_mode": {
+      "previous_loser": "Previous loser starts",
+      "alternate": "Switch starter",
+      "random": "Random"
+    },
+    "option_yes": "Yes",
+    "option_no": "No",
+    "match_starter": {
+      "higher_swiss_seed": "Higher Swiss seed",
+      "random": "Random"
+    },
+    "view": {
+      "live": "Current standings",
+      "final": "Final standings",
+      "swiss_frozen": "Swiss (frozen)",
+      "bracket": "Bracket"
+    },
+    "stage": {
+      "round_of_16": "Round of 16",
+      "quarterfinal": "Quarterfinal",
+      "semifinal": "Semifinal",
+      "final": "Final",
+      "third_place": "Third place"
+    },
+    "bracket": {
+      "empty": "No knockout bracket data yet.",
+      "winner": "Winner: {{name}}",
+      "games_played": "{{count}} game(s)",
+      "final_title": "Final"
+    },
+    "match": {
+      "game_n": "Game {{n}} of the matchup"
+    }
+  },
+  "swiss": {
+    "starter": {
+      "config_title": "Starting player (Swiss phase)",
+      "match_label": "Who starts the game",
+      "match_help": "Applied when each Swiss round is generated.",
+      "higher_ranked": "Higher ranked",
+      "random": "Random"
     }
   }
 }

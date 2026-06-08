@@ -539,7 +539,8 @@ export class SwissPairingService {
     }
 
     const numberOfRounds = tournament.number_of_rounds || calculateNumberOfRounds(players.length);
-    if (rounds.length >= numberOfRounds) {
+    const swissRoundCount = rounds.filter((r) => (r.phase ?? 'swiss') === 'swiss').length;
+    if (swissRoundCount >= numberOfRounds) {
       throw new Error(`Se ha alcanzado el número máximo de rondas (${numberOfRounds})`);
     }
 
@@ -792,7 +793,7 @@ export class SwissPairingService {
 
     if (results) {
       for (const matchPlayers of results) {
-        const { startPlayerId, reason } = await this.determineStartPlayer(matchPlayers, startStats);
+        const { startPlayerId, reason } = this.determineStartPlayer(matchPlayers, startStats);
         pairings.push({ players: matchPlayers, startPlayerId, reason });
       }
     } else {
@@ -853,7 +854,7 @@ export class SwissPairingService {
           );
         }
 
-        const { startPlayerId, reason } = await this.determineStartPlayer(matchPlayers, startStats);
+        const { startPlayerId, reason } = this.determineStartPlayer(matchPlayers, startStats);
         pairings.push({ players: matchPlayers, startPlayerId, reason });
       }
     }
@@ -1045,27 +1046,26 @@ export class SwissPairingService {
     return { pointGroups, sortedPoints };
   }
 
-  /** Same rules as automatic round generation: balance starts, then recency, then random tiebreak. */
+  /** Mismas reglas que el emparejamiento automático: equilibrio de inicios, antigüedad y azar. */
   static async pickStartPlayerForPair(
     playerId1: number,
     playerId2: number,
     startStats: Record<number, { totalStarts: number; lastStartRound: number }>
   ): Promise<number> {
-    const { startPlayerId } = await this.determineStartPlayer(
+    const { startPlayerId } = this.determineStartPlayer(
       [{ player_id: playerId1 }, { player_id: playerId2 }],
       startStats
     );
     return startPlayerId;
   }
 
-  private static async determineStartPlayer(
+  private static determineStartPlayer(
     players: { player_id: number; player_name?: string }[],
     stats: { [playerId: number]: { totalStarts: number; lastStartRound: number } }
-  ): Promise<{ startPlayerId: number; reason: 'balance' | 'recency' | 'azar' }> {
+  ): { startPlayerId: number; reason: 'balance' | 'recency' | 'azar' } {
     if (players.length === 0) return { startPlayerId: -1, reason: 'azar' };
     if (players.length === 1) return { startPlayerId: players[0].player_id, reason: 'balance' };
 
-    // 1. Balance: Sort by total starts (ascending)
     const sortedByStarts = [...players].sort((a, b) => {
       const statsA = stats[a.player_id] || { totalStarts: 0, lastStartRound: 0 };
       const statsB = stats[b.player_id] || { totalStarts: 0, lastStartRound: 0 };
@@ -1082,8 +1082,6 @@ export class SwissPairingService {
       return { startPlayerId: candidatesByStarts[0].player_id, reason: 'balance' };
     }
 
-    // 2. Recency: Sort by last start round (ascending -> smaller round number means started longer ago)
-    // 0 means never started
     const sortedByRecency = [...candidatesByStarts].sort((a, b) => {
       const statsA = stats[a.player_id] || { totalStarts: 0, lastStartRound: 0 };
       const statsB = stats[b.player_id] || { totalStarts: 0, lastStartRound: 0 };
@@ -1102,7 +1100,6 @@ export class SwissPairingService {
       return { startPlayerId: candidatesByRecency[0].player_id, reason: 'recency' };
     }
 
-    // 3. Random
     const randomIndex = Math.floor(Math.random() * candidatesByRecency.length);
     return { startPlayerId: candidatesByRecency[randomIndex].player_id, reason: 'azar' };
   }

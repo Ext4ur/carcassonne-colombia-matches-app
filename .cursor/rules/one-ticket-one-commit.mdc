@@ -1,0 +1,13 @@
+---
+description: Un ticket por commit; mensaje con ID AC-XXX
+alwaysApply: true
+---
+
+# Un ticket, un commit
+
+- Cada commit debe corresponder a **un solo ticket** del issue tracker (formato `AC-XXX`).
+- Mensaje de commit: `AC-XXX Verbo breve orientado al porqué` (ej. `AC-063 Auto-vincular clasificatorias al circuito`).
+- No mezclar tickets no relacionados en el mismo commit.
+- Excepción: el usuario pide explícitamente un commit agregado o squash.
+
+No crear commits sin que el usuario lo pida, salvo instrucción explícita en la tarea actual.

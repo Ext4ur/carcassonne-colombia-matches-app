@@ -20,7 +20,6 @@ import { Place } from '../types/place';
 import { formatDateForDisplay } from '../utils/dateUtils';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
-import { TOURNAMENT_LIST_DELETE_SECRET } from '../constants/deleteGuards';
 
 type WizardStep = 'form' | 'config' | 'registration' | null;
 
@@ -41,7 +40,7 @@ export default function Tournaments() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
-  const [deleteKeyInput, setDeleteKeyInput] = useState('');
+  const [deleteNameInput, setDeleteNameInput] = useState('');
   const [mode, setMode] = useState<'quick' | 'advanced'>('quick');
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlaceIds, setSelectedPlaceIds] = useState<number[]>([]);
@@ -189,14 +188,14 @@ export default function Tournaments() {
 
   const handleDelete = (tournament: Tournament) => {
     setDeleteTarget(tournament);
-    setDeleteKeyInput('');
+    setDeleteNameInput('');
     setIsDeleteModalOpen(true);
   };
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget?.id) return;
-    if (deleteKeyInput !== TOURNAMENT_LIST_DELETE_SECRET) {
-      addNotification({ message: t('tournaments.wizard.delete_key_invalid'), type: 'error' });
+    if (deleteNameInput.trim() !== deleteTarget.name) {
+      addNotification({ message: t('tournaments.wizard.delete_name_invalid'), type: 'error' });
       return;
     }
 
@@ -205,7 +204,7 @@ export default function Tournaments() {
       await DatabaseService.deleteTournament(deleteTarget.id);
       setIsDeleteModalOpen(false);
       setDeleteTarget(null);
-      setDeleteKeyInput('');
+      setDeleteNameInput('');
       loadTournaments();
     } catch (error) {
       console.error('Error deleting tournament:', error);
@@ -401,7 +400,7 @@ export default function Tournaments() {
           if (isLoading) return;
           setIsDeleteModalOpen(false);
           setDeleteTarget(null);
-          setDeleteKeyInput('');
+          setDeleteNameInput('');
         }}
         title={t('common.delete')}
         size="sm"
@@ -412,7 +411,7 @@ export default function Tournaments() {
               onClick={() => {
                 setIsDeleteModalOpen(false);
                 setDeleteTarget(null);
-                setDeleteKeyInput('');
+                setDeleteNameInput('');
               }}
               disabled={isLoading}
             >
@@ -431,9 +430,9 @@ export default function Tournaments() {
               : t('common.loading')}
           </p>
           <Input
-            label={t('tournaments.wizard.delete_enter_key')}
-            value={deleteKeyInput}
-            onChange={(e) => setDeleteKeyInput(e.target.value)}
+            label={t('tournaments.wizard.delete_enter_name', { name: deleteTarget?.name ?? '' })}
+            value={deleteNameInput}
+            onChange={(e) => setDeleteNameInput(e.target.value)}
           />
         </div>
       </Modal>

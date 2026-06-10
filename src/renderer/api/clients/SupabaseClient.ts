@@ -15,6 +15,7 @@ import {
  */
 export class SupabaseClient implements IApiClient {
   private _client: SupabaseJSClient | null = null;
+  private _authReady: Promise<void> | null = null;
 
   /** Expuesto para DatabaseService cuando necesita el cliente Supabase directo (ej. .from().select()). */
   get client(): SupabaseJSClient | null {
@@ -26,6 +27,41 @@ export class SupabaseClient implements IApiClient {
       this._client = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
     } else {
       console.warn('Supabase no está configurado:', getConfigError());
+    }
+  }
+
+  private async ensureSyncSession(): Promise<void> {
+    if (!this._client) return;
+    if (this._authReady) {
+      await this._authReady;
+      return;
+    }
+
+    this._authReady = (async () => {
+      const {
+        data: { session },
+      } = await this._client!.auth.getSession();
+      if (session) return;
+
+      const email = import.meta.env.VITE_SUPABASE_SYNC_EMAIL;
+      const password = import.meta.env.VITE_SUPABASE_SYNC_PASSWORD;
+      if (!email || !password) {
+        throw new Error(
+          'Sync remoto requiere VITE_SUPABASE_SYNC_EMAIL y VITE_SUPABASE_SYNC_PASSWORD'
+        );
+      }
+
+      const { error } = await this._client!.auth.signInWithPassword({ email, password });
+      if (error) {
+        throw new Error(`Error de autenticación Supabase: ${error.message}`);
+      }
+    })();
+
+    try {
+      await this._authReady;
+    } catch (err) {
+      this._authReady = null;
+      throw err;
     }
   }
 
@@ -44,6 +80,8 @@ export class SupabaseClient implements IApiClient {
     if (!this._client) {
       throw new Error('Supabase no está configurado. ' + getConfigError());
     }
+
+    await this.ensureSyncSession();
 
     try {
       // Parsear SQL básico para extraer tabla y condiciones
@@ -232,6 +270,8 @@ export class SupabaseClient implements IApiClient {
     if (!this._client) {
       throw new Error('Supabase no está configurado. ' + getConfigError());
     }
+
+    await this.ensureSyncSession();
 
     try {
       const parsed = this.parseMutationQuery(sql, params);

@@ -87,6 +87,7 @@ async function backup() {
 
     fs.writeFileSync(outputPath, JSON.stringify(backupData, null, 2));
     console.log(`\n🎉 Backup saved to: ${outputPath}`);
+    console.warn('⚠️  Este archivo contiene PII (emails, teléfonos). No lo subas a git.');
 }
 
 backup().catch(err => {

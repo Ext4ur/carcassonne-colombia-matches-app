@@ -1,0 +1,13 @@
+---
+description: Traducciones obligatorias es, en y hu
+globs: src/renderer/i18n/**/*
+alwaysApply: false
+---
+
+# i18n
+
+- Idiomas soportados: **es**, **en**, **hu** (`src/renderer/i18n/locales/`).
+- Toda string visible al usuario debe usar `t('...')` con clave en los tres archivos.
+- Tras añadir o cambiar claves: `npm run check-translations`.
+- Default por build: Colombia → `es`, International → `en` (`i18n/config.ts`).
+- No hardcodear textos en español/inglés en componentes salvo datos de usuario.

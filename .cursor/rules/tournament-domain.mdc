@@ -1,0 +1,21 @@
+---
+description: Reglas de dominio torneo; consultar doc local antes de implementar
+alwaysApply: true
+---
+
+# Dominio torneo
+
+Antes de implementar o cambiar reglas de torneo, formatos, KO, circuitos, clasificados o import:
+
+1. Leer **`docs/local/TOURNAMENT_RULES.md`** (gitignored, solo desarrollo local).
+2. Leer **`docs/local/IMPORT_EXPORT.md`** si afecta backup o homologación.
+3. Aplicar regla **ask-before-assuming**: no inferir reglas de negocio no escritas.
+
+Referencias en código:
+
+- Suizo: `src/renderer/services/swiss.ts`
+- KO: `src/renderer/types/knockout.ts`, `src/renderer/services/knockout.ts`
+- Circuitos: `src/renderer/services/circuit.ts`, `circuitScoring.ts`
+- Backlog KO en repo: `docs/KNOCKOUT_BACKLOG.md`
+
+Si `docs/local/` no existe en la máquina, pedir al usuario el borrador o acordar reglas antes de codificar.

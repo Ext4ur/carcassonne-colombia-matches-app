@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { SupabaseClient } from '@api/clients/SupabaseClient';
-import { isSupabaseConfigured, getConfigError } from '@api/clients/supabaseConfig';
+import {
+  isSupabaseConfigured,
+  isRemoteSyncReady,
+  getConfigError,
+} from '@api/clients/supabaseConfig';
 
 /**
  * Utilidad para probar la conexión con Supabase
@@ -11,7 +15,7 @@ export async function testSupabaseConnection(): Promise<{
   details?: any;
 }> {
   // Verificar configuración
-  if (!isSupabaseConfigured()) {
+  if (!isRemoteSyncReady()) {
     return {
       success: false,
       message: 'Supabase no está configurado',

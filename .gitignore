@@ -29,6 +29,11 @@ Thumbs.db
 # Exports
 exports/
 
+# Supabase dumps (may contain PII — never commit)
+supabase_backup*.json
+**/remote_data_export.json
+**/data_export.json
+
 
 
 .env.colombia
@@ -38,3 +43,6 @@ exports/
 supabase/colombia/
 supabase/international/
 PROJECT_CONTEXT.md
+
+# Local-only docs and prompts (never commit)
+docs/local/

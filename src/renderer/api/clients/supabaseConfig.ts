@@ -30,6 +30,12 @@ export const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABL
 /**
  * Verificar si Supabase está configurado y habilitado por el usuario
  */
+export function isSyncAuthConfigured(): boolean {
+  const email = import.meta.env.VITE_SUPABASE_SYNC_EMAIL;
+  const password = import.meta.env.VITE_SUPABASE_SYNC_PASSWORD;
+  return !!(email && password);
+}
+
 export function isSupabaseConfigured(): boolean {
   const hasConfig = !!(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
   if (!hasConfig) return false;
@@ -41,6 +47,11 @@ export function isSupabaseConfigured(): boolean {
   }
 
   return syncEnabled === 'true';
+}
+
+/** Sync remoto requiere URL, publishable key y usuario dedicado de Supabase Auth. */
+export function isRemoteSyncReady(): boolean {
+  return isSupabaseConfigured() && isSyncAuthConfigured();
 }
 
 /**
@@ -55,6 +66,9 @@ export function getConfigError(): string | null {
   }
   if (!SUPABASE_PUBLISHABLE_KEY) {
     return 'VITE_SUPABASE_PUBLISHABLE_KEY no está configurado';
+  }
+  if (!isSyncAuthConfigured()) {
+    return 'Faltan VITE_SUPABASE_SYNC_EMAIL y VITE_SUPABASE_SYNC_PASSWORD para sincronizar';
   }
   return null;
 }

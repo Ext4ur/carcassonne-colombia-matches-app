@@ -1,6 +1,6 @@
 import { SqliteClient } from '../api/clients/SqliteClient';
 import { SupabaseClient } from '../api/clients/SupabaseClient';
-import { isSupabaseConfigured } from '../api/clients/supabaseConfig';
+import { isSupabaseConfigured, isRemoteSyncReady } from '../api/clients/supabaseConfig';
 
 export interface SyncQueueItem {
   id: number;
@@ -118,8 +118,8 @@ export class SyncService {
 
     console.log(`🔄 Sync Service Started (Instance: ${this.instanceId})`);
 
-    if (!isSupabaseConfigured()) {
-      console.log('ℹ️ Sync Service is disabled by configuration or user setting.');
+    if (!isRemoteSyncReady()) {
+      console.log('ℹ️ Sync Service is disabled by configuration, auth, or user setting.');
       return;
     }
 
@@ -189,7 +189,7 @@ export class SyncService {
       return false;
     }
 
-    if (!isSupabaseConfigured()) {
+    if (!isRemoteSyncReady()) {
       this._isOnline = false;
       return false;
     }
@@ -1037,7 +1037,7 @@ export class SyncService {
     return {
       isSyncing: this.isSyncing,
       isOnline: this._isOnline,
-      isConfigured: isSupabaseConfigured(),
+      isConfigured: isRemoteSyncReady(),
     };
   }
 

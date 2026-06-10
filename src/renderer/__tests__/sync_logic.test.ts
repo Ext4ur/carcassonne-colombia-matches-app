@@ -32,6 +32,8 @@ describe('Cloud Sync Logic', () => {
     vi.resetModules();
     vi.stubEnv('VITE_SUPABASE_URL', 'https://test.supabase.co');
     vi.stubEnv('VITE_SUPABASE_PUBLISHABLE_KEY', 'test-publishable-key');
+    vi.stubEnv('VITE_SUPABASE_SYNC_EMAIL', 'sync@test.example');
+    vi.stubEnv('VITE_SUPABASE_SYNC_PASSWORD', 'test-password');
   });
 
   afterEach(() => {
@@ -71,6 +73,23 @@ describe('Cloud Sync Logic', () => {
       localStorageMock.setItem('cloud_sync_enabled', 'false');
       const { isSupabaseConfigured } = await loadSupabaseConfig();
       expect(isSupabaseConfigured()).toBe(false);
+    });
+  });
+
+  describe('isRemoteSyncReady', () => {
+    it('should return false when sync auth env vars are missing', async () => {
+      vi.stubEnv('VITE_SUPABASE_SYNC_EMAIL', '');
+      vi.stubEnv('VITE_SUPABASE_SYNC_PASSWORD', '');
+      vi.stubEnv('VITE_APP_ENV', 'colombia');
+      vi.resetModules();
+      const { isRemoteSyncReady } = await loadSupabaseConfig();
+      expect(isRemoteSyncReady()).toBe(false);
+    });
+
+    it('should return true when Supabase and auth are configured', async () => {
+      vi.stubEnv('VITE_APP_ENV', 'colombia');
+      const { isRemoteSyncReady } = await loadSupabaseConfig();
+      expect(isRemoteSyncReady()).toBe(true);
     });
   });
 

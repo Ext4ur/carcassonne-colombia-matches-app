@@ -1,0 +1,16 @@
+---
+description: Ritual de verificación antes de terminar trabajo de código
+alwaysApply: true
+---
+
+# Ritual del agente
+
+Antes de dar por terminado un cambio de código (commit, PR o entrega al usuario):
+
+1. **`npm run test:run`** — todos los tests deben pasar.
+2. **`npm run typecheck`** — sin errores de TypeScript (renderer + main).
+3. Si se modificaron **`src/renderer/i18n/locales/*.json`** o strings de UI: **`npm run check-translations`**.
+
+Si algún paso falla, corregir antes de commit/PR.
+
+No omitir el ritual por cambios "pequeños" en lógica de dominio, sync o import/export.

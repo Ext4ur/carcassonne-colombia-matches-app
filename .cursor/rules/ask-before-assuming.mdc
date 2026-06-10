@@ -1,0 +1,15 @@
+---
+description: No asumir requisitos de negocio; preguntar al usuario antes de diseñar o implementar
+alwaysApply: true
+---
+
+# Preguntar antes de asumir
+
+Antes de diseñar o implementar comportamiento de negocio, reglas de torneo, UX o datos:
+
+1. **No inferir** requisitos no escritos explícitamente.
+2. **Preguntar** al usuario cuando haya ambigüedad, opciones válidas o impacto en datos existentes.
+3. **Confirmar** edge cases (empates, fases, configuración, migraciones) si no están en el plan o ticket actual.
+4. **Documentar** en el plan o en comentarios mínimos solo lo acordado; no ampliar alcance por iniciativa propia.
+
+Excepciones: convenciones ya fijadas en el repo (lint, i18n, patrones de código) y bugs con causa evidente en el código.

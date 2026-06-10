@@ -126,6 +126,7 @@ vi.mock('../api/clients/SupabaseClient', () => ({
 
 vi.mock('../api/clients/supabaseConfig', () => ({
   isSupabaseConfigured: vi.fn().mockReturnValue(true),
+  isRemoteSyncReady: vi.fn().mockReturnValue(true),
   getConfigError: vi.fn(),
 }));
 

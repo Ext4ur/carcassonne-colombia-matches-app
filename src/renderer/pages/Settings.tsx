@@ -12,6 +12,7 @@ import DatabaseStatus from '../components/common/DatabaseStatus';
 import { useTranslation } from 'react-i18next';
 import Select from '../components/common/Select';
 import githubIcon from '../assets/icons/github.svg';
+import bgaIcon from '../assets/icons/bga_icon.png';
 import TournamentConfigComponent from '../components/tournament/TournamentConfig';
 import { TournamentConfig, normalizeBuchholzByeMode } from '../types/tournament';
 import { getDefaultScoringSystem } from '../utils/scoring';
@@ -458,10 +459,10 @@ export default function Settings() {
                 className="flex items-center text-sm text-primary-600 dark:text-primary-400 hover:underline"
               >
                 <img
-                  src="http://www.boardgamearena.com/favicon.ico"
+                  src={bgaIcon}
                   alt=""
                   aria-hidden
-                  className="w-5 h-5 mr-2 rounded-sm"
+                  className="w-5 h-5 mr-2 rounded-sm object-contain"
                 />
                 <span>{t('settings.links.board_game_arena')}</span>
               </a>

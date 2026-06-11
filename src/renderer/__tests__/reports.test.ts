@@ -181,4 +181,32 @@ describe('ReportService', () => {
       expect(html).toContain('<!DOCTYPE html>');
     });
   });
+
+  describe('generateTournamentImage', () => {
+    it('generates shareable HTML with podium and top players', async () => {
+      const tId = 1;
+      (DatabaseService.getTournamentById as any).mockResolvedValue({
+        id: tId,
+        name: 'Image Cup',
+        date: '2024-06-01',
+      });
+      (DatabaseService.getTournamentConfig as any).mockResolvedValue({
+        tiebreak_criteria: [{ id: 'wins', enabled: true }],
+      });
+      (SwissPairingService.calculateStandings as any).mockResolvedValue([
+        { player_name: 'First', total_points: 5, wins: 5, tiebreak_values: {} },
+        { player_name: 'Second', total_points: 4, wins: 4, tiebreak_values: {} },
+        { player_name: 'Third', total_points: 3, wins: 3, tiebreak_values: {} },
+      ]);
+
+      const html = await ReportService.generateTournamentImage(tId);
+
+      expect(html).toContain('Image Cup');
+      expect(html).toContain('First');
+      expect(html).toContain('Second');
+      expect(html).toContain('Third');
+      expect(html).toContain('podium');
+      expect(html).toContain('<!DOCTYPE html>');
+    });
+  });
 });

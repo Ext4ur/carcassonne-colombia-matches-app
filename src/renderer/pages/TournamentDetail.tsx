@@ -18,6 +18,7 @@ import {
   type CompetitionFormat,
 } from '../types/knockout';
 import { ReportService } from '../services/reports';
+import { htmlDocumentToPngDataUrl } from '../utils/htmlToPng';
 import {
   Tournament,
   Round,
@@ -904,6 +905,40 @@ export default function TournamentDetail() {
     }
   };
 
+  const handleExportImage = async () => {
+    if (!tournament?.id) return;
+
+    try {
+      setIsLoading(true);
+      const html = await ReportService.generateTournamentImage(tournament.id);
+      const dataUrl = await htmlDocumentToPngDataUrl(html);
+      const filename = `${tournament.name.replace(/[^a-z0-9]/gi, '_')}_podio.png`;
+      const result = await window.electronAPI.saveFile(dataUrl, filename, 'image');
+      if (result.success) {
+        addNotification({
+          message: t('tournaments.reports.export_image_success'),
+          type: 'success',
+        });
+      } else if (!result.canceled) {
+        addNotification({
+          message:
+            t('tournaments.reports.export_image_error') +
+            ': ' +
+            (result.error || t('common.error_unknown')),
+          type: 'error',
+        });
+      }
+    } catch (error) {
+      console.error('Error exporting tournament image:', error);
+      addNotification({
+        message: t('tournaments.reports.export_image_error'),
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleGenerateReport = async (
     type: 'excel' | 'csv-standings' | 'csv-matches' | 'csv-stats'
   ) => {
@@ -1635,6 +1670,19 @@ export default function TournamentDetail() {
                 >
                   {t('tournaments.reports.export_csv_stats')}
                 </button>
+                {tournament.type === 'qualifier' && (
+                  <>
+                    <div className="px-4 py-2 text-xs text-gray-400 font-semibold uppercase tracking-wider border-t border-gray-200 dark:border-gray-700">
+                      {t('tournaments.reports.export_image_title')}
+                    </div>
+                    <button
+                      onClick={handleExportImage}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 font-semibold"
+                    >
+                      {t('tournaments.reports.export_image')}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

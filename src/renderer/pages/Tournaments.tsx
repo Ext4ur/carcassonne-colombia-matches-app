@@ -174,6 +174,7 @@ export default function Tournaments() {
       setConfigDraft(null);
       setRegistrationPlayers([]);
       loadTournaments();
+      navigate(`/tournament/${tournamentId}`);
     } catch (error) {
       console.error('Error al crear el torneo:', error);
       addNotification({ message: t('tournaments.wizard.create_error'), type: 'error' });

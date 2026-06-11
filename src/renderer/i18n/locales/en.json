@@ -644,6 +644,7 @@
       "position_n_short": "Position #{{n}}"
     },
     "empty_msg": "No tournaments registered",
+    "export_btn": "Export",
     "filter_place": "Filter by place",
     "form": {
       "circuit_label": "Circuit *",

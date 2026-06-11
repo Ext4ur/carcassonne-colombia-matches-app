@@ -644,6 +644,7 @@
       "position_n_short": "{{n}}. helyezés"
     },
     "empty_msg": "Nincsenek regisztrált versenyek",
+    "export_btn": "Exportálás",
     "filter_place": "Szűrés helyszín szerint",
     "form": {
       "circuit_label": "Sorozat *",

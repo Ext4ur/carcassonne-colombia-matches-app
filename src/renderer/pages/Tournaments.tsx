@@ -19,6 +19,7 @@ import { Column } from '../components/common/Table';
 import { Place } from '../types/place';
 import { formatDateForDisplay } from '../utils/dateUtils';
 import { useNotifications } from '../contexts/NotificationContext';
+import { ExportService, isExportSubsetError } from '../services/export';
 import { useTranslation } from 'react-i18next';
 
 type WizardStep = 'form' | 'config' | 'registration' | null;
@@ -45,6 +46,7 @@ export default function Tournaments() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlaceIds, setSelectedPlaceIds] = useState<number[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [exportingTournamentId, setExportingTournamentId] = useState<number | null>(null);
   const formRef = useRef<TournamentFormRef>(null);
 
   const loadTournaments = useCallback(async () => {
@@ -221,6 +223,26 @@ export default function Tournaments() {
     setIsDeleteModalOpen(true);
   };
 
+  const handleExportTournament = async (tournament: Tournament) => {
+    if (!tournament.id) return;
+    try {
+      setExportingTournamentId(tournament.id);
+      await ExportService.exportSubset([tournament.id]);
+      addNotification({
+        message: t('settings.errors.export_success'),
+        type: 'success',
+      });
+    } catch (error) {
+      console.error('Error exporting tournament:', error);
+      const msg = isExportSubsetError(error)
+        ? t('settings.export_no_selection')
+        : t('settings.errors.export_error');
+      addNotification({ message: msg, type: 'error' });
+    } finally {
+      setExportingTournamentId(null);
+    }
+  };
+
   const handleConfirmDelete = async () => {
     if (!deleteTarget?.id) return;
     if (deleteNameInput.trim() !== deleteTarget.name) {
@@ -286,6 +308,15 @@ export default function Tournaments() {
         <div className="flex space-x-2">
           <Button variant="primary" size="sm" onClick={() => handleViewTournament(tournament)}>
             {t('common.view')}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleExportTournament(tournament)}
+            isLoading={exportingTournamentId === tournament.id}
+            disabled={exportingTournamentId != null && exportingTournamentId !== tournament.id}
+          >
+            {t('tournaments.export_btn')}
           </Button>
           <Button variant="danger" size="sm" onClick={() => handleDelete(tournament)}>
             {t('common.delete')}

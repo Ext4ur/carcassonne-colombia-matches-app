@@ -644,6 +644,7 @@
       "position_n_short": "{{n}}° Lugar"
     },
     "empty_msg": "No hay torneos registrados",
+    "export_btn": "Exportar",
     "filter_place": "Filtrar por lugar",
     "form": {
       "circuit_label": "Circuito *",

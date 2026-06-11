@@ -129,45 +129,58 @@ export default function Tournaments() {
     setWizardStep('registration');
   };
 
-  const handleRegistrationComplete = async (numberOfRounds: number) => {
+  const createTournamentFromDraft = async (numberOfRounds: number): Promise<number | null> => {
     if (!tournamentDraft?.name || !tournamentDraft?.type || !tournamentDraft?.date) {
       addNotification({ message: t('tournaments.wizard.missing_data'), type: 'error' });
-      return;
+      return null;
     }
+    const tournamentId = await DatabaseService.createTournament({
+      name: tournamentDraft.name,
+      type: tournamentDraft.type,
+      circuit_id: tournamentDraft.circuit_id,
+      date: tournamentDraft.date,
+      players_per_match: tournamentDraft.players_per_match || 2,
+      number_of_rounds: numberOfRounds,
+      place_id: tournamentDraft.place_id,
+      competition_format: tournamentDraft.competition_format || 'swiss',
+    });
+    if (configDraft) {
+      await DatabaseService.createTournamentConfig({
+        tournament_id: tournamentId,
+        avoid_rematches: configDraft.avoid_rematches ?? true,
+        tiebreak_criteria: configDraft.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
+        scoring_system:
+          configDraft.scoring_system ||
+          getDefaultScoringSystem(tournamentDraft.players_per_match || 2),
+        bye_selection: configDraft.bye_selection || 'worst',
+        player_display_mode: configDraft.player_display_mode ?? 'per_player',
+        pairing_algorithm: configDraft.pairing_algorithm ?? 'greedy',
+        buchholz_bye_mode: configDraft.buchholz_bye_mode ?? 'legacy',
+        knockout_size: configDraft.knockout_size ?? 8,
+        knockout_seeding: configDraft.knockout_seeding ?? 'standard_bracket',
+        knockout_series: configDraft.knockout_series ?? 'best_of_1',
+      });
+    }
+    for (const player of registrationPlayers) {
+      if (player.id) {
+        await DatabaseService.registerPlayerToTournament(tournamentId, player.id);
+      }
+    }
+    return tournamentId;
+  };
+
+  const resetWizardForNewTournament = () => {
+    setTournamentDraft(null);
+    setConfigDraft(null);
+    setRegistrationPlayers([]);
+    setWizardStep('form');
+  };
+
+  const handleRegistrationComplete = async (numberOfRounds: number) => {
     try {
       setIsLoading(true);
-      const tournamentId = await DatabaseService.createTournament({
-        name: tournamentDraft.name,
-        type: tournamentDraft.type,
-        circuit_id: tournamentDraft.circuit_id,
-        date: tournamentDraft.date,
-        players_per_match: tournamentDraft.players_per_match || 2,
-        number_of_rounds: numberOfRounds,
-        place_id: tournamentDraft.place_id,
-        competition_format: tournamentDraft.competition_format || 'swiss',
-      });
-      if (configDraft) {
-        await DatabaseService.createTournamentConfig({
-          tournament_id: tournamentId,
-          avoid_rematches: configDraft.avoid_rematches ?? true,
-          tiebreak_criteria: configDraft.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
-          scoring_system:
-            configDraft.scoring_system ||
-            getDefaultScoringSystem(tournamentDraft.players_per_match || 2),
-          bye_selection: configDraft.bye_selection || 'worst',
-          player_display_mode: configDraft.player_display_mode ?? 'per_player',
-          pairing_algorithm: configDraft.pairing_algorithm ?? 'greedy',
-          buchholz_bye_mode: configDraft.buchholz_bye_mode ?? 'legacy',
-          knockout_size: configDraft.knockout_size ?? 8,
-          knockout_seeding: configDraft.knockout_seeding ?? 'standard_bracket',
-          knockout_series: configDraft.knockout_series ?? 'best_of_1',
-        });
-      }
-      for (const player of registrationPlayers) {
-        if (player.id) {
-          await DatabaseService.registerPlayerToTournament(tournamentId, player.id);
-        }
-      }
+      const tournamentId = await createTournamentFromDraft(numberOfRounds);
+      if (tournamentId == null) return;
       setIsModalOpen(false);
       setWizardStep(null);
       setTournamentDraft(null);
@@ -175,6 +188,21 @@ export default function Tournaments() {
       setRegistrationPlayers([]);
       loadTournaments();
       navigate(`/tournament/${tournamentId}`);
+    } catch (error) {
+      console.error('Error al crear el torneo:', error);
+      addNotification({ message: t('tournaments.wizard.create_error'), type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegistrationCompleteAndAnother = async (numberOfRounds: number) => {
+    try {
+      setIsLoading(true);
+      const tournamentId = await createTournamentFromDraft(numberOfRounds);
+      if (tournamentId == null) return;
+      loadTournaments();
+      resetWizardForNewTournament();
     } catch (error) {
       console.error('Error al crear el torneo:', error);
       addNotification({ message: t('tournaments.wizard.create_error'), type: 'error' });
@@ -389,6 +417,9 @@ export default function Tournaments() {
             draftPlayers={registrationPlayers}
             onDraftPlayersChange={setRegistrationPlayers}
             onComplete={handleRegistrationComplete}
+            onCompleteAndAnother={
+              mode === 'quick' ? handleRegistrationCompleteAndAnother : undefined
+            }
             onCancel={handleCancelWizard}
             mode={mode}
           />

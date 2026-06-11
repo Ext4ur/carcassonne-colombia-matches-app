@@ -12,10 +12,14 @@ import { calculateNumberOfRounds } from '../../utils/tournament';
 import RoundsConfirmationModal from './RoundsConfirmationModal';
 import { useTranslation } from 'react-i18next';
 
+type RoundsConfirmAction = 'complete' | 'completeAndAnother';
+
 interface PlayerRegistrationProps {
   /** When null, draft mode: players come from draftPlayers/onDraftPlayersChange (no DB writes until parent creates tournament). */
   tournamentId: number | null;
   onComplete: (numberOfRounds: number) => void;
+  /** Quick wizard: create tournament and reset form for another without navigating away. */
+  onCompleteAndAnother?: (numberOfRounds: number) => void;
   onCancel?: () => void;
   mode?: 'quick' | 'advanced';
   /** Required when tournamentId is null (draft mode). */
@@ -26,6 +30,7 @@ interface PlayerRegistrationProps {
 export default function PlayerRegistration({
   tournamentId,
   onComplete,
+  onCompleteAndAnother,
   onCancel,
   mode = 'quick',
   draftPlayers = [],
@@ -36,6 +41,7 @@ export default function PlayerRegistration({
   const [isLoading, setIsLoading] = useState(false);
   const [isNewPlayerModalOpen, setIsNewPlayerModalOpen] = useState(false);
   const [isRoundsModalOpen, setIsRoundsModalOpen] = useState(false);
+  const [roundsConfirmAction, setRoundsConfirmAction] = useState<RoundsConfirmAction>('complete');
   const [calculatedRounds, setCalculatedRounds] = useState(1);
   const [newPlayerData, setNewPlayerData] = useState({
     name: '',
@@ -234,8 +240,23 @@ export default function PlayerRegistration({
             {t('common.cancel')}
           </Button>
         )}
+        {onCompleteAndAnother && (
+          <Button
+            onClick={() => {
+              setRoundsConfirmAction('completeAndAnother');
+              setIsRoundsModalOpen(true);
+            }}
+            variant="secondary"
+            disabled={players.length < 2}
+          >
+            {t('tournaments.wizard.create_and_another')}
+          </Button>
+        )}
         <Button
-          onClick={() => setIsRoundsModalOpen(true)}
+          onClick={() => {
+            setRoundsConfirmAction('complete');
+            setIsRoundsModalOpen(true);
+          }}
           variant="primary"
           disabled={players.length < 2}
         >
@@ -248,7 +269,11 @@ export default function PlayerRegistration({
         onClose={() => setIsRoundsModalOpen(false)}
         onConfirm={(numberOfRounds) => {
           setIsRoundsModalOpen(false);
-          onComplete(numberOfRounds);
+          if (roundsConfirmAction === 'completeAndAnother' && onCompleteAndAnother) {
+            onCompleteAndAnother(numberOfRounds);
+          } else {
+            onComplete(numberOfRounds);
+          }
         }}
         numPlayers={players.length}
         calculatedRounds={calculatedRounds}

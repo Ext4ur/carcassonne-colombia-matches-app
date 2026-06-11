@@ -831,6 +831,7 @@
     "wizard": {
       "cancel_confirm": "Mégsem? A verseny nem jön létre, és az űrlap adatai elvesznek.",
       "cancel_confirm_edit": "Szerkesztés visszavonása? A módosítások elvesznek.",
+      "create_and_another": "Hozzáadás és új létrehozása",
       "create_error": "Hiba a verseny létrehozásakor",
       "created": "Verseny sikeresen létrehozva",
       "delete_confirm": "Biztosan törölni szeretné a \\\"{{name}}\\\" versenyt?",

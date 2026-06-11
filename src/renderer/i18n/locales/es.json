@@ -831,6 +831,7 @@
     "wizard": {
       "cancel_confirm": "¿Cancelar? No se creará el torneo y se perderán los datos del formulario.",
       "cancel_confirm_edit": "¿Cancelar edición? Se perderán los cambios.",
+      "create_and_another": "Agregar y crear otro",
       "create_error": "Error al crear el torneo",
       "created": "Torneo creado exitosamente",
       "delete_confirm": "¿Estás seguro de eliminar el torneo \\\"{{name}}\\\"?",

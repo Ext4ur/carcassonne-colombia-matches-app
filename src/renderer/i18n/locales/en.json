@@ -831,6 +831,7 @@
     "wizard": {
       "cancel_confirm": "Cancel? The tournament won't be created and form data will be lost.",
       "cancel_confirm_edit": "Cancel editing? Changes will be lost.",
+      "create_and_another": "Add and create another",
       "create_error": "Error creating tournament",
       "created": "Tournament created successfully",
       "delete_confirm": "Are you sure you want to delete the tournament \\\"{{name}}\\\"?",

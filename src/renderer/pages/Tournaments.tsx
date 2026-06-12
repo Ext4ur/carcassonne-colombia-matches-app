@@ -9,6 +9,11 @@ import { DEFAULT_TIEBREAK_CRITERIA } from '../utils/tiebreak';
 import { buildQuickConfigDraft } from '../utils/quickTournamentDefaults';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
+import IconActionButton, {
+  EyeIcon,
+  ExportIcon,
+  TrashIcon,
+} from '../components/common/IconActionButton';
 import Modal from '../components/common/Modal';
 import TournamentForm, { TournamentFormRef } from '../components/tournament/TournamentForm';
 import TournamentConfigComponent from '../components/tournament/TournamentConfig';
@@ -305,22 +310,28 @@ export default function Tournaments() {
       key: 'actions',
       header: t('common.actions'),
       render: (tournament) => (
-        <div className="flex space-x-2">
-          <Button variant="primary" size="sm" onClick={() => handleViewTournament(tournament)}>
-            {t('common.view')}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
+        <div className="flex items-center gap-1">
+          <IconActionButton
+            label={t('common.view')}
+            onClick={() => handleViewTournament(tournament)}
+          >
+            <EyeIcon />
+          </IconActionButton>
+          <IconActionButton
+            label={t('tournaments.export_btn')}
             onClick={() => handleExportTournament(tournament)}
             isLoading={exportingTournamentId === tournament.id}
             disabled={exportingTournamentId != null && exportingTournamentId !== tournament.id}
           >
-            {t('tournaments.export_btn')}
-          </Button>
-          <Button variant="danger" size="sm" onClick={() => handleDelete(tournament)}>
-            {t('common.delete')}
-          </Button>
+            <ExportIcon />
+          </IconActionButton>
+          <IconActionButton
+            label={t('common.delete')}
+            onClick={() => handleDelete(tournament)}
+            variant="danger"
+          >
+            <TrashIcon />
+          </IconActionButton>
         </div>
       ),
     },

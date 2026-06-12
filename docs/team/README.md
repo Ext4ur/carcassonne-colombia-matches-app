@@ -6,6 +6,7 @@
 |-----------|-----------|-----------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Desarrolladores | Stack, procesos Electron, dominio, sync, builds, CI, estructura de carpetas |
 | [GUIA_USO.md](./GUIA_USO.md) | Organizadores | Flujo paso a paso: jugadores, lugares, torneos, rondas, reportes, respaldos |
+| [SMOKE_TESTS_KO.md](./SMOKE_TESTS_KO.md) | QA / desarrollo | Checklist manual de smoke tests para fase eliminatoria |
 
 ## Documentación complementaria en el repo
 

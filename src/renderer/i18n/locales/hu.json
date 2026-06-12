@@ -770,6 +770,7 @@
       "export_image": "PNG kép — Dómsor (közösségi)",
       "export_image_error": "Hiba a kép exportálásakor",
       "export_image_ko_bracket": "PNG kép — Kieséses ábra",
+      "export_image_ko_bracket_disabled": "Kieséses ábra — előbb indítsd el a kieséses szakaszt",
       "export_image_ko_bracket_title": "Kieséses ábra",
       "export_image_standings": "PNG kép — Teljes ranglista",
       "export_image_success": "Kép sikeresen exportálva",

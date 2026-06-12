@@ -770,6 +770,7 @@
       "export_image": "Imagen PNG — Podio (redes)",
       "export_image_error": "Error al exportar la imagen",
       "export_image_ko_bracket": "Imagen PNG — Cuadro eliminatorio",
+      "export_image_ko_bracket_disabled": "Cuadro KO — inicia la fase eliminatoria primero",
       "export_image_ko_bracket_title": "Cuadro eliminatorio",
       "export_image_standings": "Imagen PNG — Clasificación completa",
       "export_image_success": "Imagen exportada correctamente",

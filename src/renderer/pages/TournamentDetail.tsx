@@ -7,6 +7,7 @@ import { RoundGenerationService, KnockoutPairingService } from '../services/roun
 import {
   countSwissRounds,
   computeSeriesState,
+  canExportKnockoutBracket,
   isKnockoutPhaseActive,
   isSeriesMatch,
   resolveGameStarter,
@@ -59,6 +60,7 @@ import { getDefaultScoringSystem } from '../utils/scoring';
 import { useTranslation } from 'react-i18next';
 import { knockoutStageI18nKey } from '../types/knockout';
 import type { KnockoutSeries } from '../types/knockout';
+import { formatUserError } from '../utils/formatUserError';
 
 export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -132,7 +134,7 @@ export default function TournamentDetail() {
     } catch (error) {
       console.error('Error loading tournament:', error);
       addNotification({
-        message: t('tournaments.detail.load_error'),
+        message: formatUserError(error, t('tournaments.detail.load_error')),
         type: 'error',
       });
     } finally {
@@ -215,7 +217,7 @@ export default function TournamentDetail() {
         if (seq !== standingsLoadSeqRef.current) return;
         console.error('Error loading standings:', error);
         addNotification({
-          message: error?.message || t('tournaments.detail.stats_error'),
+          message: formatUserError(error, t('tournaments.detail.stats_error')),
           type: 'error',
         });
         setStandings([]);
@@ -329,7 +331,7 @@ export default function TournamentDetail() {
     } catch (error: any) {
       console.error('Error generating round:', error);
       addNotification({
-        message: error.message || t('tournaments.detail.round_gen_error'),
+        message: formatUserError(error, t('tournaments.detail.round_gen_error')),
         type: 'error',
         duration: 5000,
       });
@@ -358,7 +360,7 @@ export default function TournamentDetail() {
     } catch (error: any) {
       console.error('Error finalizing tournament:', error);
       addNotification({
-        message: t('tournaments.detail.finalize_error'),
+        message: formatUserError(error, t('tournaments.detail.finalize_error')),
         type: 'error',
       });
     } finally {
@@ -382,7 +384,7 @@ export default function TournamentDetail() {
       addNotification({ message: t('knockout.started'), type: 'success' });
     } catch (error: any) {
       addNotification({
-        message: error.message || t('knockout.start_error'),
+        message: formatUserError(error, t('knockout.start_error')),
         type: 'error',
       });
     } finally {
@@ -425,10 +427,10 @@ export default function TournamentDetail() {
   }, [tournament?.id, rounds, t]);
 
   useEffect(() => {
-    if (tournament?.knockout_phase_started_at) {
+    if (tournament && isKnockoutPhaseActive(tournament, rounds)) {
       loadBracket();
     }
-  }, [tournament?.knockout_phase_started_at, rounds, loadBracket]);
+  }, [tournament, rounds, loadBracket]);
 
   const knockoutQualifierInfo = useMemo(() => {
     if (tournament?.competition_format !== 'swiss_knockout') return null;
@@ -485,7 +487,7 @@ export default function TournamentDetail() {
         addNotification({ message: t('knockout.round_created'), type: 'success' });
       } catch (error: any) {
         addNotification({
-          message: error.message || t('tournaments.detail.round_gen_error'),
+          message: formatUserError(error, t('tournaments.detail.round_gen_error')),
           type: 'error',
         });
       } finally {
@@ -502,7 +504,7 @@ export default function TournamentDetail() {
     } catch (error: any) {
       console.error('Error generating preview:', error);
       addNotification({
-        message: error.message || t('tournaments.detail.preview_error'),
+        message: formatUserError(error, t('tournaments.detail.preview_error')),
         type: 'error',
       });
     } finally {
@@ -541,7 +543,7 @@ export default function TournamentDetail() {
     } catch (error: any) {
       console.error('Error generating round:', error);
       addNotification({
-        message: error.message || t('tournaments.detail.round_gen_error'),
+        message: formatUserError(error, t('tournaments.detail.round_gen_error')),
         type: 'error',
       });
     } finally {
@@ -594,7 +596,7 @@ export default function TournamentDetail() {
     } catch (error: any) {
       console.error('Error generating manual round:', error);
       addNotification({
-        message: error.message || t('tournaments.detail.manual_round_error'),
+        message: formatUserError(error, t('tournaments.detail.manual_round_error')),
         type: 'error',
       });
     } finally {
@@ -658,7 +660,7 @@ export default function TournamentDetail() {
     } catch (error) {
       console.error('Error loading round results:', error);
       addNotification({
-        message: t('tournaments.detail.round_results_error'),
+        message: formatUserError(error, t('tournaments.detail.round_results_error')),
         type: 'error',
       });
     } finally {
@@ -816,7 +818,7 @@ export default function TournamentDetail() {
     } catch (e) {
       console.error(e);
       addNotification({
-        message: t('tournaments.detail.prestart_config_error'),
+        message: formatUserError(e, t('tournaments.detail.prestart_config_error')),
         type: 'error',
       });
     } finally {
@@ -854,7 +856,7 @@ export default function TournamentDetail() {
     } catch (e) {
       console.error(e);
       addNotification({
-        message: t('tournaments.detail.delete_last_round_error_generic'),
+        message: formatUserError(e, t('tournaments.detail.delete_last_round_error_generic')),
         type: 'error',
       });
     } finally {
@@ -899,7 +901,10 @@ export default function TournamentDetail() {
       await loadTournament();
     } catch (error) {
       console.error('Error updating tournament:', error);
-      addNotification({ message: t('tournaments.detail.update_error'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('tournaments.detail.update_error')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -930,7 +935,7 @@ export default function TournamentDetail() {
     } catch (error) {
       console.error('Error exporting tournament image:', error);
       addNotification({
-        message: t('tournaments.reports.export_image_error'),
+        message: formatUserError(error, t('tournaments.reports.export_image_error')),
         type: 'error',
       });
     } finally {
@@ -956,9 +961,11 @@ export default function TournamentDetail() {
     await saveTournamentPng(html, 'cuadro_ko');
   };
 
+  const isSwissKnockoutFormat = tournament?.competition_format === 'swiss_knockout';
   const showKnockoutBracketExport =
-    tournament?.competition_format === 'swiss_knockout' &&
-    Boolean(tournament.knockout_phase_started_at || bracketColumns.length > 0);
+    tournament != null && canExportKnockoutBracket(tournament, rounds);
+  const showKnockoutBracketExportDisabled =
+    isSwissKnockoutFormat && !showKnockoutBracketExport && standings.length > 0;
 
   const handleGenerateReport = async (
     type: 'excel' | 'csv-standings' | 'csv-matches' | 'csv-stats'
@@ -1002,7 +1009,7 @@ export default function TournamentDetail() {
     } catch (error) {
       console.error('Error generating report:', error);
       addNotification({
-        message: t('reports.export_error'),
+        message: formatUserError(error, t('reports.export_error')),
         type: 'error',
       });
     } finally {
@@ -1093,7 +1100,7 @@ export default function TournamentDetail() {
       } catch (error) {
         console.error('Error removing player:', error);
         addNotification({
-          message: t('tournaments.registration.remove_error'),
+          message: formatUserError(error, t('tournaments.registration.remove_error')),
           type: 'error',
         });
       } finally {
@@ -1124,7 +1131,7 @@ export default function TournamentDetail() {
       } catch (error) {
         console.error('Error dropping player:', error);
         addNotification({
-          message: t('tournaments.detail.dropout_error'),
+          message: formatUserError(error, t('tournaments.detail.dropout_error')),
           type: 'error',
         });
       } finally {
@@ -1156,7 +1163,7 @@ export default function TournamentDetail() {
     } catch (error) {
       console.error('Error restoring player:', error);
       addNotification({
-        message: t('tournaments.registration.reactivate_error'),
+        message: formatUserError(error, t('tournaments.registration.reactivate_error')),
         type: 'error',
       });
     } finally {
@@ -1718,6 +1725,14 @@ export default function TournamentDetail() {
                         {t('tournaments.reports.export_image_ko_bracket')}
                       </button>
                     )}
+                    {showKnockoutBracketExportDisabled && (
+                      <div
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                        title={t('tournaments.reports.export_image_ko_bracket_disabled')}
+                      >
+                        {t('tournaments.reports.export_image_ko_bracket_disabled')}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1895,7 +1910,16 @@ export default function TournamentDetail() {
             </p>
           )}
         {standingsView === 'bracket' ? (
-          <KnockoutBracket columns={bracketColumns} />
+          <div>
+            {showKnockoutBracketExport && (
+              <div className="mb-4 flex justify-end">
+                <Button size="sm" variant="secondary" onClick={handleExportKnockoutBracketImage}>
+                  {t('tournaments.reports.export_image_ko_bracket')}
+                </Button>
+              </div>
+            )}
+            <KnockoutBracket columns={bracketColumns} />
+          </div>
         ) : isLoadingStandings && standingsForTable.length === 0 ? (
           <div className="p-6 text-center text-gray-600 dark:text-gray-400">
             {t('common.loading')}

@@ -770,6 +770,7 @@
       "export_image": "PNG image — Podium (social)",
       "export_image_error": "Error exporting image",
       "export_image_ko_bracket": "PNG image — Knockout bracket",
+      "export_image_ko_bracket_disabled": "Knockout bracket — start knockout phase first",
       "export_image_ko_bracket_title": "Knockout bracket",
       "export_image_standings": "PNG image — Full standings",
       "export_image_success": "Image exported successfully",

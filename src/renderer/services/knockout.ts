@@ -179,6 +179,16 @@ export function isKnockoutPhaseActive(
   return rounds.some((r) => r.phase === 'knockout');
 }
 
+/** True cuando el torneo es Suizo+KO y la fase eliminatoria ya tiene datos (iniciada o rondas KO). */
+export function canExportKnockoutBracket(
+  tournament: { competition_format?: string; knockout_phase_started_at?: string | null },
+  rounds: Pick<Round, 'phase'>[]
+): boolean {
+  if (tournament.competition_format !== 'swiss_knockout') return false;
+  if (tournament.knockout_phase_started_at) return true;
+  return rounds.some((r) => r.phase === 'knockout');
+}
+
 export function canStartKnockoutPhase(
   tournament: {
     competition_format?: string;

@@ -154,6 +154,8 @@ En la lista de inscritos del torneo, usa **Retirar jugador** si alguien abandona
 3. Genera rondas KO y registra resultados (incluye series al mejor de N si está configurado).
 4. Finaliza el torneo cuando el bracket esté completo.
 
+Para validar releases o cambios en KO, usa el checklist en [SMOKE_TESTS_KO.md](./SMOKE_TESTS_KO.md).
+
 ### Emparejamientos manuales
 
 Si prefieres no usar el algoritmo automático:
@@ -200,7 +202,9 @@ En el detalle del torneo, menú **Generar reporte**:
 |--------|-----|
 | Excel | Clasificación, partidas por ronda, estadísticas (varias hojas) |
 | CSV | Clasificación, partidas o estadísticas por separado |
-| **Imagen PNG** | Solo **clasificatorios**: podio listo para compartir en redes sociales |
+| **Imagen PNG — Podio** | Solo **clasificatorios**: top 4 listo para redes sociales |
+| **Imagen PNG — Clasificación completa** | Tabla de todos los jugadores con desempates |
+| **Imagen PNG — Cuadro eliminatorio** | Solo torneos **Suizo+KO** con fase eliminatoria iniciada; también desde la vista **Bracket** |
 
 Elige ubicación y nombre de archivo en el diálogo del sistema.
 

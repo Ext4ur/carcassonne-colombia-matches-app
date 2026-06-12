@@ -330,5 +330,44 @@ describe('ReportService', () => {
       expect(html).toContain('Finalist A');
       expect(html).toContain('<!DOCTYPE html>');
     });
+
+    it('generates bracket HTML for top-2 (final only)', async () => {
+      const tId = 3;
+      (DatabaseService.getTournamentById as any).mockResolvedValue({
+        id: tId,
+        name: 'KO Top 2',
+        date: '2024-09-01',
+        competition_format: 'swiss_knockout',
+      });
+      (DatabaseService.getTournamentRounds as any).mockResolvedValue([
+        {
+          id: 30,
+          round_number: 3,
+          phase: 'knockout',
+          knockout_stage: 'final',
+        },
+      ]);
+      (DatabaseService.getRoundMatches as any).mockResolvedValue([
+        {
+          id: 300,
+          match_number: 1,
+          knockout_match_stage: 'final',
+          series_target_wins: 1,
+          series_winner_id: 1,
+        },
+      ]);
+      (DatabaseService.getMatchPlayers as any).mockResolvedValue([
+        { id: 1, name: 'Champion' },
+        { id: 2, name: 'Runner-up' },
+      ]);
+      (DatabaseService.getMatchResults as any).mockResolvedValue([]);
+
+      const html = await ReportService.generateKnockoutBracketImage(tId);
+
+      expect(html).toContain('KO Top 2');
+      expect(html).toContain('bracket-layout');
+      expect(html).toContain('Champion');
+      expect(html).not.toContain('knockout.bracket.empty');
+    });
   });
 });

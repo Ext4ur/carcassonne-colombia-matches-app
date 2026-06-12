@@ -29,7 +29,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
       setNotifications((prev) => [...prev, newNotification]);
 
-      const duration = notification.duration || 5000;
+      const defaultDuration = notification.type === 'error' ? 8000 : 5000;
+      const duration = notification.duration ?? defaultDuration;
       setTimeout(() => {
         removeNotification(id);
       }, duration);

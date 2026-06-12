@@ -4,6 +4,8 @@ import { Match } from '../../types/tournament';
 import { Player } from '../../types/player';
 import { calculatePositions } from '../../utils/scoring';
 import { useTranslation } from 'react-i18next';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { formatUserError } from '../../utils/formatUserError';
 import Input from '../common/Input';
 import Button from '../common/Button';
 import {
@@ -42,6 +44,7 @@ export default function MatchResultForm({
   const effectivePlayersPerMatch = isKnockout ? 2 : playersPerMatch;
   const isBestOf3 = isKnockout && knockoutSeries === 'best_of_3';
   const { t } = useTranslation();
+  const { addNotification } = useNotifications();
   const [players, setPlayers] = useState<Player[]>([]);
   const [results, setResults] = useState<Array<{ player_id: number; points: number }>>([]);
   const [firstPlayerId, setFirstPlayerId] = useState<number | undefined>(undefined);
@@ -249,19 +252,28 @@ export default function MatchResultForm({
   const handleSave = async () => {
     // Validate all players are assigned
     if (results.some((r) => !r.player_id)) {
-      alert(t('tournaments.match.error_all_assigned'));
+      addNotification({
+        message: t('tournaments.match.error_all_assigned'),
+        type: 'warning',
+      });
       return;
     }
 
     // Validate all players have points entered
     if (results.some((r) => r.points === undefined || r.points === null)) {
-      alert(t('tournaments.match.error_all_points'));
+      addNotification({
+        message: t('tournaments.match.error_all_points'),
+        type: 'warning',
+      });
       return;
     }
 
     // Validate who started the match is selected (AC-012)
     if (firstPlayerId === undefined || firstPlayerId === null) {
-      alert(t('tournaments.match.error_starter_required'));
+      addNotification({
+        message: t('tournaments.match.error_starter_required'),
+        type: 'warning',
+      });
       return;
     }
 
@@ -351,7 +363,10 @@ export default function MatchResultForm({
       onSave();
     } catch (error) {
       console.error('Error saving match results:', error);
-      alert(t('tournaments.match.save_error'));
+      addNotification({
+        message: formatUserError(error, t('tournaments.match.save_error')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }

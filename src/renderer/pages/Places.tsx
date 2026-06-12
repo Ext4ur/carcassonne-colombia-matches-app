@@ -11,6 +11,7 @@ import { Column } from '../components/common/Table';
 import { useNotifications } from '../contexts/NotificationContext';
 import { DEFAULT_PLACE_NAME } from '../constants';
 import { useTranslation } from 'react-i18next';
+import { formatUserError } from '../utils/formatUserError';
 
 export default function Places() {
   const { t } = useTranslation();
@@ -30,7 +31,10 @@ export default function Places() {
       setPlaces(data);
     } catch (error) {
       console.error('Error loading places:', error);
-      addNotification({ message: t('places.errors.load'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('places.errors.load')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -104,7 +108,7 @@ export default function Places() {
     } catch (error) {
       console.error('Error saving place:', error);
       addNotification({
-        message: error instanceof Error ? error.message : t('places.errors.save'),
+        message: formatUserError(error, t('places.errors.save')),
         type: 'error',
       });
     } finally {
@@ -130,7 +134,7 @@ export default function Places() {
     } catch (error) {
       console.error('Error deleting place:', error);
       addNotification({
-        message: error instanceof Error ? error.message : t('places.errors.delete'),
+        message: formatUserError(error, t('places.errors.delete')),
         type: 'error',
       });
     } finally {

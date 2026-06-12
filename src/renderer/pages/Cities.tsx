@@ -8,6 +8,7 @@ import Input from '../components/common/Input';
 import { Column } from '../components/common/Table';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
+import { formatUserError } from '../utils/formatUserError';
 
 export default function Cities() {
   const { t } = useTranslation();
@@ -26,7 +27,10 @@ export default function Cities() {
       setCities(data);
     } catch (error) {
       console.error('Error loading cities:', error);
-      addNotification({ message: t('cities.errors.load'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('cities.errors.load')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +84,7 @@ export default function Cities() {
     } catch (error) {
       console.error('Error saving city:', error);
       addNotification({
-        message: error instanceof Error ? error.message : t('cities.errors.save'),
+        message: formatUserError(error, t('cities.errors.save')),
         type: 'error',
       });
     } finally {
@@ -98,10 +102,8 @@ export default function Cities() {
       loadCities();
     } catch (error) {
       console.error('Error deleting city:', error);
-      const msg =
-        error instanceof Error && error.message ? error.message : t('cities.errors.delete');
       addNotification({
-        message: msg,
+        message: formatUserError(error, t('cities.errors.delete')),
         type: 'error',
       });
     } finally {

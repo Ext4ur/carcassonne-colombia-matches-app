@@ -23,6 +23,7 @@ import {
   writeQuickTournamentDefaults,
 } from '../utils/quickTournamentDefaults';
 import packageJson from '../../../package.json';
+import { formatUserError } from '../utils/formatUserError';
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
@@ -129,7 +130,7 @@ export default function Settings() {
     } catch (error) {
       console.error('Error listing tournaments:', error);
       addNotification({
-        message: t('settings.errors.export_error'),
+        message: formatUserError(error, t('settings.errors.export_error')),
         type: 'error',
       });
     }
@@ -161,7 +162,7 @@ export default function Settings() {
       console.error('Error exporting:', error);
       const msg = isExportSubsetError(error)
         ? t('settings.export_no_selection')
-        : t('settings.errors.export_error');
+        : formatUserError(error, t('settings.errors.export_error'));
       addNotification({ message: msg, type: 'error' });
     } finally {
       setIsExporting(false);
@@ -191,7 +192,7 @@ export default function Settings() {
     } catch (error) {
       console.error('Error importing:', error);
       addNotification({
-        message: t('settings.errors.import_error'),
+        message: formatUserError(error, t('settings.errors.import_error')),
         type: 'error',
       });
     } finally {
@@ -238,7 +239,7 @@ export default function Settings() {
     } catch (error) {
       console.error('Error importing:', error);
       addNotification({
-        message: t('settings.errors.import_error'),
+        message: formatUserError(error, t('settings.errors.import_error')),
         type: 'error',
       });
     } finally {

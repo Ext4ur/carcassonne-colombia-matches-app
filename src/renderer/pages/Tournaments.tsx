@@ -26,6 +26,7 @@ import { formatDateForDisplay } from '../utils/dateUtils';
 import { useNotifications } from '../contexts/NotificationContext';
 import { ExportService, isExportSubsetError } from '../services/export';
 import { useTranslation } from 'react-i18next';
+import { formatUserError } from '../utils/formatUserError';
 
 type WizardStep = 'form' | 'config' | 'registration' | null;
 
@@ -61,7 +62,10 @@ export default function Tournaments() {
       setTournaments(data);
     } catch (error) {
       console.error('Error loading tournaments:', error);
-      addNotification({ message: t('common.error_loading'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('common.error_loading')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -197,7 +201,10 @@ export default function Tournaments() {
       navigate(`/tournament/${tournamentId}`);
     } catch (error) {
       console.error('Error al crear el torneo:', error);
-      addNotification({ message: t('tournaments.wizard.create_error'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('tournaments.wizard.create_error')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -212,7 +219,10 @@ export default function Tournaments() {
       resetWizardForNewTournament();
     } catch (error) {
       console.error('Error al crear el torneo:', error);
-      addNotification({ message: t('tournaments.wizard.create_error'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('tournaments.wizard.create_error')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -241,7 +251,7 @@ export default function Tournaments() {
       console.error('Error exporting tournament:', error);
       const msg = isExportSubsetError(error)
         ? t('settings.export_no_selection')
-        : t('settings.errors.export_error');
+        : formatUserError(error, t('settings.errors.export_error'));
       addNotification({ message: msg, type: 'error' });
     } finally {
       setExportingTournamentId(null);
@@ -264,7 +274,10 @@ export default function Tournaments() {
       loadTournaments();
     } catch (error) {
       console.error('Error deleting tournament:', error);
-      addNotification({ message: t('common.delete_error'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('common.delete_error')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }

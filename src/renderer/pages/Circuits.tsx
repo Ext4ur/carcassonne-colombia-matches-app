@@ -12,6 +12,7 @@ import { Place } from '../types/place';
 import { formatDateForDisplay } from '../utils/dateUtils';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
+import { formatUserError } from '../utils/formatUserError';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
@@ -79,7 +80,10 @@ export default function Circuits() {
       setCircuits(data);
     } catch (error) {
       console.error('Error loading circuits:', error);
-      addNotification({ message: t('circuits.errors.load'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('circuits.errors.load')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -117,7 +121,10 @@ export default function Circuits() {
       setStandingsModalOpen(true);
     } catch (error) {
       console.error('Error loading standings:', error);
-      addNotification({ message: t('circuits.errors.load_standings'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('circuits.errors.load_standings')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -132,7 +139,10 @@ export default function Circuits() {
       loadCircuits();
     } catch (error) {
       console.error('Error finalizing circuit:', error);
-      addNotification({ message: t('circuits.errors.finalize'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('circuits.errors.finalize')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -216,7 +226,10 @@ export default function Circuits() {
       loadCircuits();
     } catch (error) {
       console.error('Error saving circuit:', error);
-      addNotification({ message: t('circuits.errors.save'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('circuits.errors.save')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -233,8 +246,7 @@ export default function Circuits() {
     } catch (error) {
       console.error('Error deleting circuit:', error);
       addNotification({
-        message:
-          error instanceof Error && error.message ? error.message : t('circuits.errors.delete'),
+        message: formatUserError(error, t('circuits.errors.delete')),
         type: 'error',
       });
     } finally {
@@ -275,7 +287,10 @@ export default function Circuits() {
       }
     } catch (error) {
       console.error('Error generating report:', error);
-      addNotification({ message: t('circuits.errors.report'), type: 'error' });
+      addNotification({
+        message: formatUserError(error, t('circuits.errors.report')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }

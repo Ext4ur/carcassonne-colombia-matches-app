@@ -11,6 +11,8 @@ import { Column } from '../common/Table';
 import { calculateNumberOfRounds } from '../../utils/tournament';
 import RoundsConfirmationModal from './RoundsConfirmationModal';
 import { useTranslation } from 'react-i18next';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { formatUserError } from '../../utils/formatUserError';
 
 type RoundsConfirmAction = 'complete' | 'completeAndAnother';
 
@@ -37,6 +39,7 @@ export default function PlayerRegistration({
   onDraftPlayersChange,
 }: PlayerRegistrationProps) {
   const { t } = useTranslation();
+  const { addNotification } = useNotifications();
   const [dbPlayers, setDbPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isNewPlayerModalOpen, setIsNewPlayerModalOpen] = useState(false);
@@ -62,11 +65,14 @@ export default function PlayerRegistration({
       setDbPlayers(data);
     } catch (error) {
       console.error('Error loading tournament players:', error);
-      alert(t('tournaments.registration.load_error'));
+      addNotification({
+        message: formatUserError(error, t('tournaments.registration.load_error')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [tournamentId, t]);
+  }, [tournamentId, t, addNotification]);
 
   useEffect(() => {
     if (!isDraftMode && tournamentId) {
@@ -87,7 +93,10 @@ export default function PlayerRegistration({
     if (!player.id) return;
     if (isDraftMode) {
       if (draftPlayers.some((p) => p.id === player.id)) {
-        alert(t('tournaments.registration.already_in_list'));
+        addNotification({
+          message: t('tournaments.registration.already_in_list'),
+          type: 'warning',
+        });
         return;
       }
       onDraftPlayersChange?.([...draftPlayers, player]);
@@ -98,10 +107,16 @@ export default function PlayerRegistration({
       loadPlayers();
     } catch (error: any) {
       if (error.message?.includes('UNIQUE constraint')) {
-        alert(t('tournaments.registration.already_registered'));
+        addNotification({
+          message: t('tournaments.registration.already_registered'),
+          type: 'warning',
+        });
       } else {
         console.error('Error registering player:', error);
-        alert(t('tournaments.registration.register_error'));
+        addNotification({
+          message: formatUserError(error, t('tournaments.registration.register_error')),
+          type: 'error',
+        });
       }
     }
   };
@@ -120,13 +135,16 @@ export default function PlayerRegistration({
       loadPlayers();
     } catch (error) {
       console.error('Error removing player:', error);
-      alert(t('tournaments.registration.remove_error'));
+      addNotification({
+        message: formatUserError(error, t('tournaments.registration.remove_error')),
+        type: 'error',
+      });
     }
   };
 
   const handleCreateAndAdd = async () => {
     if (!newPlayerData.name.trim()) {
-      alert(t('tournaments.form.name_req'));
+      addNotification({ message: t('tournaments.form.name_req'), type: 'warning' });
       return;
     }
     try {
@@ -155,7 +173,10 @@ export default function PlayerRegistration({
       setNewPlayerData({ name: '', bga_username: '', phone: '', email: '', age: '' });
     } catch (error) {
       console.error('Error creating player:', error);
-      alert(t('tournaments.registration.create_error'));
+      addNotification({
+        message: formatUserError(error, t('tournaments.registration.create_error')),
+        type: 'error',
+      });
     }
   };
 

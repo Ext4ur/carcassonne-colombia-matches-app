@@ -9,6 +9,8 @@ import Input from '../common/Input';
 
 import { useTranslation } from 'react-i18next';
 import { calculateNumberOfRounds } from '../../utils/tournament';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { formatUserError } from '../../utils/formatUserError';
 
 interface AddPlayerDialogProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ export default function AddPlayerDialog({
   isUnstarted,
 }: AddPlayerDialogProps) {
   const { t } = useTranslation();
+  const { addNotification } = useNotifications();
   const [isNewPlayerMode, setIsNewPlayerMode] = useState(false);
   const [newPlayerData, setNewPlayerData] = useState({
     name: '',
@@ -90,10 +93,16 @@ export default function AddPlayerDialog({
       }
     } catch (error: any) {
       if (error.message?.includes('UNIQUE constraint')) {
-        alert(t('tournaments.registration.already_registered'));
+        addNotification({
+          message: t('tournaments.registration.already_registered'),
+          type: 'warning',
+        });
       } else {
         console.error('Error adding player:', error);
-        alert(t('tournaments.registration.register_error'));
+        addNotification({
+          message: formatUserError(error, t('tournaments.registration.register_error')),
+          type: 'error',
+        });
       }
     } finally {
       setIsLoading(false);
@@ -102,7 +111,7 @@ export default function AddPlayerDialog({
 
   const handleCreateAndAdd = async () => {
     if (!newPlayerData.name.trim()) {
-      alert(t('tournaments.form.name_req'));
+      addNotification({ message: t('tournaments.form.name_req'), type: 'warning' });
       return;
     }
     try {
@@ -124,7 +133,10 @@ export default function AddPlayerDialog({
       }
     } catch (error) {
       console.error('Error creating player:', error);
-      alert(t('tournaments.registration.create_error'));
+      addNotification({
+        message: formatUserError(error, t('tournaments.registration.create_error')),
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }

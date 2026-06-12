@@ -11,7 +11,7 @@ import HeadToHeadHistory from '../components/player/HeadToHeadHistory';
 import { HeadToHeadService } from '../services/headToHead';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
-import { DELETE_BLOCKED_BY_TOURNAMENTS_MESSAGE } from '../constants/deleteGuards';
+import { formatUserError } from '../utils/formatUserError';
 
 export default function Players() {
   const { t } = useTranslation();
@@ -50,7 +50,7 @@ export default function Players() {
     } catch (error) {
       console.error('Error loading players:', error);
       addNotification({
-        message: t('players.errors.load'),
+        message: formatUserError(error, t('players.errors.load')),
         type: 'error',
       });
     } finally {
@@ -172,7 +172,7 @@ export default function Players() {
     } catch (error) {
       console.error('Error saving player:', error);
       addNotification({
-        message: t('players.errors.save'),
+        message: formatUserError(error, t('players.errors.save')),
         type: 'error',
       });
     } finally {
@@ -194,17 +194,8 @@ export default function Players() {
       });
     } catch (error) {
       console.error('Error deleting player:', error);
-      const err = error as Error;
-      const msg = err.message || '';
-      const errorMessage =
-        msg === DELETE_BLOCKED_BY_TOURNAMENTS_MESSAGE ||
-        msg.includes('No se puede eliminar') ||
-        msg.includes('ha participado')
-          ? msg
-          : t('players.errors.delete');
-
       addNotification({
-        message: errorMessage,
+        message: formatUserError(error, t('players.errors.delete')),
         type: 'error',
       });
     } finally {
@@ -222,7 +213,7 @@ export default function Players() {
     } catch (error) {
       console.error('Error loading opponents:', error);
       addNotification({
-        message: t('players.errors.load_opponents'),
+        message: formatUserError(error, t('players.errors.load_opponents')),
         type: 'error',
       });
     } finally {

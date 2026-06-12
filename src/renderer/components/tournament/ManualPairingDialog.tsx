@@ -5,6 +5,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { PlayerStanding } from '../../types/tournament';
 import { useTranslation } from 'react-i18next';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 // Helper for strict mode with r-b-dnd
 export const StrictModeDroppable = ({ children, ...props }: any) => {
@@ -46,6 +47,7 @@ export default function ManualPairingDialog({
   previousOpponents = {},
 }: ManualPairingDialogProps) {
   const { t } = useTranslation();
+  const { addNotification } = useNotifications();
   const [columns, setColumns] = useState<Record<string, ColumnData>>({});
 
   useEffect(() => {
@@ -107,7 +109,10 @@ export default function ManualPairingDialog({
 
   const handleConfirm = () => {
     if (columns['unassigned']?.items.length > 0) {
-      alert(t('tournaments.manual_pairing.error_unassigned'));
+      addNotification({
+        message: t('tournaments.manual_pairing.error_unassigned'),
+        type: 'warning',
+      });
       return;
     }
 

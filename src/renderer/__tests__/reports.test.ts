@@ -11,6 +11,8 @@ vi.mock('../services/database', () => ({
     getTournamentRounds: vi.fn(),
     getRoundMatches: vi.fn(),
     getMatchResults: vi.fn(),
+    getMatchPlayers: vi.fn(),
+    getKnockoutSeeds: vi.fn(),
     getTournamentConfig: vi.fn(),
   },
 }));
@@ -206,6 +208,126 @@ describe('ReportService', () => {
       expect(html).toContain('Second');
       expect(html).toContain('Third');
       expect(html).toContain('podium');
+      expect(html).toContain('<!DOCTYPE html>');
+    });
+  });
+
+  describe('generateStandingsTableImage', () => {
+    it('generates HTML with full standings table markers', async () => {
+      const tId = 1;
+      (DatabaseService.getTournamentById as any).mockResolvedValue({
+        id: tId,
+        name: 'Standings Cup',
+        date: '2024-07-01',
+      });
+      (DatabaseService.getTournamentConfig as any).mockResolvedValue({
+        tiebreak_criteria: [{ id: 'point_difference', enabled: true, order: 1 }],
+      });
+      (DatabaseService.getTournamentRounds as any).mockResolvedValue([]);
+      (SwissPairingService.calculateStandings as any).mockResolvedValue([
+        {
+          player_name: 'Alpha',
+          total_points: 5,
+          wins: 5,
+          tiebreak_values: { point_difference: 12 },
+        },
+        {
+          player_name: 'Beta',
+          total_points: 4,
+          wins: 4,
+          tiebreak_values: { point_difference: 3 },
+        },
+      ]);
+
+      const html = await ReportService.generateStandingsTableImage(tId);
+
+      expect(html).toContain('Standings Cup');
+      expect(html).toContain('standings-table-image');
+      expect(html).toContain('standings-table');
+      expect(html).toContain('Alpha');
+      expect(html).toContain('Beta');
+      expect(html).toContain('5.00');
+      expect(html).toContain('<!DOCTYPE html>');
+    });
+  });
+
+  describe('generateKnockoutBracketImage', () => {
+    it('generates HTML with knockout bracket markers', async () => {
+      const tId = 2;
+      (DatabaseService.getTournamentById as any).mockResolvedValue({
+        id: tId,
+        name: 'KO Cup',
+        date: '2024-08-01',
+        competition_format: 'swiss_knockout',
+      });
+      (DatabaseService.getTournamentRounds as any).mockResolvedValue([
+        {
+          id: 20,
+          round_number: 4,
+          phase: 'knockout',
+          knockout_stage: 'semifinal',
+        },
+        {
+          id: 21,
+          round_number: 5,
+          phase: 'knockout',
+          knockout_stage: 'final',
+        },
+      ]);
+      (DatabaseService.getRoundMatches as any).mockImplementation(async (roundId: number) => {
+        if (roundId === 20) {
+          return [
+            {
+              id: 200,
+              match_number: 1,
+              knockout_bracket_slot: 1,
+              series_target_wins: 1,
+            },
+            {
+              id: 201,
+              match_number: 2,
+              knockout_bracket_slot: 2,
+              series_target_wins: 1,
+            },
+          ];
+        }
+        return [
+          {
+            id: 210,
+            match_number: 1,
+            knockout_match_stage: 'final',
+            series_target_wins: 1,
+            series_winner_id: 11,
+          },
+        ];
+      });
+      (DatabaseService.getMatchPlayers as any).mockImplementation(async (matchId: number) => {
+        if (matchId === 200) {
+          return [
+            { id: 1, name: 'P1' },
+            { id: 2, name: 'P2' },
+          ];
+        }
+        if (matchId === 201) {
+          return [
+            { id: 3, name: 'P3' },
+            { id: 4, name: 'P4' },
+          ];
+        }
+        return [
+          { id: 11, name: 'Finalist A' },
+          { id: 12, name: 'Finalist B' },
+        ];
+      });
+      (DatabaseService.getMatchResults as any).mockResolvedValue([]);
+
+      const html = await ReportService.generateKnockoutBracketImage(tId);
+
+      expect(html).toContain('KO Cup');
+      expect(html).toContain('knockout-bracket-image');
+      expect(html).toContain('bracket-layout');
+      expect(html).toContain('P1');
+      expect(html).toContain('Finalist A');
       expect(html).toContain('<!DOCTYPE html>');
     });
   });

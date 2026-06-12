@@ -12,6 +12,12 @@ import {
   tiebreakHeaderForExport,
 } from '../utils/standingTiebreakExport';
 
+import type {
+  BracketMatchNode,
+  BracketRoundColumn,
+} from '../components/tournament/KnockoutBracket';
+import { knockoutStageI18nKey } from '../types/knockout';
+import { buildBracketTree } from '../utils/knockoutBracketTree';
 import i18n from '../i18n/config';
 
 export class ReportService {
@@ -548,6 +554,405 @@ export class ReportService {
     `;
 
     return htmlContent;
+  }
+
+  static async generateStandingsTableImage(tournamentId: number): Promise<string> {
+    const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
+    const standings = await this.getStandings(tournamentId);
+    const config = await DatabaseService.getTournamentConfig(tournamentId);
+    const tiebreakCols = getStandingsExportTiebreakColumns(config?.tiebreak_criteria);
+    const tReport = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+    const tiebreakHeaders = tiebreakCols.map((c) => tiebreakHeaderForExport(c, tReport));
+
+    const headers = [
+      i18n.t('tournaments.reports.position'),
+      i18n.t('tournaments.reports.player'),
+      i18n.t('tournaments.reports.total_points_short'),
+      i18n.t('tournaments.reports.wins'),
+      ...tiebreakHeaders,
+    ];
+
+    const rows = standings.map((s, index) => [
+      String(index + 1),
+      s.player_name,
+      s.total_points.toFixed(2),
+      String(s.wins),
+      ...tiebreakCols.map((c) => formatStandingTiebreakForExport(s, c.id, tReport)),
+    ]);
+
+    const tableHead = headers.map((h) => `<th>${h}</th>`).join('');
+    const tableBody = rows
+      .map(
+        (row) =>
+          `<tr>${row.map((cell, i) => `<td class="${i === 0 ? 'pos' : ''}">${cell || '—'}</td>`).join('')}</tr>`
+      )
+      .join('');
+
+    return this.wrapImageDocument(
+      tournament,
+      `
+        <h2 class="section-title">${i18n.t('tournaments.reports.export_pdf_leaderboard')}</h2>
+        <table class="standings-table">
+          <thead><tr>${tableHead}</tr></thead>
+          <tbody>${tableBody}</tbody>
+        </table>
+      `,
+      'standings-table-image'
+    );
+  }
+
+  static async generateKnockoutBracketImage(tournamentId: number): Promise<string> {
+    const tournament = (await DatabaseService.getTournamentById(tournamentId)) as Tournament;
+    const columns = await this.loadBracketColumns(tournamentId);
+    const tree = buildBracketTree(columns);
+    const hasSideRounds =
+      tree.leftRounds.some((c) => c.matches.length > 0) ||
+      tree.rightRounds.some((c) => c.matches.length > 0);
+
+    const bracketBody =
+      columns.length === 0 || (!hasSideRounds && !tree.final)
+        ? `<p class="empty">${i18n.t('knockout.bracket.empty')}</p>`
+        : this.buildBracketHtml(tree);
+
+    return this.wrapImageDocument(
+      tournament,
+      `
+        <h2 class="section-title">${i18n.t('tournaments.reports.export_image_ko_bracket_title')}</h2>
+        ${bracketBody}
+      `,
+      'knockout-bracket-image'
+    );
+  }
+
+  private static wrapImageDocument(
+    tournament: Tournament,
+    bodyHtml: string,
+    rootClass: string
+  ): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+              padding: 40px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              margin: 0;
+            }
+            .container {
+              background: white;
+              border-radius: 20px;
+              padding: 40px;
+              box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+              max-width: 1200px;
+              margin: 0 auto;
+            }
+            .${rootClass} h1 {
+              color: #1f2937;
+              text-align: center;
+              margin-bottom: 10px;
+              font-size: 2.2em;
+            }
+            .date {
+              text-align: center;
+              color: #6b7280;
+              margin-bottom: 30px;
+              font-size: 1.1em;
+            }
+            .section-title {
+              text-align: center;
+              color: #374151;
+              margin: 0 0 24px 0;
+              font-size: 1.4em;
+            }
+            .standings-table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 0.95em;
+            }
+            .standings-table th {
+              background: #f3f4f6;
+              color: #374151;
+              padding: 10px 12px;
+              text-align: left;
+              border-bottom: 2px solid #e5e7eb;
+              white-space: nowrap;
+            }
+            .standings-table td {
+              padding: 8px 12px;
+              border-bottom: 1px solid #e5e7eb;
+              color: #1f2937;
+            }
+            .standings-table tr:nth-child(even) td {
+              background: #f9fafb;
+            }
+            .standings-table td.pos {
+              font-weight: 700;
+              color: #4b5563;
+              width: 48px;
+            }
+            .empty {
+              text-align: center;
+              color: #6b7280;
+              font-size: 1em;
+            }
+            .bracket-layout {
+              display: flex;
+              align-items: stretch;
+              justify-content: center;
+              gap: 8px;
+              padding: 8px 0;
+            }
+            .bracket-side {
+              display: flex;
+              gap: 20px;
+              align-items: stretch;
+            }
+            .bracket-side.right {
+              flex-direction: row-reverse;
+            }
+            .bracket-round {
+              display: flex;
+              flex-direction: column;
+              gap: 20px;
+              justify-content: space-around;
+              min-height: 100%;
+            }
+            .bracket-round-title {
+              font-size: 11px;
+              font-weight: 600;
+              text-align: center;
+              color: #6b7280;
+              margin-bottom: 4px;
+            }
+            .match-node {
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              padding: 10px 12px;
+              background: #fff;
+              min-width: 150px;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+              font-size: 13px;
+            }
+            .match-player {
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              max-width: 180px;
+            }
+            .match-player.winner {
+              font-weight: 700;
+              color: #15803d;
+            }
+            .match-vs {
+              font-size: 10px;
+              color: #9ca3af;
+              text-align: center;
+              margin: 4px 0;
+            }
+            .match-series {
+              font-size: 10px;
+              color: #6b7280;
+              text-align: center;
+              margin-top: 4px;
+            }
+            .match-winner {
+              font-size: 10px;
+              color: #2563eb;
+              text-align: center;
+              margin-top: 4px;
+            }
+            .bracket-connector {
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              width: 20px;
+            }
+            .bracket-connector div {
+              flex: 1;
+              min-height: 36px;
+            }
+            .bracket-connector .top {
+              border-right: 2px solid #d1d5db;
+              border-top: 2px solid #d1d5db;
+              border-top-right-radius: 8px;
+            }
+            .bracket-connector .bottom {
+              border-right: 2px solid #d1d5db;
+              border-bottom: 2px solid #d1d5db;
+              border-bottom-right-radius: 8px;
+            }
+            .bracket-connector.left .top {
+              border-right: none;
+              border-left: 2px solid #d1d5db;
+              border-top-left-radius: 8px;
+              border-top-right-radius: 0;
+            }
+            .bracket-connector.left .bottom {
+              border-right: none;
+              border-left: 2px solid #d1d5db;
+              border-bottom-left-radius: 8px;
+              border-bottom-right-radius: 0;
+            }
+            .bracket-center {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 16px;
+              min-width: 190px;
+              padding: 0 12px;
+            }
+            .final-label {
+              font-size: 11px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              color: #b45309;
+            }
+            .bronze-block {
+              width: 100%;
+              border-top: 1px solid #e5e7eb;
+              padding-top: 12px;
+              margin-top: 4px;
+            }
+            .bronze-title {
+              font-size: 11px;
+              font-weight: 600;
+              text-align: center;
+              color: #92400e;
+              margin-bottom: 8px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container ${rootClass}">
+            <h1>${tournament.name}</h1>
+            <div class="date">${new Date(tournament.date).toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            ${bodyHtml}
+          </div>
+        </body>
+      </html>
+    `;
+  }
+
+  private static buildBracketHtml(tree: ReturnType<typeof buildBracketTree>): string {
+    const renderMatch = (node: BracketMatchNode): string => {
+      const p1Class =
+        node.winnerName && node.winnerName === node.player1Name
+          ? 'match-player winner'
+          : 'match-player';
+      const p2Class =
+        node.winnerName && node.winnerName === node.player2Name
+          ? 'match-player winner'
+          : 'match-player';
+      return `
+        <div class="match-node">
+          <div class="${p1Class}">${node.player1Name}</div>
+          <div class="match-vs">vs</div>
+          <div class="${p2Class}">${node.player2Name}</div>
+          ${node.seriesLabel ? `<div class="match-series">${node.seriesLabel}</div>` : ''}
+          ${
+            node.winnerName
+              ? `<div class="match-winner">${i18n.t('knockout.bracket.winner', { name: node.winnerName })}</div>`
+              : ''
+          }
+        </div>
+      `;
+    };
+
+    const renderRound = (col: BracketRoundColumn): string => {
+      if (col.matches.length === 0) return '';
+      const title = col.round.knockout_stage
+        ? i18n.t(knockoutStageI18nKey(col.round.knockout_stage))
+        : i18n.t('tournaments.round_n', { n: col.round.round_number });
+      return `
+        <div class="bracket-round">
+          <div class="bracket-round-title">${title}</div>
+          ${col.matches.map((m) => renderMatch(m)).join('')}
+        </div>
+      `;
+    };
+
+    const hasSideRounds =
+      tree.leftRounds.some((c) => c.matches.length > 0) ||
+      tree.rightRounds.some((c) => c.matches.length > 0);
+
+    const leftHtml = tree.leftRounds.map(renderRound).join('');
+    const rightHtml = tree.rightRounds.map(renderRound).join('');
+
+    const centerHtml = `
+      <div class="bracket-center">
+        <div class="final-label">${i18n.t('knockout.bracket.final_title')}</div>
+        ${tree.final ? renderMatch(tree.final) : `<p class="empty">${i18n.t('knockout.bracket.empty')}</p>`}
+        ${
+          tree.bronze
+            ? `
+          <div class="bronze-block">
+            <div class="bronze-title">${i18n.t('knockout.stage.third_place')}</div>
+            ${renderMatch(tree.bronze)}
+          </div>
+        `
+            : ''
+        }
+      </div>
+    `;
+
+    const connectorRight = hasSideRounds
+      ? `<div class="bracket-connector"><div class="top"></div><div class="bottom"></div></div>`
+      : '';
+    const connectorLeft = hasSideRounds
+      ? `<div class="bracket-connector left"><div class="top"></div><div class="bottom"></div></div>`
+      : '';
+
+    return `
+      <div class="bracket-layout">
+        <div class="bracket-side">${leftHtml}</div>
+        ${connectorRight}
+        ${centerHtml}
+        ${connectorLeft}
+        <div class="bracket-side right">${rightHtml}</div>
+      </div>
+    `;
+  }
+
+  private static async loadBracketColumns(tournamentId: number): Promise<BracketRoundColumn[]> {
+    const rounds = await DatabaseService.getTournamentRounds(tournamentId);
+    const koRounds = rounds.filter((r) => r.phase === 'knockout');
+    const { computeSeriesState } = await import('./knockout');
+    const cols: BracketRoundColumn[] = [];
+
+    for (const round of koRounds) {
+      if (!round.id) continue;
+      const roundMatches = await DatabaseService.getRoundMatches(round.id);
+      const nodes = await Promise.all(
+        roundMatches.map(async (m) => {
+          const players = await DatabaseService.getMatchPlayers(m.id!);
+          const results = await DatabaseService.getMatchResults(m.id!);
+          const winner = m.series_winner_id
+            ? players.find((p) => p.id === m.series_winner_id)?.name
+            : undefined;
+          let seriesLabel: string | undefined;
+          if ((m.series_target_wins ?? 1) > 1 && players.length === 2) {
+            const pids = [players[0]!.id!, players[1]!.id!] as [number, number];
+            const state = computeSeriesState(m, results, pids);
+            seriesLabel = `${state.winsByPlayer[pids[0]] ?? 0}-${state.winsByPlayer[pids[1]] ?? 0}`;
+          }
+          return {
+            match: m,
+            player1Name: players[0]?.name ?? '—',
+            player2Name: players[1]?.name ?? '—',
+            winnerName: winner,
+            seriesLabel,
+          };
+        })
+      );
+      cols.push({ round, matches: nodes });
+    }
+
+    return cols;
   }
 
   /** Clasificación con valores de desempate (p. ej. informes, respaldo JSON). */

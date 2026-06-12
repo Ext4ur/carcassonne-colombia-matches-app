@@ -1,19 +1,20 @@
 import { ReactNode } from 'react';
 
 const iconButtonBase =
-  'p-1.5 rounded transition-colors disabled:opacity-40 disabled:pointer-events-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 dark:focus:ring-offset-gray-900';
+  'inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900 disabled:opacity-45 disabled:pointer-events-none';
 
+/** Light: sólido primario/rojo. Dark: superficie gris con icono teñido (menos contraste). */
 const iconButtonVariants = {
-  default:
-    'text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-600',
+  primary:
+    'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 dark:bg-gray-700 dark:text-primary-400 dark:hover:bg-gray-600 dark:hover:text-primary-300 dark:focus:ring-primary-700',
   danger:
-    'text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-600',
+    'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 dark:bg-gray-700 dark:text-red-400 dark:hover:bg-gray-600 dark:hover:text-red-300 dark:focus:ring-red-900',
 };
 
 function IconSpinner() {
   return (
     <svg
-      className="animate-spin w-5 h-5"
+      className="animate-spin w-4 h-4 text-current"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
@@ -43,7 +44,7 @@ export default function IconActionButton({
   onClick,
   disabled = false,
   isLoading = false,
-  variant = 'default',
+  variant = 'primary',
   children,
 }: IconActionButtonProps) {
   return (

@@ -310,15 +310,17 @@ export default function Tournaments() {
       key: 'actions',
       header: t('common.actions'),
       render: (tournament) => (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <IconActionButton
             label={t('common.view')}
+            variant="primary"
             onClick={() => handleViewTournament(tournament)}
           >
             <EyeIcon />
           </IconActionButton>
           <IconActionButton
             label={t('tournaments.export_btn')}
+            variant="primary"
             onClick={() => handleExportTournament(tournament)}
             isLoading={exportingTournamentId === tournament.id}
             disabled={exportingTournamentId != null && exportingTournamentId !== tournament.id}

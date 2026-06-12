@@ -54,6 +54,13 @@ export default function RoundsConfirmationModal({
       closeOnBackdropClick={false}
     >
       <div className="space-y-3">
+        {numPlayers === 0 && (
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-300 dark:border-amber-700">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              {t('tournaments.rounds_modal.no_players_hint')}
+            </p>
+          </div>
+        )}
         <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <p className="text-sm text-gray-700 dark:text-gray-300">
             <strong>{t('tournaments.rounds_modal.registered')}</strong> {numPlayers}

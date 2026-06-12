@@ -201,6 +201,18 @@ export default function PlayerRegistration({
         </div>
       </div>
 
+      {players.length === 0 && (
+        <div
+          className="flex-none p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-300 dark:border-amber-700"
+          role="status"
+        >
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            <strong>{t('common.warning')}:</strong>{' '}
+            {t('tournaments.registration.no_players_warning')}
+          </p>
+        </div>
+      )}
+
       {/* Table section: fixed max height so only this area scrolls, modal stays same size */}
       <div className="flex-none flex flex-col overflow-hidden relative z-0 min-h-0">
         <div className="flex justify-between items-center mb-2 flex-none">
@@ -233,7 +245,6 @@ export default function PlayerRegistration({
         </div>
       </div>
 
-      {/* Buttons: Cancel and Continuar in same row, Continuar disabled when < 2 players */}
       <div className="flex-none flex justify-end items-center gap-2 pt-2">
         {onCancel && (
           <Button variant="secondary" onClick={onCancel}>
@@ -247,7 +258,6 @@ export default function PlayerRegistration({
               setIsRoundsModalOpen(true);
             }}
             variant="secondary"
-            disabled={players.length < 2}
           >
             {t('tournaments.wizard.create_and_another')}
           </Button>
@@ -258,7 +268,6 @@ export default function PlayerRegistration({
             setIsRoundsModalOpen(true);
           }}
           variant="primary"
-          disabled={players.length < 2}
         >
           {t('tournaments.registration.continue_with_count', { count: players.length })}
         </Button>

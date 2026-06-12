@@ -737,6 +737,7 @@
       "empty_msg": "Nincsenek regisztrált játékosok. Keressen vagy hozzon létre egyet a regisztrációhoz.",
       "load_error": "Hiba a játékosok betöltésekor",
       "new_player": "Új Játékos",
+      "no_players_warning": "Nincsenek regisztrált játékosok. Folytathatod, és később hozzáadhatsz játékosokat.",
       "register_error": "Hiba a játékos regisztrálásakor",
       "registered_count": "Regisztrált játékosok ({{count}})",
       "remove_confirm": "Biztosan törölni szeretné {{name}} játékost a versenyből?",
@@ -810,6 +811,7 @@
       "help_advanced": "Módosítsa a fordulók számát szükség esetén",
       "help_quick": "Gyors módban automatikusan számolódik",
       "label": "Fordulók száma",
+      "no_players_hint": "Nincsenek regisztrált játékosok. Alapértelmezés: 1 forduló; haladó módban módosítható.",
       "registered": "Regisztrált játékosok:",
       "title": "Fordulók számának megerősítése"
     },

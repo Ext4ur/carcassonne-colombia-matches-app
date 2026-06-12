@@ -737,6 +737,7 @@
       "empty_msg": "No hay jugadores inscritos. Busca o crea uno para inscribirlo.",
       "load_error": "Error al cargar los jugadores",
       "new_player": "Nuevo Jugador",
+      "no_players_warning": "Sin jugadores inscritos. Puedes continuar y agregar jugadores después.",
       "register_error": "Error al inscribir el jugador",
       "registered_count": "Jugadores Inscritos ({{count}})",
       "remove_confirm": "¿Estás seguro de eliminar a {{name}} del torneo?",
@@ -810,6 +811,7 @@
       "help_advanced": "Ajusta el número de rondas si lo necesitas",
       "help_quick": "En modo rápido se calcula automáticamente",
       "label": "Número de Rondas",
+      "no_players_hint": "No hay jugadores inscritos. Se usará 1 ronda por defecto; puedes ajustarla en modo avanzado.",
       "registered": "Jugadores inscritos:",
       "title": "Confirmar Número de Rondas"
     },

@@ -737,6 +737,7 @@
       "empty_msg": "No players registered. Search or create one to register.",
       "load_error": "Error loading players",
       "new_player": "New Player",
+      "no_players_warning": "No players registered. You can continue and add players later.",
       "register_error": "Error registering player",
       "registered_count": "Registered Players ({{count}})",
       "remove_confirm": "Are you sure you want to remove {{name}} from the tournament?",
@@ -810,6 +811,7 @@
       "help_advanced": "Adjust the number of rounds if you need to",
       "help_quick": "In quick mode it's calculated automatically",
       "label": "Number of Rounds",
+      "no_players_hint": "No players registered. Default is 1 round; you can adjust it in advanced mode.",
       "registered": "Registered players:",
       "title": "Confirm Number of Rounds"
     },

@@ -6,7 +6,6 @@ import { Tournament, TournamentConfig } from '../types/tournament';
 import { Player } from '../types/player';
 import { getDefaultScoringSystem } from '../utils/scoring';
 import { DEFAULT_TIEBREAK_CRITERIA } from '../utils/tiebreak';
-import { buildQuickConfigDraft } from '../utils/quickTournamentDefaults';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
 import IconActionButton, {
@@ -16,6 +15,9 @@ import IconActionButton, {
 } from '../components/common/IconActionButton';
 import Modal from '../components/common/Modal';
 import TournamentForm, { TournamentFormRef } from '../components/tournament/TournamentForm';
+import QuickTournamentWizard, {
+  QuickTournamentPayload,
+} from '../components/tournament/QuickTournamentWizard';
 import TournamentConfigComponent from '../components/tournament/TournamentConfig';
 import PlayerRegistration from '../components/tournament/PlayerRegistration';
 import MultiSelect from '../components/common/MultiSelect';
@@ -28,7 +30,7 @@ import { ExportService, isExportSubsetError } from '../services/export';
 import { useTranslation } from 'react-i18next';
 import { formatUserError } from '../utils/formatUserError';
 
-type WizardStep = 'form' | 'config' | 'registration' | null;
+type WizardStep = 'quick' | 'form' | 'config' | 'registration' | null;
 
 type ConfigDraft = Partial<TournamentConfig> & {
   bye_selection?: 'worst' | 'random' | 'round_robin';
@@ -78,12 +80,12 @@ export default function Tournaments() {
       .catch(() => {});
   }, [loadTournaments]);
 
-  const handleCreateTournament = (mode: 'quick' | 'advanced') => {
-    setMode(mode);
+  const handleCreateTournament = (createMode: 'quick' | 'advanced') => {
+    setMode(createMode);
     setTournamentDraft(null);
     setConfigDraft(null);
     setRegistrationPlayers([]);
-    setWizardStep('form');
+    setWizardStep(createMode === 'quick' ? 'quick' : 'form');
     setIsModalOpen(true);
   };
 
@@ -109,12 +111,7 @@ export default function Tournaments() {
       place_id: tournamentData.place_id,
       competition_format: tournamentData.competition_format || 'swiss',
     });
-    if (mode === 'quick') {
-      setConfigDraft(buildQuickConfigDraft(tournamentData.players_per_match || 2) as ConfigDraft);
-      setWizardStep('registration');
-    } else {
-      setWizardStep('config');
-    }
+    setWizardStep('config');
   };
 
   /** Config submit: no DB write, store draft and go to registration. */
@@ -140,39 +137,49 @@ export default function Tournaments() {
     setWizardStep('registration');
   };
 
-  const createTournamentFromDraft = async (numberOfRounds: number): Promise<number | null> => {
-    if (!tournamentDraft?.name || !tournamentDraft?.type || !tournamentDraft?.date) {
+  const createTournamentFromDraft = async (
+    numberOfRounds: number,
+    overrides?: {
+      tournamentDraft?: Partial<Tournament>;
+      configDraft?: ConfigDraft | null;
+      registrationPlayers?: Player[];
+    }
+  ): Promise<number | null> => {
+    const draft = overrides?.tournamentDraft ?? tournamentDraft;
+    const config = overrides?.configDraft !== undefined ? overrides.configDraft : configDraft;
+    const players = overrides?.registrationPlayers ?? registrationPlayers;
+
+    if (!draft?.name || !draft?.type || !draft?.date) {
       addNotification({ message: t('tournaments.wizard.missing_data'), type: 'error' });
       return null;
     }
     const tournamentId = await DatabaseService.createTournament({
-      name: tournamentDraft.name,
-      type: tournamentDraft.type,
-      circuit_id: tournamentDraft.circuit_id,
-      date: tournamentDraft.date,
-      players_per_match: tournamentDraft.players_per_match || 2,
+      name: draft.name,
+      type: draft.type,
+      circuit_id: draft.circuit_id,
+      date: draft.date,
+      players_per_match: draft.players_per_match || 2,
       number_of_rounds: numberOfRounds,
-      place_id: tournamentDraft.place_id,
-      competition_format: tournamentDraft.competition_format || 'swiss',
+      place_id: draft.place_id,
+      competition_format: draft.competition_format || 'swiss',
     });
-    if (configDraft) {
+    if (config) {
       await DatabaseService.createTournamentConfig({
         tournament_id: tournamentId,
-        avoid_rematches: configDraft.avoid_rematches ?? true,
-        tiebreak_criteria: configDraft.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
+        avoid_rematches: config.avoid_rematches ?? true,
+        tiebreak_criteria: config.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA,
         scoring_system:
-          configDraft.scoring_system ||
-          getDefaultScoringSystem(tournamentDraft.players_per_match || 2),
-        bye_selection: configDraft.bye_selection || 'worst',
-        player_display_mode: configDraft.player_display_mode ?? 'per_player',
-        pairing_algorithm: configDraft.pairing_algorithm ?? 'greedy',
-        buchholz_bye_mode: configDraft.buchholz_bye_mode ?? 'legacy',
-        knockout_size: configDraft.knockout_size ?? 8,
-        knockout_seeding: configDraft.knockout_seeding ?? 'standard_bracket',
-        knockout_series: configDraft.knockout_series ?? 'best_of_1',
+          config.scoring_system || getDefaultScoringSystem(draft.players_per_match || 2),
+        bye_selection: config.bye_selection || 'worst',
+        player_display_mode: config.player_display_mode ?? 'per_player',
+        pairing_algorithm: config.pairing_algorithm ?? 'greedy',
+        buchholz_bye_mode: config.buchholz_bye_mode ?? 'legacy',
+        knockout_size: config.knockout_size ?? 8,
+        knockout_seeding: config.knockout_seeding ?? 'standard_bracket',
+        knockout_series: config.knockout_series ?? 'best_of_1',
       });
     }
-    for (const player of registrationPlayers) {
+    for (const player of players) {
       if (player.id) {
         await DatabaseService.registerPlayerToTournament(tournamentId, player.id);
       }
@@ -184,13 +191,17 @@ export default function Tournaments() {
     setTournamentDraft(null);
     setConfigDraft(null);
     setRegistrationPlayers([]);
-    setWizardStep('form');
+    setWizardStep('quick');
   };
 
-  const handleRegistrationComplete = async (numberOfRounds: number) => {
+  const handleQuickComplete = async (payload: QuickTournamentPayload) => {
     try {
       setIsLoading(true);
-      const tournamentId = await createTournamentFromDraft(numberOfRounds);
+      const tournamentId = await createTournamentFromDraft(payload.numberOfRounds, {
+        tournamentDraft: payload.tournament,
+        configDraft: payload.config,
+        registrationPlayers: payload.players,
+      });
       if (tournamentId == null) return;
       setIsModalOpen(false);
       setWizardStep(null);
@@ -210,13 +221,40 @@ export default function Tournaments() {
     }
   };
 
-  const handleRegistrationCompleteAndAnother = async (numberOfRounds: number) => {
+  const handleQuickCompleteAndAnother = async (payload: QuickTournamentPayload) => {
+    try {
+      setIsLoading(true);
+      const tournamentId = await createTournamentFromDraft(payload.numberOfRounds, {
+        tournamentDraft: payload.tournament,
+        configDraft: payload.config,
+        registrationPlayers: payload.players,
+      });
+      if (tournamentId == null) return;
+      loadTournaments();
+      resetWizardForNewTournament();
+    } catch (error) {
+      console.error('Error al crear el torneo:', error);
+      addNotification({
+        message: formatUserError(error, t('tournaments.wizard.create_error')),
+        type: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegistrationComplete = async (numberOfRounds: number) => {
     try {
       setIsLoading(true);
       const tournamentId = await createTournamentFromDraft(numberOfRounds);
       if (tournamentId == null) return;
+      setIsModalOpen(false);
+      setWizardStep(null);
+      setTournamentDraft(null);
+      setConfigDraft(null);
+      setRegistrationPlayers([]);
       loadTournaments();
-      resetWizardForNewTournament();
+      navigate(`/tournament/${tournamentId}`);
     } catch (error) {
       console.error('Error al crear el torneo:', error);
       addNotification({
@@ -368,10 +406,10 @@ export default function Tournaments() {
 
   const getWizardTitle = () => {
     switch (wizardStep) {
+      case 'quick':
+        return t('tournaments.wizard.quick_title');
       case 'form':
-        return mode === 'quick'
-          ? t('tournaments.wizard.quick_title')
-          : t('tournaments.wizard.step1');
+        return t('tournaments.wizard.step1');
       case 'config':
         return t('tournaments.wizard.step2');
       case 'registration':
@@ -432,7 +470,7 @@ export default function Tournaments() {
         isOpen={isModalOpen}
         onClose={handleCancelWizard}
         title={getWizardTitle()}
-        size="lg"
+        size={wizardStep === 'quick' ? 'xl' : 'lg'}
         footer={
           wizardStep === 'form' ? (
             <>
@@ -448,6 +486,14 @@ export default function Tournaments() {
           ) : undefined
         }
       >
+        {wizardStep === 'quick' && (
+          <QuickTournamentWizard
+            onCancel={handleCancelWizard}
+            onComplete={handleQuickComplete}
+            onCompleteAndAnother={handleQuickCompleteAndAnother}
+          />
+        )}
+
         {wizardStep === 'form' && (
           <TournamentForm
             ref={formRef}
@@ -468,17 +514,14 @@ export default function Tournaments() {
           />
         )}
 
-        {wizardStep === 'registration' && tournamentDraft && (
+        {wizardStep === 'registration' && tournamentDraft && mode === 'advanced' && (
           <PlayerRegistration
             tournamentId={null}
             draftPlayers={registrationPlayers}
             onDraftPlayersChange={setRegistrationPlayers}
             onComplete={handleRegistrationComplete}
-            onCompleteAndAnother={
-              mode === 'quick' ? handleRegistrationCompleteAndAnother : undefined
-            }
             onCancel={handleCancelWizard}
-            mode={mode}
+            mode="advanced"
           />
         )}
       </Modal>

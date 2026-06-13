@@ -13,6 +13,7 @@ import { formatDateForDisplay } from '../utils/dateUtils';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
 import { formatUserError } from '../utils/formatUserError';
+import { getCircuitPodiumRowClass } from '../utils/circuitPodiumStyles';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
@@ -837,20 +838,16 @@ export default function Circuits() {
             )}
 
             <div>
-              <h3 className="text-lg font-semibold mb-2">{t('circuits.standings.table_title')}</h3>
+              <h3 className="text-lg font-semibold mb-1">{t('circuits.standings.table_title')}</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                {t('circuits.standings.podium_row_hint')}
+              </p>
               <Table
                 columns={standingsColumns}
                 data={filteredStandings}
                 keyExtractor={(standing) => standing.player_id}
                 emptyMessage={t('circuits.standings.empty_data')}
-                getRowClassName={(_item, index) => {
-                  const pos = index + 1;
-                  if (pos === 1) return 'bg-yellow-100/60 dark:bg-yellow-900/40 font-semibold';
-                  if (pos === 2) return 'bg-slate-100/70 dark:bg-slate-800/50 font-semibold';
-                  if (pos === 3) return 'bg-orange-100/60 dark:bg-orange-900/30 font-semibold';
-                  if (pos === 4) return 'bg-blue-50/80 dark:bg-blue-900/20 font-semibold';
-                  return '';
-                }}
+                getRowClassName={(_item, index) => getCircuitPodiumRowClass(index + 1)}
               />
             </div>
           </div>

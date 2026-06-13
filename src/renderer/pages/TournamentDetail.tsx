@@ -967,6 +967,46 @@ export default function TournamentDetail() {
   const showKnockoutBracketExportDisabled =
     isSwissKnockoutFormat && !showKnockoutBracketExport && standings.length > 0;
 
+  const pngExportMenu = (
+    <>
+      {tournament?.type === 'qualifier' && (
+        <button
+          type="button"
+          onClick={handleExportPodiumImage}
+          disabled={standings.length === 0}
+          className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+        >
+          {t('tournaments.reports.export_image')}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={handleExportStandingsImage}
+        disabled={standings.length === 0}
+        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+      >
+        {t('tournaments.reports.export_image_standings')}
+      </button>
+      {showKnockoutBracketExport && (
+        <button
+          type="button"
+          onClick={handleExportKnockoutBracketImage}
+          className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+        >
+          {t('tournaments.reports.export_image_ko_bracket')}
+        </button>
+      )}
+      {showKnockoutBracketExportDisabled && (
+        <div
+          className="block w-full text-left px-4 py-2 text-sm text-gray-400 dark:text-gray-500 cursor-not-allowed"
+          title={t('tournaments.reports.export_image_ko_bracket_disabled')}
+        >
+          {t('tournaments.reports.export_image_ko_bracket_disabled')}
+        </div>
+      )}
+    </>
+  );
+
   const handleGenerateReport = async (
     type: 'excel' | 'csv-standings' | 'csv-matches' | 'csv-stats'
   ) => {
@@ -1564,7 +1604,7 @@ export default function TournamentDetail() {
         </Button>
       </div>
 
-      <div className="card mb-6">
+      <div className="card mb-6 relative z-20 overflow-visible">
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-2xl font-bold mb-2">
@@ -1668,9 +1708,9 @@ export default function TournamentDetail() {
             >
               📊 {showStats ? t('tournaments.detail.close_stats') : t('tournaments.detail.stats')}
             </Button>
-            <div className="relative group">
-              <Button variant="primary">{t('tournaments.detail.generate_report')} ▼</Button>
-              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 overflow-hidden">
+            <div className="relative z-50 group">
+              <Button variant="primary">{t('tournaments.export_btn')} ▼</Button>
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
                 <button
                   onClick={() => handleGenerateReport('excel')}
                   className="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 font-semibold"
@@ -1698,43 +1738,10 @@ export default function TournamentDetail() {
                 >
                   {t('tournaments.reports.export_csv_stats')}
                 </button>
-                {standings.length > 0 && (
-                  <>
-                    <div className="px-4 py-2 text-xs text-gray-400 font-semibold uppercase tracking-wider border-t border-gray-200 dark:border-gray-700">
-                      {t('tournaments.reports.export_image_title')}
-                    </div>
-                    {tournament.type === 'qualifier' && (
-                      <button
-                        onClick={handleExportPodiumImage}
-                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
-                      >
-                        {t('tournaments.reports.export_image')}
-                      </button>
-                    )}
-                    <button
-                      onClick={handleExportStandingsImage}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 font-semibold"
-                    >
-                      {t('tournaments.reports.export_image_standings')}
-                    </button>
-                    {showKnockoutBracketExport && (
-                      <button
-                        onClick={handleExportKnockoutBracketImage}
-                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
-                      >
-                        {t('tournaments.reports.export_image_ko_bracket')}
-                      </button>
-                    )}
-                    {showKnockoutBracketExportDisabled && (
-                      <div
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-400 dark:text-gray-500 cursor-not-allowed"
-                        title={t('tournaments.reports.export_image_ko_bracket_disabled')}
-                      >
-                        {t('tournaments.reports.export_image_ko_bracket_disabled')}
-                      </div>
-                    )}
-                  </>
-                )}
+                <div className="px-4 py-2 text-xs text-gray-400 font-semibold uppercase tracking-wider border-t border-gray-200 dark:border-gray-700">
+                  {t('tournaments.reports.export_image_title')}
+                </div>
+                {pngExportMenu}
               </div>
             </div>
           </div>

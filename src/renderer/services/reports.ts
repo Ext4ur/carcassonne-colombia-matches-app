@@ -730,39 +730,39 @@ export class ReportService {
             .match-node {
               border: 1px solid #e5e7eb;
               border-radius: 8px;
-              padding: 10px 12px;
+              padding: 12px 14px;
               background: #fff;
-              min-width: 150px;
+              min-width: 160px;
               box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-              font-size: 13px;
+              font-size: 14px;
+              line-height: 1.45;
+              text-align: center;
             }
             .match-player {
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              max-width: 180px;
+              display: block;
+              line-height: 1.45;
+              padding: 3px 0;
+              overflow: visible;
+              word-break: break-word;
+              text-align: center;
             }
             .match-player.winner {
               font-weight: 700;
               color: #15803d;
             }
             .match-vs {
-              font-size: 10px;
+              font-size: 11px;
               color: #9ca3af;
               text-align: center;
-              margin: 4px 0;
+              margin: 6px 0;
+              line-height: 1.2;
             }
             .match-series {
-              font-size: 10px;
+              font-size: 11px;
               color: #6b7280;
               text-align: center;
-              margin-top: 4px;
-            }
-            .match-winner {
-              font-size: 10px;
-              color: #2563eb;
-              text-align: center;
-              margin-top: 4px;
+              margin-top: 6px;
+              line-height: 1.3;
             }
             .bracket-connector {
               display: flex;
@@ -854,11 +854,6 @@ export class ReportService {
           <div class="match-vs">vs</div>
           <div class="${p2Class}">${node.player2Name}</div>
           ${node.seriesLabel ? `<div class="match-series">${node.seriesLabel}</div>` : ''}
-          ${
-            node.winnerName
-              ? `<div class="match-winner">${i18n.t('knockout.bracket.winner', { name: node.winnerName })}</div>`
-              : ''
-          }
         </div>
       `;
     };

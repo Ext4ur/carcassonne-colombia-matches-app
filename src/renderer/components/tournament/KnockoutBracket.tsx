@@ -28,8 +28,8 @@ function MatchNode({ node, t }: { node: BracketMatchNode; t: TFunction }) {
       <div
         className={
           node.winnerName && node.winnerName === node.player1Name
-            ? 'font-bold text-green-700 dark:text-green-400 truncate'
-            : 'truncate'
+            ? 'font-bold text-green-700 dark:text-green-400 truncate text-center'
+            : 'truncate text-center'
         }
       >
         {node.player1Name}
@@ -38,8 +38,8 @@ function MatchNode({ node, t }: { node: BracketMatchNode; t: TFunction }) {
       <div
         className={
           node.winnerName && node.winnerName === node.player2Name
-            ? 'font-bold text-green-700 dark:text-green-400 truncate'
-            : 'truncate'
+            ? 'font-bold text-green-700 dark:text-green-400 truncate text-center'
+            : 'truncate text-center'
         }
       >
         {node.player2Name}

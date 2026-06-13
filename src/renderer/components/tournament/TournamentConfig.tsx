@@ -116,6 +116,25 @@ export default function TournamentConfigComponent({
     }
   }, [availableKnockoutSizes, knockoutSize, showKnockoutOptions]);
 
+  useEffect(() => {
+    if (!config) return;
+    setTiebreakCriteria(config.tiebreak_criteria || DEFAULT_TIEBREAK_CRITERIA);
+    setScoringSystem(config.scoring_system || getDefaultScoringSystem(playersPerMatch));
+    setAvoidRematches(config.avoid_rematches ?? true);
+    setByeSelection(config.bye_selection ?? 'worst');
+    setPlayerDisplayMode(config.player_display_mode ?? 'per_player');
+    setPairingAlgorithm((config as any)?.pairing_algorithm ?? 'greedy');
+    setBuchholzByeMode((config as TournamentConfig)?.buchholz_bye_mode ?? 'legacy');
+    setKnockoutSize(String(config.knockout_size ?? 8));
+    setKnockoutSeries((config.knockout_series as KnockoutSeries) ?? 'best_of_1');
+    setPlayBronzeMatch(config.knockout_play_bronze_match ?? false);
+    setMatchStarter(config.knockout_match_starter ?? 'higher_swiss_seed');
+    setSeriesStarterMode(
+      config.knockout_series_starter_mode ??
+        (config.knockout_series_alternate_starter ? 'previous_loser' : 'alternate')
+    );
+  }, [config, playersPerMatch]);
+
   const handleDragEnd = (result: any) => {
     if (readOnly) return;
     if (!result.destination) return;

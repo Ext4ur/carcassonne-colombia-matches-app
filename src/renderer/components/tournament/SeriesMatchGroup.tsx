@@ -38,12 +38,26 @@ export default function SeriesMatchGroup({
     [gamesByNumber]
   );
 
+  const activeGameNumber = useMemo(() => {
+    if (!seriesState) return 1;
+    if (seriesState.isComplete) {
+      return seriesState.games[seriesState.games.length - 1]?.gameNumber ?? 1;
+    }
+    return seriesState.nextGameNumber;
+  }, [seriesState]);
+
+  const activeStarter = useMemo(
+    () => resolveGameStarter(match, activeGameNumber),
+    [match, activeGameNumber]
+  );
+
   const winsLabel = (playerId: number) => seriesState?.winsByPlayer[playerId] ?? 0;
 
   const renderPlayerLine = (
     player: { id?: number; name: string },
     wins: number,
-    isWinner: boolean
+    isWinner: boolean,
+    showStarter = false
   ) => (
     <span
       key={player.id}
@@ -51,6 +65,14 @@ export default function SeriesMatchGroup({
     >
       {player.name}
       <span className="text-xs text-gray-500 dark:text-gray-400">({wins})</span>
+      {showStarter && activeStarter != null && Number(activeStarter) === Number(player.id) && (
+        <span
+          className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded"
+          title={t('tournaments.detail.first_player_tooltip')}
+        >
+          🎲
+        </span>
+      )}
     </span>
   );
 
@@ -62,13 +84,15 @@ export default function SeriesMatchGroup({
             {renderPlayerLine(
               players[0]!,
               winsLabel(players[0]!.id!),
-              seriesState?.winnerId === players[0]!.id
+              seriesState?.winnerId === players[0]!.id,
+              match.status !== 'completed'
             )}
             <span className="text-gray-400 text-xs">{t('common.versus')}</span>
             {renderPlayerLine(
               players[1]!,
               winsLabel(players[1]!.id!),
-              seriesState?.winnerId === players[1]!.id
+              seriesState?.winnerId === players[1]!.id,
+              match.status !== 'completed'
             )}
           </>
         ) : (

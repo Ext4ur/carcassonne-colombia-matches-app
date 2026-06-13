@@ -130,9 +130,14 @@ export default function Tournaments() {
       bye_selection: configData.bye_selection || 'worst',
       player_display_mode: configData.player_display_mode ?? 'per_player',
       pairing_algorithm: configData.pairing_algorithm ?? 'greedy',
+      buchholz_bye_mode: configData.buchholz_bye_mode ?? 'legacy',
       knockout_size: configData.knockout_size ?? 8,
       knockout_seeding: configData.knockout_seeding ?? 'standard_bracket',
       knockout_series: configData.knockout_series ?? 'best_of_1',
+      knockout_play_bronze_match: configData.knockout_play_bronze_match ?? false,
+      knockout_match_starter: configData.knockout_match_starter ?? 'higher_swiss_seed',
+      knockout_series_starter_mode: configData.knockout_series_starter_mode,
+      knockout_series_alternate_starter: configData.knockout_series_alternate_starter ?? false,
     });
     setWizardStep('registration');
   };
@@ -177,6 +182,10 @@ export default function Tournaments() {
         knockout_size: config.knockout_size ?? 8,
         knockout_seeding: config.knockout_seeding ?? 'standard_bracket',
         knockout_series: config.knockout_series ?? 'best_of_1',
+        knockout_play_bronze_match: config.knockout_play_bronze_match ?? false,
+        knockout_match_starter: config.knockout_match_starter ?? 'higher_swiss_seed',
+        knockout_series_starter_mode: config.knockout_series_starter_mode,
+        knockout_series_alternate_starter: config.knockout_series_alternate_starter ?? false,
       });
     }
     for (const player of players) {

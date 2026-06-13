@@ -1270,6 +1270,7 @@ export class DatabaseService {
         FROM match_players mp
         JOIN players p ON mp.player_id = p.id
         WHERE mp.match_id IN (${placeholders})
+        ORDER BY mp.match_id, mp.id
       `,
       matchIds
     );
@@ -1712,7 +1713,7 @@ export class DatabaseService {
         FROM match_players mp
         JOIN players p ON mp.player_id = p.id
         WHERE mp.match_id = ?
-        ORDER BY p.name
+        ORDER BY mp.id
       `,
       [matchId]
     );

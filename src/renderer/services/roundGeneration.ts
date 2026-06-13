@@ -4,15 +4,24 @@ import {
   buildFirstKnockoutPairings,
   buildNextKnockoutPairings,
   canStartKnockoutPhase,
+  computeSeriesState,
   countSwissRounds,
   isKnockoutMatchComplete,
   isKnockoutPhaseActive,
+  resolveKnockoutGameStarter,
+  serializeSeriesMeta,
   seriesTargetForConfig,
   tournamentHasKnockoutChampion,
 } from './knockout';
 import type { KnockoutSeries, KnockoutSize } from '../types/knockout';
 import { isKnockoutSize, resolveEffectiveKnockoutSize } from '../types/knockout';
-import type { Match, MatchResult, PlayerStanding, Tournament } from '../types/tournament';
+import type {
+  Match,
+  MatchResult,
+  PlayerStanding,
+  Tournament,
+  TournamentConfig,
+} from '../types/tournament';
 import { calculateNumberOfRounds } from '../utils/tournament';
 
 export class RoundGenerationService {
@@ -152,6 +161,36 @@ export class RoundGenerationService {
 }
 
 export class KnockoutPairingService {
+  private static async persistKnockoutMatchStarter(
+    tournamentId: number,
+    matchId: number,
+    playerIds: [number, number],
+    config: TournamentConfig
+  ): Promise<void> {
+    const seeds = await DatabaseService.getKnockoutSeeds(tournamentId);
+    const seedByPlayer = new Map(seeds.map((s) => [s.player_id, s.seed] as const));
+    const targetWins = seriesTargetForConfig(
+      (config.knockout_series ?? 'best_of_1') as KnockoutSeries
+    );
+    const seriesState = computeSeriesState(
+      { round_id: 0, match_number: 0, status: 'pending', series_target_wins: targetWins },
+      [],
+      playerIds
+    );
+    const starter = resolveKnockoutGameStarter(1, playerIds, {
+      matchStarter: config.knockout_match_starter ?? 'higher_swiss_seed',
+      seriesStarterMode: config.knockout_series_starter_mode,
+      alternateStarter: Boolean(config.knockout_series_alternate_starter),
+      seedByPlayer,
+      seriesState,
+      existingStarters: {},
+    });
+    await DatabaseService.updateMatch(matchId, {
+      first_player_id: starter,
+      series_meta: serializeSeriesMeta({ gameStarters: { 1: starter } }),
+    });
+  }
+
   static async startKnockoutPhase(tournamentId: number): Promise<void> {
     const check = await RoundGenerationService.canStartKnockout(tournamentId);
     if (!check.ok) throw new Error(check.reason || 'cannot_start_knockout');
@@ -211,6 +250,12 @@ export class KnockoutPairingService {
         is_knockout: true,
       });
       await DatabaseService.setMatchPlayers(matchId, [p.player1Id, p.player2Id]);
+      await this.persistKnockoutMatchStarter(
+        tournamentId,
+        matchId,
+        [p.player1Id, p.player2Id],
+        config
+      );
       matchNumber++;
     }
 
@@ -299,6 +344,12 @@ export class KnockoutPairingService {
         sortedWinners[0]!.winnerId,
         sortedWinners[1]!.winnerId,
       ]);
+      await this.persistKnockoutMatchStarter(
+        tournamentId,
+        finalMatchId,
+        [sortedWinners[0]!.winnerId, sortedWinners[1]!.winnerId],
+        config
+      );
 
       if (playBronze && sortedLosers.length === 2) {
         const bronzeMatchId = await DatabaseService.createMatch({
@@ -314,6 +365,12 @@ export class KnockoutPairingService {
           sortedLosers[0]!.loserId,
           sortedLosers[1]!.loserId,
         ]);
+        await this.persistKnockoutMatchStarter(
+          tournamentId,
+          bronzeMatchId,
+          [sortedLosers[0]!.loserId, sortedLosers[1]!.loserId],
+          config
+        );
       }
     } else {
       const playerCountEntering = winners.length;
@@ -338,6 +395,12 @@ export class KnockoutPairingService {
           is_knockout: true,
         });
         await DatabaseService.setMatchPlayers(matchId, [p.player1Id, p.player2Id]);
+        await this.persistKnockoutMatchStarter(
+          tournamentId,
+          matchId,
+          [p.player1Id, p.player2Id],
+          config
+        );
         matchNumber++;
       }
     }

@@ -18,6 +18,18 @@ import {
 } from '../../services/knockout';
 import type { KnockoutSeries } from '../../types/knockout';
 
+function orderResultsByPlayers(
+  loadedResults: Array<{ player_id: number; points: number }>,
+  matchPlayers: Player[],
+  count: number
+): Array<{ player_id: number; points: number }> {
+  const pointsByPlayer = new Map(loadedResults.map((r) => [r.player_id, r.points]));
+  return matchPlayers.slice(0, count).map((p) => ({
+    player_id: p.id!,
+    points: pointsByPlayer.get(p.id!) ?? 0,
+  }));
+}
+
 interface MatchResultFormProps {
   match: Match;
   tournamentId: number;
@@ -151,10 +163,11 @@ export default function MatchResultForm({
         setActiveGameNumber(gn);
         const gameResults = existingResults.filter((r) => (r.game_number ?? 1) === gn);
         if (gameResults.length >= 2) {
-          const loadedResults = gameResults.map((r) => ({
-            player_id: r.player_id,
-            points: r.points,
-          }));
+          const loadedResults = orderResultsByPlayers(
+            gameResults.map((r) => ({ player_id: r.player_id, points: r.points })),
+            matchPlayers,
+            2
+          );
           setResults(loadedResults);
           const meta = parseSeriesMeta(mRow?.series_meta ?? undefined);
           updatePositions(
@@ -175,10 +188,11 @@ export default function MatchResultForm({
         }
       } else if (existingResults.length > 0) {
         const gameResults = resultsForGame(existingResults, 1);
-        const loadedResults = gameResults.map((r) => ({
-          player_id: r.player_id,
-          points: r.points,
-        }));
+        const loadedResults = orderResultsByPlayers(
+          gameResults.map((r) => ({ player_id: r.player_id, points: r.points })),
+          matchPlayers,
+          effectivePlayersPerMatch
+        );
         setResults(loadedResults);
         const mRow = matchData[0];
         const starter = resolveGameStarter(

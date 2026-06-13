@@ -5,6 +5,7 @@ import { Circuit } from '../../types/circuit';
 import { Place } from '../../types/place';
 import { DEFAULT_PLACE_NAME } from '../../constants';
 import { getLocalDateString } from '../../utils/dateUtils';
+import { buildQuickTournamentName } from '../../utils/quickTournamentName';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
@@ -13,6 +14,8 @@ import type { CompetitionFormat } from '../../types/knockout';
 
 export interface TournamentFormRef {
   submit: () => void;
+  /** Validates and returns form data without calling onSave. */
+  validateAndGet: () => Partial<Tournament> | null;
 }
 
 interface TournamentFormProps {
@@ -48,11 +51,15 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     competition_format: (tournament?.competition_format || 'swiss') as CompetitionFormat,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [nameManuallyEdited, setNameManuallyEdited] = useState(Boolean(tournament?.name));
 
   useEffect(() => {
     loadCircuits();
     loadPlaces();
   }, []);
+
+  const resolvePlaceName = (placeId: string): string =>
+    places.find((p) => p.id?.toString() === placeId)?.name ?? '';
 
   useEffect(() => {
     if (places.length > 0 && !formData.place_id) {
@@ -61,6 +68,14 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
         setFormData((prev) => ({ ...prev, place_id: defaultPlace.id!.toString() }));
     }
   }, [places, formData.place_id]);
+
+  useEffect(() => {
+    if (mode !== 'quick' || nameManuallyEdited) return;
+    const autoName = buildQuickTournamentName(resolvePlaceName(formData.place_id), formData.date);
+    if (autoName !== formData.name) {
+      setFormData((prev) => ({ ...prev, name: autoName }));
+    }
+  }, [mode, nameManuallyEdited, formData.place_id, formData.date, places, formData.name]);
 
   const loadCircuits = async () => {
     try {
@@ -125,8 +140,26 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     });
   };
 
+  const validateAndGet = (): Partial<Tournament> | null => {
+    if (!validateForm()) return null;
+    return {
+      name: formData.name.trim(),
+      type: formData.type,
+      circuit_id:
+        formData.type === 'circuit' && formData.circuit_id
+          ? Number(formData.circuit_id)
+          : undefined,
+      date: formData.date,
+      players_per_match: formData.players_per_match,
+      number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
+      place_id: formData.place_id ? Number(formData.place_id) : undefined,
+      competition_format: formData.competition_format as 'swiss' | 'swiss_knockout',
+    };
+  };
+
   useImperativeHandle(ref, () => ({
     submit: handleSubmit,
+    validateAndGet,
   }));
 
   return (
@@ -134,8 +167,19 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       <Input
         label={t('tournaments.form.name_label')}
         value={formData.name}
-        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        onChange={(e) => {
+          const newName = e.target.value;
+          setFormData({ ...formData, name: newName });
+          if (mode === 'quick') {
+            const autoName = buildQuickTournamentName(
+              resolvePlaceName(formData.place_id),
+              formData.date
+            );
+            setNameManuallyEdited(newName !== autoName);
+          }
+        }}
         error={errors.name}
+        helperText={mode === 'quick' ? t('tournaments.form.name_auto_help') : undefined}
         required
       />
 

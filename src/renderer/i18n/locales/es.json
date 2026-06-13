@@ -80,6 +80,7 @@
       "final_podium": "Podio final",
       "pts": "pts",
       "table_title": "Tabla de posiciones",
+      "podium_row_hint": "Las primeras 4 posiciones están resaltadas",
       "title_active": "Acumulado - {{name}}",
       "title_final": "Estadísticas finales - {{name}}"
     },
@@ -654,6 +655,7 @@
       "n_players": "{{count}} jugadores",
       "name_label": "Nombre del Torneo *",
       "name_req": "El nombre es requerido",
+      "name_auto_help": "Se genera automáticamente a partir del lugar y la fecha; puedes editarlo",
       "place_label": "Lugar *",
       "place_req": "Debes seleccionar un lugar",
       "players_label": "Jugadores por Partida *",
@@ -729,6 +731,11 @@
     "quick_tournament": "Torneo Rápido",
     "registration": {
       "already_in_list": "Este jugador ya está en la lista",
+      "picker_label": "Agregar jugadores",
+      "picker_placeholder": "Seleccionar jugadores...",
+      "picker_registered_count": "{{count}} inscrito(s)",
+      "picker_search": "Buscar por nombre o BGA...",
+      "registered_badge": "Inscrito",
       "already_registered": "Este jugador ya está inscrito en el torneo",
       "calculated_rounds": "Rondas calculadas",
       "continue_with_count": "Continuar ({{count}} jugadores)",
@@ -846,6 +853,7 @@
       "delete_name_invalid": "El nombre no coincide. No se eliminó el torneo.",
       "missing_data": "Faltan datos del torneo",
       "quick_title": "Crear Torneo Rápido",
+      "quick_config_section": "Configuración del torneo",
       "step1": "Crear Torneo - Paso 1: Información",
       "step2": "Crear Torneo - Paso 2: Configuración",
       "step3": "Crear Torneo - Paso 3: Inscripción"

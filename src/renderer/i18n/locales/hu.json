@@ -80,6 +80,7 @@
       "final_podium": "Végső Dobogó",
       "pts": "pont",
       "table_title": "Ranglista táblázat",
+      "podium_row_hint": "Az első 4 hely kiemelve",
       "title_active": "Ranglista - {{name}}",
       "title_final": "Végső Statisztikák - {{name}}"
     },
@@ -654,6 +655,7 @@
       "n_players": "{{count}} játékos",
       "name_label": "Verseny Neve *",
       "name_req": "A név megadása kötelező",
+      "name_auto_help": "Automatikusan a helyszín és dátum alapján; szerkeszthető",
       "place_label": "Helyszín *",
       "place_req": "Ki kell választani egy helyszínt",
       "players_label": "Játékosok Mérkőzésenként *",
@@ -729,6 +731,11 @@
     "quick_tournament": "Gyors Verseny",
     "registration": {
       "already_in_list": "Ez a játékos már rajta van a listán",
+      "picker_label": "Játékosok hozzáadása",
+      "picker_placeholder": "Játékosok kiválasztása...",
+      "picker_registered_count": "{{count}} regisztrálva",
+      "picker_search": "Keresés név vagy BGA alapján...",
+      "registered_badge": "Regisztrálva",
       "already_registered": "Ez a játékos már regisztrált a versenyre",
       "calculated_rounds": "Számított fordulók",
       "continue_with_count": "Folytatás ({{count}} játékos)",
@@ -846,6 +853,7 @@
       "delete_name_invalid": "A név nem egyezik. A verseny nem lett törölve.",
       "missing_data": "Hiányzó verseny adatok",
       "quick_title": "Gyors Verseny Létrehozása",
+      "quick_config_section": "Verseny beállításai",
       "step1": "Verseny Létrehozása - 1. Lépés: Információ",
       "step2": "Verseny Létrehozása - 2. Lépés: Beállítások",
       "step3": "Verseny Létrehozása - 3. Lépés: Regisztráció"

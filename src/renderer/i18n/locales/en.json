@@ -80,6 +80,7 @@
       "final_podium": "Final Podium",
       "pts": "pts",
       "table_title": "Standings table",
+      "podium_row_hint": "Top 4 positions are highlighted",
       "title_active": "Standings - {{name}}",
       "title_final": "Final Statistics - {{name}}"
     },
@@ -654,6 +655,7 @@
       "n_players": "{{count}} players",
       "name_label": "Tournament Name *",
       "name_req": "Name is required",
+      "name_auto_help": "Generated automatically from place and date; you can edit it",
       "place_label": "Place *",
       "place_req": "You must select a place",
       "players_label": "Players per Match *",
@@ -729,6 +731,11 @@
     "quick_tournament": "Quick Tournament",
     "registration": {
       "already_in_list": "This player is already in the list",
+      "picker_label": "Add players",
+      "picker_placeholder": "Select players...",
+      "picker_registered_count": "{{count}} registered",
+      "picker_search": "Search by name or BGA...",
+      "registered_badge": "Registered",
       "already_registered": "This player is already registered in the tournament",
       "calculated_rounds": "Calculated rounds",
       "continue_with_count": "Continue ({{count}} players)",
@@ -846,6 +853,7 @@
       "delete_name_invalid": "The name does not match. The tournament was not deleted.",
       "missing_data": "Missing tournament data",
       "quick_title": "Create Quick Tournament",
+      "quick_config_section": "Tournament settings",
       "step1": "Create Tournament - Step 1: Info",
       "step2": "Create Tournament - Step 2: Config",
       "step3": "Create Tournament - Step 3: Registration"

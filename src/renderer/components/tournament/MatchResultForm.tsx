@@ -17,23 +17,14 @@ import {
   resultsForGame,
 } from '../../services/knockout';
 import type { KnockoutSeries } from '../../types/knockout';
-
-function orderResultsByPlayers(
-  loadedResults: Array<{ player_id: number; points: number }>,
-  matchPlayers: Player[],
-  count: number
-): Array<{ player_id: number; points: number }> {
-  const pointsByPlayer = new Map(loadedResults.map((r) => [r.player_id, r.points]));
-  return matchPlayers.slice(0, count).map((p) => ({
-    player_id: p.id!,
-    points: pointsByPlayer.get(p.id!) ?? 0,
-  }));
-}
+import { orderResultsByMatchPlayers } from '../../utils/matchPlayerOrder';
 
 interface MatchResultFormProps {
   match: Match;
   tournamentId: number;
   playersPerMatch: number;
+  /** Same player array already shown in the matches table (avoids a second query with different sort). */
+  seatPlayers?: Player[];
   onSave: () => void;
   onCancel: () => void;
   tournamentStatus?: 'draft' | 'in_progress' | 'completed';
@@ -46,6 +37,7 @@ export default function MatchResultForm({
   match,
   tournamentId,
   playersPerMatch,
+  seatPlayers,
   onSave,
   onCancel,
   tournamentStatus = 'in_progress',
@@ -80,9 +72,11 @@ export default function MatchResultForm({
   const loadData = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      const [matchPlayers, existingResults, matchData, tournamentConfig, knockoutSeeds] =
+      const [fetchedPlayers, existingResults, matchData, tournamentConfig, knockoutSeeds] =
         await Promise.all([
-          DatabaseService.getMatchPlayers(match.id!) as Promise<Player[]>,
+          seatPlayers?.length
+            ? Promise.resolve(seatPlayers)
+            : (DatabaseService.getMatchPlayers(match.id!) as Promise<Player[]>),
           DatabaseService.getMatchResults(match.id!),
           DatabaseService.query<{
             first_player_id: number | null;
@@ -96,6 +90,8 @@ export default function MatchResultForm({
           isKnockout ? DatabaseService.getTournamentConfig(tournamentId) : Promise.resolve(null),
           isKnockout ? DatabaseService.getKnockoutSeeds(tournamentId) : Promise.resolve([]),
         ]);
+
+      const matchPlayers = fetchedPlayers;
 
       const seedByPlayer = new Map(
         (knockoutSeeds ?? []).map((s) => [s.player_id, s.seed] as const)
@@ -163,7 +159,7 @@ export default function MatchResultForm({
         setActiveGameNumber(gn);
         const gameResults = existingResults.filter((r) => (r.game_number ?? 1) === gn);
         if (gameResults.length >= 2) {
-          const loadedResults = orderResultsByPlayers(
+          const loadedResults = orderResultsByMatchPlayers(
             gameResults.map((r) => ({ player_id: r.player_id, points: r.points })),
             matchPlayers,
             2
@@ -188,7 +184,7 @@ export default function MatchResultForm({
         }
       } else if (existingResults.length > 0) {
         const gameResults = resultsForGame(existingResults, 1);
-        const loadedResults = orderResultsByPlayers(
+        const loadedResults = orderResultsByMatchPlayers(
           gameResults.map((r) => ({ player_id: r.player_id, points: r.points })),
           matchPlayers,
           effectivePlayersPerMatch
@@ -235,7 +231,7 @@ export default function MatchResultForm({
     } finally {
       setIsLoadingData(false);
     }
-  }, [match, tournamentId, effectivePlayersPerMatch, isBestOf3, isKnockout]);
+  }, [match, tournamentId, effectivePlayersPerMatch, isBestOf3, isKnockout, seatPlayers]);
 
   useEffect(() => {
     if (match?.id) {

@@ -2232,6 +2232,7 @@ export default function TournamentDetail() {
           <MatchResultForm
             match={selectedMatch}
             tournamentId={tournament.id!}
+            seatPlayers={selectedMatch.id != null ? matchPlayersMap[selectedMatch.id] : undefined}
             playersPerMatch={
               selectedMatch.is_knockout || currentRound?.phase === 'knockout'
                 ? 2

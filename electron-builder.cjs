@@ -42,7 +42,7 @@ module.exports = {
         arch: ["x64"]
       }
     ],
-    icon: isInt ? "build/icon_int.ico" : "build/icon.ico"
+    icon: "build/icon.ico"
   },
   asarUnpack: [
     "**/better-sqlite3/**/*"

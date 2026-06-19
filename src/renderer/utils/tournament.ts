@@ -14,6 +14,15 @@ export function calculateNumberOfRounds(numPlayers: number): number {
   return 7;
 }
 
+/** Rondas planificadas: valor guardado o cálculo por jugadores (nunca asumir 1 por defecto). */
+export function getEffectiveNumberOfRounds(
+  stored: number | null | undefined,
+  playerCount: number
+): number {
+  if (stored != null && stored > 0) return stored;
+  return calculateNumberOfRounds(Math.max(playerCount, 0));
+}
+
 /**
  * Get the maximum number of players for a given number of rounds
  */

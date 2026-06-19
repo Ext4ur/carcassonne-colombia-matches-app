@@ -121,6 +121,7 @@ vi.mock('../api/clients/SupabaseClient', () => ({
       from: (table: string) => mockFrom(table),
     },
     query: vi.fn(),
+    ensureSyncSession: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
@@ -170,6 +171,7 @@ describe('SyncService', () => {
       client: {
         from: mockFrom,
       },
+      ensureSyncSession: vi.fn().mockResolvedValue(undefined),
     };
 
     mockExecute.mockClear();
@@ -266,7 +268,10 @@ describe('SyncService', () => {
     // Mock queries to handle the sequence correctly
     mockQuery.mockImplementation(async (sql: string) => {
       if (sql.includes('sync_meta')) return [{ value: '0' }];
-      if (sql.includes('sync_queue')) {
+      if (sql.includes('COUNT(*)') && sql.includes('sync_queue')) {
+        return [{ count: 1 }];
+      }
+      if (sql.includes('SELECT * FROM sync_queue')) {
         // Return queueItem only once per test run
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (!(mockQuery as any)._called) {
@@ -304,6 +309,7 @@ describe('SyncService', () => {
     let queryCount = 0;
     mockQuery.mockImplementation(async (sql: string) => {
       if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('COUNT(*)') && sql.includes('sync_queue')) return [{ count: 1 }];
       if (sql.includes('SELECT * FROM sync_queue')) {
         return queryCount++ === 0 ? [queueItem] : [];
       }
@@ -338,6 +344,7 @@ describe('SyncService', () => {
     let queryCount = 0;
     mockQuery.mockImplementation(async (sql: string) => {
       if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('COUNT(*)') && sql.includes('sync_queue')) return [{ count: 1 }];
       if (sql.includes('SELECT * FROM sync_queue')) {
         return queryCount++ === 0 ? [queueItem] : [];
       }
@@ -371,6 +378,7 @@ describe('SyncService', () => {
     let queryCount = 0;
     mockQuery.mockImplementation(async (sql: string) => {
       if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('COUNT(*)') && sql.includes('sync_queue')) return [{ count: 1 }];
       if (sql.includes('SELECT * FROM sync_queue')) {
         return queryCount++ === 0 ? [queueItem] : [];
       }
@@ -409,5 +417,31 @@ describe('SyncService', () => {
 
     // Should not query queue
     expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it('getSyncProgress returns checkpoint and queue metrics', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) {
+        return [{ value: '500' }];
+      }
+      if (sql.includes('FROM sync_queue')) {
+        return [{ count: 12 }];
+      }
+      return [];
+    });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sync_audit_logs') {
+        return createMockChain([{ id: 1000 }]);
+      }
+      return createMockChain();
+    });
+
+    const progress = await SyncService.getSyncProgress();
+
+    expect(progress.pullCheckpoint).toBe(500);
+    expect(progress.pullRemoteMax).toBe(1000);
+    expect(progress.pushPending).toBe(12);
+    expect(progress.percent).toBe(50);
   });
 });

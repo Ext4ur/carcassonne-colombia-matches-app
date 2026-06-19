@@ -10,6 +10,10 @@ import Places from './pages/Places';
 import Cities from './pages/Cities';
 import Settings from './pages/Settings';
 import Layout from './components/common/Layout';
+import { isStoreMode } from './utils/storeMode';
+import { ensureStoreModeSyncDefaults } from './api/clients/supabaseConfig';
+
+ensureStoreModeSyncDefaults();
 
 function App() {
   return (
@@ -21,11 +25,11 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/tournaments" element={<Tournaments />} />
               <Route path="/tournament/:id" element={<TournamentDetail />} />
-              <Route path="/circuits" element={<Circuits />} />
+              {!isStoreMode() && <Route path="/circuits" element={<Circuits />} />}
+              {!isStoreMode() && <Route path="/places" element={<Places />} />}
+              {!isStoreMode() && <Route path="/cities" element={<Cities />} />}
               <Route path="/players" element={<Players />} />
-              <Route path="/places" element={<Places />} />
-              <Route path="/cities" element={<Cities />} />
-              <Route path="/settings" element={<Settings />} />
+              {!isStoreMode() && <Route path="/settings" element={<Settings />} />}
             </Routes>
           </Layout>
         </HashRouter>

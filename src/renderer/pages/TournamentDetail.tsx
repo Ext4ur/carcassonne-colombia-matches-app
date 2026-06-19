@@ -48,7 +48,7 @@ import Select from '../components/common/Select';
 import { Column } from '../components/common/Table';
 import { Place } from '../types/place';
 import { useNotifications } from '../contexts/NotificationContext';
-import { calculateNumberOfRounds } from '../utils/tournament';
+import { calculateNumberOfRounds, getEffectiveNumberOfRounds } from '../utils/tournament';
 import { formatDateForDisplay } from '../utils/dateUtils';
 import {
   formatPlayerStandingHeadToHeadText,
@@ -61,6 +61,9 @@ import { useTranslation } from 'react-i18next';
 import { knockoutStageI18nKey } from '../types/knockout';
 import type { KnockoutSeries } from '../types/knockout';
 import { formatUserError } from '../utils/formatUserError';
+import { isStoreMode } from '../utils/storeMode';
+import { canEditStoreTournament } from '../services/storeLifecycle';
+import StoreFinalizeExportModal from '../components/store/StoreFinalizeExportModal';
 
 export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -124,6 +127,19 @@ export default function TournamentDetail() {
     useState<CompetitionFormat>('swiss');
   const [tournamentSettingsModalKey, setTournamentSettingsModalKey] = useState(0);
   const [buchholzByeMode, setBuchholzByeMode] = useState<BuchholzByeMode>('legacy');
+  const [isFinalizeExportOpen, setIsFinalizeExportOpen] = useState(false);
+
+  const canEditTournament = useMemo(() => {
+    if (!tournament) return false;
+    if (!isStoreMode()) return tournament.status !== 'completed';
+    return canEditStoreTournament(tournament.status);
+  }, [tournament]);
+
+  const effectiveMaxSwissRounds = useMemo(() => {
+    if (!tournament) return 1;
+    const playerCount = standings.filter((s) => s.active).length || standings.length || 0;
+    return getEffectiveNumberOfRounds(tournament.number_of_rounds, playerCount);
+  }, [tournament, standings]);
 
   const loadTournament = useCallback(async () => {
     if (!id) return;
@@ -350,7 +366,12 @@ export default function TournamentDetail() {
     try {
       setIsLoading(true);
       await DatabaseService.updateTournament(tournament.id, { status: 'completed' });
-      await loadTournament(); // Reload tournament to get updated status
+      if (isStoreMode()) {
+        setIsFinalizeExportOpen(true);
+        await loadTournament();
+        return;
+      }
+      await loadTournament();
       addNotification({
         message: t('tournaments.detail.finalize_success'),
         type: 'success',
@@ -366,6 +387,17 @@ export default function TournamentDetail() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleStoreFinalizeExportComplete = async () => {
+    setIsFinalizeExportOpen(false);
+    await loadTournament();
+    addNotification({
+      message: t('tournaments.detail.finalize_success_store'),
+      type: 'success',
+      duration: 5000,
+    });
+    setShowStats(true);
   };
 
   const handleStartKnockout = async () => {
@@ -703,8 +735,10 @@ export default function TournamentDetail() {
     const roundsAfter = await loadRounds();
 
     const players = await DatabaseService.getTournamentPlayers(tournament.id);
-    const effectiveMaxRounds =
-      tournament.number_of_rounds || calculateNumberOfRounds(players.length);
+    const effectiveMaxRounds = getEffectiveNumberOfRounds(
+      tournament.number_of_rounds,
+      players.length
+    );
 
     if (roundsAfter.length < effectiveMaxRounds) {
       addNotification({
@@ -724,12 +758,13 @@ export default function TournamentDetail() {
   const tournamentConfigReadOnly = useMemo(() => rounds.length > 0, [rounds.length]);
 
   const canOfferDeleteLastRound = useMemo(() => {
+    if (!canEditTournament) return false;
     if (!tournament || tournament.status === 'completed' || rounds.length === 0) return false;
     const last = rounds[rounds.length - 1];
     if (!last?.id || last.status !== 'pending' || currentRound?.id !== last.id) return false;
     // Bye: solo 1 fila de resultado (auto); no cuenta como “ronda con resultados guardados”.
     return !matches.some((m) => m.id && (matchResultsMap[m.id]?.length ?? 0) >= 2);
-  }, [tournament, rounds, currentRound?.id, matches, matchResultsMap]);
+  }, [canEditTournament, tournament, rounds, currentRound?.id, matches, matchResultsMap]);
 
   const handlePrestartConfigSave = async (
     cfg: Partial<TournamentConfig> & {
@@ -1578,10 +1613,11 @@ export default function TournamentDetail() {
             variant="primary"
             size="sm"
             onClick={() => handleOpenMatchModal(match)}
-            disabled={tournament?.status === 'completed'}
             className="whitespace-nowrap"
           >
-            {match.status === 'completed' ? t('common.edit') : t('common.play')}
+            {match.status === 'completed' || !canEditTournament
+              ? t('common.view')
+              : t('common.play')}
           </Button>
         );
       },
@@ -1613,8 +1649,7 @@ export default function TournamentDetail() {
             <p className="text-gray-600 dark:text-gray-400">
               {t(`tournaments.types.${tournament.type}`)} • {formatDateForDisplay(tournament.date)}
               {(() => {
-                const planned =
-                  tournament.number_of_rounds || calculateNumberOfRounds(standings.length || 0);
+                const planned = effectiveMaxSwissRounds;
                 const safePlanned = Math.max(1, planned);
                 const cur =
                   currentRound?.round_number ??
@@ -1667,7 +1702,9 @@ export default function TournamentDetail() {
               variant="secondary"
               size="sm"
               onClick={() => setIsAddPlayerOpen(true)}
-              disabled={tournament?.status === 'completed' || rounds.length > 1}
+              disabled={
+                tournament?.status === 'completed' || rounds.length > 1 || !canEditTournament
+              }
               title={
                 rounds.length > 1
                   ? t('tournaments.detail.add_player_blocked_title')
@@ -1676,24 +1713,28 @@ export default function TournamentDetail() {
             >
               + {t('players.new')}
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setTournamentSettingsModalKey((k) => k + 1);
-                setIsPrestartConfigOpen(true);
-              }}
-              title={
-                tournamentConfigReadOnly
-                  ? t('tournaments.detail.tournament_settings_view_hint')
-                  : t('tournaments.detail.prestart_settings_hint')
-              }
-            >
-              {t('tournaments.detail.prestart_settings')}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleOpenEditModal}>
-              {t('common.edit')}
-            </Button>
+            {!isStoreMode() && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setTournamentSettingsModalKey((k) => k + 1);
+                  setIsPrestartConfigOpen(true);
+                }}
+                title={
+                  tournamentConfigReadOnly
+                    ? t('tournaments.detail.tournament_settings_view_hint')
+                    : t('tournaments.detail.prestart_settings_hint')
+                }
+              >
+                {t('tournaments.detail.prestart_settings')}
+              </Button>
+            )}
+            {!isStoreMode() && (
+              <Button variant="secondary" size="sm" onClick={handleOpenEditModal}>
+                {t('common.edit')}
+              </Button>
+            )}
             <Button
               variant={showMatrix ? 'primary' : 'secondary'}
               onClick={() => setShowMatrix(!showMatrix)}
@@ -1967,14 +2008,14 @@ export default function TournamentDetail() {
                 <Button
                   onClick={handleGenerateFirstRound}
                   isLoading={isLoading}
-                  disabled={tournament?.status === 'completed'}
+                  disabled={tournament?.status === 'completed' || !canEditTournament}
                 >
                   {t('tournaments.detail.generate_first_round')}
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={() => setIsManualPairingOpen(true)}
-                  disabled={tournament?.status === 'completed' || isLoading}
+                  disabled={tournament?.status === 'completed' || isLoading || !canEditTournament}
                 >
                   {t('tournaments.detail.manual_pairings')}
                 </Button>
@@ -1992,7 +2033,7 @@ export default function TournamentDetail() {
               (() => {
                 const isSwissKo = tournament.competition_format === 'swiss_knockout';
                 const koActive = isKnockoutPhaseActive(tournament, rounds);
-                const maxSwiss = tournament.number_of_rounds || 1;
+                const maxSwiss = effectiveMaxSwissRounds;
                 const swissCount = countSwissRounds(rounds);
                 const swissRounds = rounds.filter((r) => (r.phase ?? 'swiss') === 'swiss');
                 const allSwissCompleted =
@@ -2006,6 +2047,7 @@ export default function TournamentDetail() {
                       variant="success"
                       isLoading={isLoading}
                       className="w-full"
+                      disabled={!canEditTournament}
                     >
                       {t('knockout.start_phase')}
                     </Button>
@@ -2031,7 +2073,11 @@ export default function TournamentDetail() {
                   }
                   if (lastKo?.status === 'completed' && !koDone) {
                     return (
-                      <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
+                      <Button
+                        onClick={handleGenerateNextRoundClick}
+                        isLoading={isLoading}
+                        disabled={!canEditTournament}
+                      >
                         {t('knockout.generate_next_round')}
                       </Button>
                     );
@@ -2069,13 +2115,17 @@ export default function TournamentDetail() {
                 if (currentRound?.status === 'completed') {
                   return (
                     <div className="flex flex-col gap-2">
-                      <Button onClick={handleGenerateNextRoundClick} isLoading={isLoading}>
+                      <Button
+                        onClick={handleGenerateNextRoundClick}
+                        isLoading={isLoading}
+                        disabled={!canEditTournament}
+                      >
                         {t('tournaments.detail.generate_next_round')}
                       </Button>
                       <Button
                         variant="secondary"
                         onClick={() => setIsManualPairingOpen(true)}
-                        disabled={isLoading}
+                        disabled={isLoading || !canEditTournament}
                       >
                         {t('tournaments.detail.manual_pairings')}
                       </Button>
@@ -2240,7 +2290,7 @@ export default function TournamentDetail() {
             }
             isKnockout={Boolean(selectedMatch.is_knockout || currentRound?.phase === 'knockout')}
             knockoutSeries={(tournamentConfig?.knockout_series as KnockoutSeries) ?? 'best_of_1'}
-            tournamentStatus={tournament.status}
+            tournamentStatus={canEditTournament ? tournament.status : 'completed'}
             roundStatus={currentRound?.status}
             onSave={handleMatchResultSaved}
             onCancel={() => {
@@ -2521,6 +2571,14 @@ export default function TournamentDetail() {
           players={standings.filter((p) => p.active)}
           roundNumber={rounds.length + 1}
           previousOpponents={previewData?.previousOpponents}
+        />
+      )}
+      {isStoreMode() && tournament?.id && (
+        <StoreFinalizeExportModal
+          isOpen={isFinalizeExportOpen}
+          tournamentId={tournament.id}
+          tournamentName={tournament.name ?? 'tournament'}
+          onComplete={handleStoreFinalizeExportComplete}
         />
       )}
     </div>

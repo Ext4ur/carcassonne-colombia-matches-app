@@ -31,6 +31,7 @@ export type {
 
 export interface Tournament {
   id?: number;
+  uuid?: string;
   name: string;
   type: TournamentType;
   circuit_id?: number;

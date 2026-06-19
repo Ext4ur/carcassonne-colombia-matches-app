@@ -106,12 +106,14 @@
       "load": "Error al cargar las ciudades",
       "name_required": "El nombre es requerido",
       "save": "Error al guardar la ciudad",
-      "save_success": "Ciudad actualizada"
+      "save_success": "Ciudad actualizada",
+      "system_city_locked": "Las ciudades Online y Offline del sistema no se pueden modificar"
     },
     "form": {
       "name": "Nombre *"
     },
     "loading": "Cargando...",
+    "system_city_label": "Sistema",
     "modal": {
       "cancel_btn": "Cancelar",
       "create_btn": "Crear",
@@ -184,6 +186,8 @@
   "home": {
     "circuits_desc": "Gestiona circuitos y sus torneos",
     "description": "Gestiona tus torneos presenciales de Carcassonne de manera profesional.",
+    "store_description": "Crea y juega el clasificatorio de tu tienda Devir. Al finalizar, exporta JSON y Excel y envía los archivos a Devir.",
+    "hq_description": "Consolida clasificatorios de tiendas: importa los JSON exportados, consulta torneos y jugadores. Todo en local, sin sincronización en la nube.",
     "players_desc": "Administra la base de datos de jugadores",
     "tournaments_desc": "Crea y gestiona torneos clasificatorios o de circuito",
     "welcome": "Bienvenido al Gestor de Torneos Carcassonne"
@@ -418,6 +422,16 @@
     "sync": "Sincronización",
     "sync_enabled": "Sincronización en la Nube",
     "sync_desc": "Permite sincronizar tus datos con Supabase para respaldo y acceso multidispositivo.",
+    "sync_store_required": "En el instalador tienda la sincronización con Supabase es obligatoria (canje de código y resultados). Si ves errores de conexión, el build debe incluir VITE_SUPABASE_SYNC_EMAIL y VITE_SUPABASE_SYNC_PASSWORD.",
+    "sync_store_local": "Modo local — los datos quedan en este equipo. Al finalizar el torneo, exporta JSON y Excel y envía los archivos a Devir.",
+    "sync_hq_local": "Modo sede central Devir — solo local. Importa los JSON de las tiendas en Datos; no hay conexión a la nube.",
+    "cloud_resync_title": "Reiniciar datos locales desde la nube",
+    "cloud_resync_desc": "Borra torneos, jugadores, partidas y la cola de subida en este equipo. Luego descarga todo de nuevo desde Supabase. Útil si el sync quedó atascado con datos inconsistentes.",
+    "cloud_resync_confirm": "¿Borrar todos los datos locales de torneos/jugadores y volver a descargar desde la nube? Esta acción no se puede deshacer.",
+    "cloud_resync_action": "Borrar local y re-descargar",
+    "cloud_resync_busy": "Reiniciando…",
+    "cloud_resync_success": "Datos locales borrados. Sincronizando desde la nube…",
+    "cloud_resync_error": "No se pudo reiniciar: {{detail}}",
     "links": {
       "github": "GitHub",
       "board_game_arena": "Board Game Arena"
@@ -468,7 +482,9 @@
     "sync_ok": "Sincronizado",
     "synced": "Sincronizado",
     "syncing": "Sincronizando cambios...",
-    "syncing_label": "Sincronizando..."
+    "syncing_label": "Sincronizando...",
+    "syncing_label_percent": "Sincronizando… {{percent}}%",
+    "syncing_percent": "Sincronizando… {{percent}}%"
   },
   "theme": {
     "dark": "Cambiar a modo oscuro",
@@ -582,6 +598,7 @@
       "finalize_confirm": "¿Estás seguro de finalizar el torneo? Una vez finalizado, no se podrán hacer más cambios.",
       "finalize_error": "Error al finalizar el torneo",
       "finalize_success": "Torneo finalizado exitosamente. Ya no se pueden realizar más cambios.",
+      "finalize_success_store": "Torneo finalizado. Guarda JSON y Excel y envía los archivos a Devir. El acceso quedó en solo lectura.",
       "finish_tournament": "Finalizar Torneo",
       "fourth_place": "4to Lugar",
       "generate_first_round": "Generar Primera Ronda",
@@ -658,6 +675,10 @@
       "name_auto_help": "Se genera automáticamente a partir del lugar y la fecha; puedes editarlo",
       "place_label": "Lugar *",
       "place_req": "Debes seleccionar un lugar",
+      "city_label": "Ciudad *",
+      "city_req": "La ciudad es requerida",
+      "store_place_help": "Nombre de la tienda Devir (aparecerá en el export)",
+      "store_location_error": "Indica ciudad y lugar para crear el clasificatorio",
       "players_label": "Jugadores por Partida *",
       "players_range": "Debe ser entre 2 y 4 jugadores",
       "rounds_help": "Se calculará como potencia de 2 según el número de jugadores si se deja vacío",
@@ -922,6 +943,39 @@
     },
     "match": {
       "game_n": "Partida {{n}} del cruce"
+    }
+  },
+  "store_finalize": {
+    "title": "Exportar resultados",
+    "intro": "Para cerrar el clasificatorio debes guardar ambos archivos. Envíalos a Devir cuando termines.",
+    "step_json": "Guardar backup JSON del torneo",
+    "step_excel": "Guardar reporte Excel",
+    "step_done": "listo",
+    "save_json_btn": "Guardar JSON…",
+    "save_excel_btn": "Guardar Excel…",
+    "done_btn": "Continuar",
+    "now_excel": "JSON guardado. Ahora guarda el Excel.",
+    "all_done": "Ambos archivos guardados. La app quedó en solo lectura.",
+    "canceled_json": "Cancelaste el guardado del JSON. Inténtalo de nuevo para continuar.",
+    "canceled_excel": "Cancelaste el guardado del Excel. Inténtalo de nuevo para continuar.",
+    "error_json": "No se pudo guardar el JSON. Inténtalo de nuevo.",
+    "error_excel": "No se pudo guardar el Excel. Inténtalo de nuevo."
+  },
+  "store_activation": {
+    "title": "Activación Devir",
+    "hint": "Introduce el código que recibiste para acceder al clasificatorio de tu tienda. Se requiere conexión a internet la primera vez.",
+    "code_label": "Código de activación",
+    "code_placeholder": "DEVIR-BOG-2026-A1B2",
+    "submit": "Activar",
+    "sync_not_ready_title": "Sincronización no configurada en este instalador",
+    "sync_not_ready_hint": "Faltan las credenciales de sync embebidas al compilar. Quien generó el instalador debe añadir VITE_SUPABASE_SYNC_EMAIL y VITE_SUPABASE_SYNC_PASSWORD en .env.colombia y volver a ejecutar npm run dist:win:store.",
+    "errors": {
+      "invalid_code": "Código no válido. Verifica e inténtalo de nuevo.",
+      "expired": "Este código ha expirado. Contacta al organizador.",
+      "tournament_missing": "El torneo asignado aún no está disponible en el servidor. Intenta sincronizar más tarde.",
+      "sync_not_configured": "La sincronización no está configurada en esta instalación.",
+      "auth_failed": "No se pudo conectar al servidor de sincronización.",
+      "redeem_failed": "No se pudo canjear el código. Comprueba la conexión e inténtalo de nuevo."
     }
   },
   "swiss": {

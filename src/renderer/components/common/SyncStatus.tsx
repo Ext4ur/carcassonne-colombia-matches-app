@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { SyncService } from '../../services/syncService';
+import { SyncService, type SyncProgress } from '../../services/syncService';
 
 export default function SyncStatus() {
   const { t } = useTranslation();
@@ -8,13 +8,21 @@ export default function SyncStatus() {
     isSyncing: false,
     isOnline: navigator.onLine,
     isConfigured: false,
+    progress: null as SyncProgress | null,
   });
   const [queueSize, setQueueSize] = useState(0);
   const [lastCheck, setLastCheck] = useState(new Date());
 
   useEffect(() => {
     const updateStatus = async () => {
-      setStatus(SyncService.getSyncStatus());
+      const base = SyncService.getSyncStatus();
+      const progress = await SyncService.getSyncProgress();
+      setStatus({
+        isSyncing: base.isSyncing,
+        isOnline: base.isOnline,
+        isConfigured: base.isConfigured,
+        progress,
+      });
       const size = await SyncService.getQueueSize();
       setQueueSize(size);
       setLastCheck(new Date());
@@ -68,7 +76,9 @@ export default function SyncStatus() {
   const syncTooltip = !status.isOnline
     ? t('sync_status.no_internet')
     : status.isSyncing
-      ? t('sync_status.syncing')
+      ? status.progress?.percent != null
+        ? t('sync_status.syncing_percent', { percent: status.progress.percent })
+        : t('sync_status.syncing')
       : queueSize > 0
         ? t('sync_status.pending', { count: queueSize })
         : t('sync_status.synced');
@@ -198,8 +208,12 @@ export default function SyncStatus() {
               ? t('sync_status.pending_label', { count: queueSize })
               : t('sync_status.offline')
             : status.isSyncing
-              ? t('sync_status.syncing_label')
-              : t('sync_status.sync_ok')}
+              ? status.progress?.percent != null
+                ? t('sync_status.syncing_label_percent', { percent: status.progress.percent })
+                : t('sync_status.syncing_label')
+              : queueSize > 0
+                ? t('sync_status.pending_label', { count: queueSize })
+                : t('sync_status.sync_ok')}
         </span>
       </div>
 

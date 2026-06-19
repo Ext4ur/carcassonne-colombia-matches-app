@@ -106,12 +106,14 @@
       "load": "Error loading cities",
       "name_required": "Name is required",
       "save": "Error saving city",
-      "save_success": "City updated"
+      "save_success": "City updated",
+      "system_city_locked": "System cities Online and Offline cannot be modified"
     },
     "form": {
       "name": "Name *"
     },
     "loading": "Loading...",
+    "system_city_label": "System",
     "modal": {
       "cancel_btn": "Cancel",
       "create_btn": "Create",
@@ -184,6 +186,8 @@
   "home": {
     "circuits_desc": "Manage circuits and their tournaments",
     "description": "Manage your in-person Carcassonne tournaments professionally.",
+    "store_description": "Create and run your Devir store qualifier. When finished, export JSON and Excel and send the files to Devir.",
+    "hq_description": "Consolidate store qualifiers: import exported JSON files, view tournaments and players. All local, no cloud sync.",
     "players_desc": "Manage the player database",
     "tournaments_desc": "Create and manage qualifying or circuit tournaments",
     "welcome": "Welcome to Carcassonne Tournament Manager"
@@ -418,6 +422,16 @@
     "sync": "Synchronization",
     "sync_enabled": "Cloud Synchronization",
     "sync_desc": "Sync your data with Supabase for backup and multi-device access.",
+    "sync_store_required": "In the store installer, Supabase sync is mandatory (code redemption and results). If you see connection errors, the build must include VITE_SUPABASE_SYNC_EMAIL and VITE_SUPABASE_SYNC_PASSWORD.",
+    "sync_store_local": "Local mode — data stays on this device. When you finish the tournament, export JSON and Excel and send the files to Devir.",
+    "sync_hq_local": "Devir HQ mode — local only. Import store JSON files under Data; no cloud connection.",
+    "cloud_resync_title": "Reset local data from cloud",
+    "cloud_resync_desc": "Deletes tournaments, players, matches and the upload queue on this device, then downloads everything from Supabase again. Use when sync is stuck on inconsistent data.",
+    "cloud_resync_confirm": "Delete all local tournament/player data and re-download from the cloud? This cannot be undone.",
+    "cloud_resync_action": "Clear local and re-download",
+    "cloud_resync_busy": "Resetting…",
+    "cloud_resync_success": "Local data cleared. Syncing from cloud…",
+    "cloud_resync_error": "Reset failed: {{detail}}",
     "links": {
       "github": "GitHub",
       "board_game_arena": "Board Game Arena"
@@ -468,7 +482,9 @@
     "sync_ok": "Synced",
     "synced": "Synced",
     "syncing": "Syncing changes...",
-    "syncing_label": "Syncing..."
+    "syncing_label": "Syncing...",
+    "syncing_label_percent": "Syncing… {{percent}}%",
+    "syncing_percent": "Syncing… {{percent}}%"
   },
   "theme": {
     "dark": "Switch to dark mode",
@@ -582,6 +598,7 @@
       "finalize_confirm": "Are you sure you want to finish the tournament? Once finished, no more changes can be made.",
       "finalize_error": "Error finishing tournament",
       "finalize_success": "Tournament finished successfully. No more changes can be made.",
+      "finalize_success_store": "Tournament finished. Save JSON and Excel and send the files to Devir. Access is now read-only.",
       "finish_tournament": "Finish Tournament",
       "fourth_place": "4th Place",
       "generate_first_round": "Generate First Round",
@@ -658,6 +675,10 @@
       "name_auto_help": "Generated automatically from place and date; you can edit it",
       "place_label": "Place *",
       "place_req": "You must select a place",
+      "city_label": "City *",
+      "city_req": "City is required",
+      "store_place_help": "Devir store name (shown in export)",
+      "store_location_error": "Enter city and place to create the qualifier",
       "players_label": "Players per Match *",
       "players_range": "Must be between 2 and 4 players",
       "rounds_help": "Calculated as power of 2 based on player count if empty",
@@ -922,6 +943,39 @@
     },
     "match": {
       "game_n": "Game {{n}} of the matchup"
+    }
+  },
+  "store_finalize": {
+    "title": "Export results",
+    "intro": "To close the qualifier you must save both files. Send them to Devir when done.",
+    "step_json": "Save tournament JSON backup",
+    "step_excel": "Save Excel report",
+    "step_done": "done",
+    "save_json_btn": "Save JSON…",
+    "save_excel_btn": "Save Excel…",
+    "done_btn": "Continue",
+    "now_excel": "JSON saved. Now save the Excel file.",
+    "all_done": "Both files saved. The app is now read-only.",
+    "canceled_json": "You canceled saving the JSON. Try again to continue.",
+    "canceled_excel": "You canceled saving the Excel. Try again to continue.",
+    "error_json": "Could not save the JSON. Try again.",
+    "error_excel": "Could not save the Excel. Try again."
+  },
+  "store_activation": {
+    "title": "Devir activation",
+    "hint": "Enter the code you received to access your store's qualifier. An internet connection is required the first time.",
+    "code_label": "Activation code",
+    "code_placeholder": "DEVIR-BOG-2026-A1B2",
+    "submit": "Activate",
+    "sync_not_ready_title": "Sync not configured in this installer",
+    "sync_not_ready_hint": "Sync credentials were not embedded at build time. Whoever built the installer must add VITE_SUPABASE_SYNC_EMAIL and VITE_SUPABASE_SYNC_PASSWORD to .env.colombia and run npm run dist:win:store again.",
+    "errors": {
+      "invalid_code": "Invalid code. Please check and try again.",
+      "expired": "This code has expired. Contact the organizer.",
+      "tournament_missing": "The assigned tournament is not yet available on the server. Try syncing later.",
+      "sync_not_configured": "Sync is not configured in this installation.",
+      "auth_failed": "Could not connect to the sync server.",
+      "redeem_failed": "Could not redeem the code. Check your connection and try again."
     }
   },
   "swiss": {

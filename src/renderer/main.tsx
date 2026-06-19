@@ -4,6 +4,7 @@ import App from './App';
 import './index.css';
 import i18n from './i18n/config';
 import { SyncService } from './services/syncService';
+import { isLocalOnlyMode } from './utils/storeMode';
 
 // Error boundary for React errors
 class ErrorBoundary extends React.Component<
@@ -80,9 +81,10 @@ if (!window.electronAPI) {
   console.log('electronAPI is available:', typeof window.electronAPI);
 
   // Start the background sync service
-  console.log('🔄 Starting Background Sync Service...');
   (window as unknown as { SyncService: typeof SyncService }).SyncService = SyncService;
-  SyncService.startSync(30000); // 30s interval for heavy sync
+  if (!isLocalOnlyMode()) {
+    SyncService.startSync(30000);
+  }
 
   console.log('Starting React app...');
 

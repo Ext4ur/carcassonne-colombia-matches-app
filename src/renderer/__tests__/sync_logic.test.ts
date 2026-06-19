@@ -74,6 +74,22 @@ describe('Cloud Sync Logic', () => {
       const { isSupabaseConfigured } = await loadSupabaseConfig();
       expect(isSupabaseConfigured()).toBe(false);
     });
+
+    it('should return false in store mode even with credentials', async () => {
+      vi.stubEnv('VITE_APP_ENV', 'colombia');
+      vi.stubEnv('VITE_DEVIR_STORE_MODE', 'true');
+      localStorageMock.setItem('cloud_sync_enabled', 'true');
+      const { isSupabaseConfigured } = await loadSupabaseConfig();
+      expect(isSupabaseConfigured()).toBe(false);
+    });
+
+    it('should return false in Devir HQ mode even with credentials', async () => {
+      vi.stubEnv('VITE_APP_ENV', 'colombia');
+      vi.stubEnv('VITE_DEVIR_HQ_MODE', 'true');
+      localStorageMock.setItem('cloud_sync_enabled', 'true');
+      const { isSupabaseConfigured } = await loadSupabaseConfig();
+      expect(isSupabaseConfigured()).toBe(false);
+    });
   });
 
   describe('isRemoteSyncReady', () => {

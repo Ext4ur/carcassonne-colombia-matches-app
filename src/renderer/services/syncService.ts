@@ -1,6 +1,12 @@
 import { SqliteClient } from '../api/clients/SqliteClient';
 import { SupabaseClient } from '../api/clients/SupabaseClient';
 import { isSupabaseConfigured, isRemoteSyncReady } from '../api/clients/supabaseConfig';
+import { shouldSkipPullLogInStoreMode } from './storePullFilter';
+import { filterRecordForLocalSQLite } from './syncLocalSchema';
+import { formatSyncError, syncLog } from '../utils/syncLogger';
+import { invalidateAllLists } from './dbCache';
+import { SYSTEM_CITY_UUIDS } from '../constants';
+import { isStoreMode } from '../utils/storeMode';
 
 export interface SyncQueueItem {
   id: number;
@@ -25,6 +31,17 @@ type PullProcessResult = 'processed' | 'deferred';
 /** table name -> uuid -> remote row (pull batch prefetch) */
 type RemoteRowCache = Map<string, Map<string, Record<string, unknown>>>;
 
+export interface SyncProgress {
+  /** 0–100 when estimable; null if unknown (e.g. remote max not fetched yet). */
+  percent: number | null;
+  phase: 'idle' | 'pull' | 'push';
+  pullCheckpoint: number;
+  pullRemoteMax: number | null;
+  pushPending: number;
+  pushProcessedThisSession: number;
+  isSyncing: boolean;
+}
+
 export class SyncService {
   private static _sqlite: SqliteClient | null = null;
   private static _supabase: SupabaseClient | null = null;
@@ -36,10 +53,34 @@ export class SyncService {
   private static isSchemaReady = true;
   public static instanceId = Math.random().toString(36).substring(7);
 
+  /** Max wall-clock time for one sync() burst when backlog is detected. */
+  private static readonly SYNC_BURST_MAX_MS = 55_000;
   /** Max audit rows per pull query — avoids huge payloads and long single runs. */
   private static readonly PULL_LOG_BATCH_SIZE = 500;
   /** Max pull batches per sync() so catch-up drains without waiting for the next interval. */
   private static readonly MAX_PULL_ROUNDS_PER_SYNC = 40;
+  /** Inner FK-deferral rounds per pull batch (batch hydrate → retry). */
+  private static readonly MAX_PULL_DEFERRAL_ROUNDS = 8;
+  /** Max push items per sync() burst (safety cap alongside time budget). */
+  private static readonly MAX_PUSH_ITEMS_PER_SYNC = 600;
+  /** Rows fetched from sync_queue per push inner query. */
+  private static readonly PUSH_QUERY_BATCH_SIZE = 40;
+
+  private static _syncProgress: SyncProgress = {
+    percent: null,
+    phase: 'idle',
+    pullCheckpoint: 0,
+    pullRemoteMax: null,
+    pushPending: 0,
+    pushProcessedThisSession: 0,
+    isSyncing: false,
+  };
+  private static _pushQueueAtSessionStart = 0;
+  /** Filas aplicadas en pull durante el burst actual (para invalidar caché UI). */
+  private static _pullRowsAppliedThisSession = 0;
+  /** Evita reintentar hidratar el mismo padre ausente en cada pasada del pull. */
+  private static hydrateMissCache = new Set<string>();
+  private static lastDeferredWarnSignature = '';
   /** UUIDs per Supabase `.in()` to avoid URL / PostgREST limits. */
   private static readonly PREFETCH_UUID_CHUNK_SIZE = 120;
   /**
@@ -49,23 +90,27 @@ export class SyncService {
   private static readonly PULL_LOG_PROGRESS_EVERY_DEFAULT = 100;
 
   /**
-   * Dependency order for batch FK hydration (parents before children).
-   * Must cover every table that appears as an FK target in FK_DEFINITIONS.
+   * Orden de dependencias para pull (padres antes que hijos).
+   * Ciudades → lugares → circuitos/jugadores → torneos → rondas → partidas → resultados.
    */
-  private static readonly HYDRATION_TABLE_ORDER: string[] = [
+  private static readonly PULL_TABLE_ORDER: string[] = [
     'cities',
+    'places',
     'circuits',
     'players',
-    'places',
     'tournaments',
     'tournament_configs',
+    'tournament_knockout_seeds',
+    'tournament_players',
+    'player_byes',
     'rounds',
     'matches',
-    'tournament_players',
     'match_players',
     'match_results',
-    'player_byes',
   ];
+
+  /** @deprecated alias — usar PULL_TABLE_ORDER */
+  private static readonly HYDRATION_TABLE_ORDER = SyncService.PULL_TABLE_ORDER;
 
   private static get sqlite() {
     if (!this._sqlite) this._sqlite = new SqliteClient();
@@ -82,6 +127,9 @@ export class SyncService {
     if (import.meta.env?.MODE === 'test') return 10_000;
     try {
       if (typeof localStorage !== 'undefined' && localStorage.getItem('sync_pull_trace') === '1') {
+        return 1;
+      }
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('sync_log_verbose') === '1') {
         return 1;
       }
       const raw =
@@ -107,6 +155,19 @@ export class SyncService {
     this._isOnline = true;
     this._sqlite = null; // Forces re-instantiation with mocks
     this._supabase = null;
+    this._syncProgress = {
+      percent: null,
+      phase: 'idle',
+      pullCheckpoint: 0,
+      pullRemoteMax: null,
+      pushPending: 0,
+      pushProcessedThisSession: 0,
+      isSyncing: false,
+    };
+    this.hydrateMissCache.clear();
+    this.lastDeferredWarnSignature = '';
+    this._pushQueueAtSessionStart = 0;
+    this._pullRowsAppliedThisSession = 0;
   }
 
   /**
@@ -116,10 +177,10 @@ export class SyncService {
   static async startSync(intervalMs = 10000) {
     if (this.syncInterval) return;
 
-    console.log(`🔄 Sync Service Started (Instance: ${this.instanceId})`);
+    syncLog.debug(`iniciado (${this.instanceId})`);
 
     if (!isRemoteSyncReady()) {
-      console.log('ℹ️ Sync Service is disabled by configuration, auth, or user setting.');
+      syncLog.debug('desactivado (config, auth o ajuste de usuario)');
       return;
     }
 
@@ -139,7 +200,7 @@ export class SyncService {
         );
       }
     } catch {
-      console.log('ℹ️ Sync queue not ready yet or stuck items check skipped.');
+      syncLog.debug('cola sync no lista; omitiendo revisión de atascados');
     }
 
     // Initial checks
@@ -206,9 +267,7 @@ export class SyncService {
         // If we get a 404/PGRST205, the schema is not initialized
         if (status === 404 || (error as { code?: string })?.code === 'PGRST205') {
           if (this.isSchemaReady) {
-            console.warn(
-              '⚠️ Supabase schema is not ready yet (tables missing). Sync will be deferred.'
-            );
+            syncLog.warn('esquema Supabase incompleto; sync aplazado');
           }
           this.isSchemaReady = false;
         } else {
@@ -233,33 +292,27 @@ export class SyncService {
 
   static async sync() {
     if (this.isSyncInvocationActive) {
-      console.log(`[${this.instanceId}] 🔁 Sync call skipped (invocation already active)`);
+      syncLog.debug('sync omitido (invocación activa)');
       return;
     }
     this.isSyncInvocationActive = true;
     try {
-      console.log(
-        `[${this.instanceId}] Entered sync() - isSyncing=${this.isSyncing}, isSchemaReady=${this.isSchemaReady}, isOnline=${this._isOnline}`
+      syncLog.debug(
+        `sync() online=${this._isOnline} schema=${this.isSchemaReady} syncing=${this.isSyncing}`
       );
       if (this.isSyncing) {
-        console.log(`[${this.instanceId}] 🔒 Sync already in progress (flag)`);
+        syncLog.debug('sync omitido (ya en curso)');
         return;
       }
 
-      // Refresh status first
-      console.log(`[${this.instanceId}] Sync calling updateOnlineStatus...`);
       await this.updateOnlineStatus();
-      console.log(
-        `[${this.instanceId}] Sync updateOnlineStatus returned _isOnline=${this._isOnline}`
-      );
       if (!this._isOnline) {
-        console.log(`[${this.instanceId}] 🌐 Sync skipped: Offline`);
+        syncLog.debug('sync omitido (sin conexión)');
         return;
       }
 
-      // Check if schema is ready
       if (!this.isSchemaReady) {
-        console.log(`[${this.instanceId}] ⏳ Sync deferred: Supabase schema not yet initialized.`);
+        syncLog.debug('sync aplazado (esquema no listo)');
         return;
       }
 
@@ -278,7 +331,7 @@ export class SyncService {
             now - lock.timestamp < 25000 &&
             import.meta.env?.MODE !== 'test'
           ) {
-            console.log(`🔒 Sync already in progress by another instance (${lock.instanceId})`);
+            syncLog.debug(`sync omitido (otra ventana: ${lock.instanceId})`);
             return;
           }
         }
@@ -299,13 +352,23 @@ export class SyncService {
         const verifyLockStr = localStorage.getItem(lockKey);
         const verifyLock = JSON.parse(verifyLockStr || '{}');
         if (verifyLock.instanceId !== this.instanceId && import.meta.env?.MODE !== 'test') {
-          console.warn(
-            `🔒 Instance ${this.instanceId} lost the lock during wait (verifyLock.id=${verifyLock.instanceId}).`
-          );
+          syncLog.debug(`lock perdido ante ${verifyLock.instanceId}`);
           return;
         }
 
-        console.log(`👑 Instance ${this.instanceId} is now the SYNC MASTER.`);
+        syncLog.debug(`master (${this.instanceId})`);
+
+        // Si pull y push están al día, no bloquear SQLite ni marcar "Sincronizando…".
+        await this.refreshPullProgress();
+        const queueSizeBeforeBurst = await this.getQueueSize();
+        if (queueSizeBeforeBurst === 0 && this.isPullFullyCaughtUp()) {
+          syncLog.debug('sync idle: pull al día y cola vacía');
+          this._syncProgress.phase = 'idle';
+          this._syncProgress.isSyncing = false;
+          this._syncProgress.pushPending = 0;
+          this._syncProgress.percent = 100;
+          return;
+        }
 
         // HEARTBEAT: Keep the lock while syncing
         const heartbeat = setInterval(() => {
@@ -319,38 +382,105 @@ export class SyncService {
         }, 5000);
 
         this.isSyncing = true;
+        this._syncProgress.isSyncing = true;
+        this._syncProgress.pushProcessedThisSession = 0;
+        this._pullRowsAppliedThisSession = 0;
+        this._pushQueueAtSessionStart = await this.getQueueSize();
+        this._syncProgress.pushPending = this._pushQueueAtSessionStart;
+        const burstDeadline = Date.now() + this.SYNC_BURST_MAX_MS;
         try {
           let pullRound = 0;
           let morePull = true;
-          while (morePull && pullRound < this.MAX_PULL_ROUNDS_PER_SYNC) {
+          this._syncProgress.phase = 'pull';
+          await this.refreshPullProgress();
+          while (
+            morePull &&
+            pullRound < this.MAX_PULL_ROUNDS_PER_SYNC &&
+            Date.now() < burstDeadline
+          ) {
             morePull = await this.pullChanges();
             pullRound++;
+            await this.refreshPullProgress();
           }
           if (morePull && pullRound >= this.MAX_PULL_ROUNDS_PER_SYNC) {
-            console.log(
-              `[${this.instanceId}] [Pull] Stopped after ${this.MAX_PULL_ROUNDS_PER_SYNC} batch(es); remaining backlog will continue on next sync.`
+            syncLog.debug(
+              `pull: límite ${this.MAX_PULL_ROUNDS_PER_SYNC} lotes; continúa en próximo ciclo`
             );
           }
-          await this.pushChanges();
+
+          this._syncProgress.phase = 'push';
+          let morePush = true;
+          while (morePush && Date.now() < burstDeadline) {
+            morePush = await this.pushChanges(burstDeadline);
+            this._syncProgress.pushPending = await this.getQueueSize();
+            this._syncProgress.percent = this.computeProgressPercent();
+          }
+
+          // Tras subir datos locales, re-pull: padres recién pusheados desbloquean logs aplazados.
+          if (this._syncProgress.pushProcessedThisSession > 0 && Date.now() < burstDeadline) {
+            this._syncProgress.phase = 'pull';
+            let pullAfterPush = true;
+            let pullAfterPushRound = 0;
+            while (
+              pullAfterPush &&
+              pullAfterPushRound < this.MAX_PULL_ROUNDS_PER_SYNC &&
+              Date.now() < burstDeadline
+            ) {
+              pullAfterPush = await this.pullChanges();
+              pullAfterPushRound++;
+              await this.refreshPullProgress();
+            }
+          }
         } catch (e: unknown) {
-          console.error(
-            `[${this.instanceId}] [Sync] Error during sync:`,
-            (e as Error).message || e
-          );
+          syncLog.error('sync interrumpido', e);
         } finally {
           this.isSyncing = false;
-          console.log(`[${this.instanceId}] [Sync] Finished sync sequence.`);
+          this._syncProgress.isSyncing = false;
+          this._syncProgress.phase = 'idle';
+          await this.refreshPullProgress();
+          this._syncProgress.pushPending = await this.getQueueSize();
+          this._syncProgress.percent = this.computeProgressPercent();
+          if (
+            this._pullRowsAppliedThisSession > 0 ||
+            this._syncProgress.pushProcessedThisSession > 0
+          ) {
+            invalidateAllLists();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('sync:data-changed'));
+            }
+          }
+          syncLog.debug('sync finalizado');
           clearInterval(heartbeat);
         }
       } catch (e: unknown) {
         this.isSyncing = false;
-        console.error(
-          `[${this.instanceId}] [Sync] Master check failed:`,
-          (e as Error).message || e
-        );
+        syncLog.error('lock master falló', e);
       }
     } finally {
       this.isSyncInvocationActive = false;
+    }
+  }
+
+  /**
+   * Modo tienda: si el checkpoint avanzó sin catálogo de jugadores (p. ej. sync previo al canje),
+   * reinicia pull y vuelve a sincronizar.
+   */
+  static async recoverStoreCatalogIfEmpty(): Promise<void> {
+    if (!isStoreMode()) return;
+    try {
+      const rows = await this.sqlite.query<{ count: number }>(
+        'SELECT COUNT(*) as count FROM players'
+      );
+      const playerCount = rows[0]?.count ?? 0;
+      if (playerCount > 0) return;
+      const checkpoint = await this.readPullCheckpoint();
+      if (checkpoint === 0) return;
+      syncLog.warn('modo tienda: jugadores vacíos con checkpoint>0; reiniciando pull del catálogo');
+      await this.sqlite.execute("UPDATE sync_meta SET value = '0' WHERE key = 'last_audit_log_id'");
+      await this.sqlite.execute("DELETE FROM sync_meta WHERE key = 'pull_skipped_log_ids'");
+      await this.sync();
+    } catch (e) {
+      syncLog.error('recoverStoreCatalogIfEmpty', e);
     }
   }
 
@@ -359,12 +489,77 @@ export class SyncService {
    * Usage: window.SyncService.resetSync()
    */
   static async resetSync() {
-    console.log('🔄 Manually resetting sync pointer to 0...');
+    syncLog.warn('pointer audit reseteado a 0; re-sincronizando');
     await this.sqlite.execute(
       "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_audit_log_id', '0')"
     );
-    console.log('✅ Local sync pointer reset. Restarting sync...');
     this.sync();
+  }
+
+  private static async loadPullSkippedLogIds(): Promise<Set<number>> {
+    try {
+      const rows = await this.sqlite.query<{ value: string }>(
+        "SELECT value FROM sync_meta WHERE key = 'pull_skipped_log_ids'"
+      );
+      if (rows.length === 0) return new Set();
+      const parsed = JSON.parse(rows[0].value) as unknown;
+      if (!Array.isArray(parsed)) return new Set();
+      return new Set(
+        parsed.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
+  private static async addPullSkippedLogIds(ids: number[]): Promise<void> {
+    if (ids.length === 0) return;
+    const set = await this.loadPullSkippedLogIds();
+    for (const id of ids) set.add(id);
+    const capped = [...set].sort((a, b) => a - b).slice(-5000);
+    await this.sqlite.execute(
+      "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('pull_skipped_log_ids', ?)",
+      [JSON.stringify(capped)]
+    );
+  }
+
+  /**
+   * Borra datos locales de torneos/jugadores/etc., vacía la cola de push y vuelve a pull desde id 0.
+   * Destructivo: solo datos de dominio sync; no toca ajustes de UI ni activaciones tienda.
+   */
+  static async resetLocalDataForCloudResync(): Promise<{ ok: boolean; error?: string }> {
+    if (!isRemoteSyncReady()) {
+      return { ok: false, error: 'sync_not_configured' };
+    }
+    try {
+      this.stopSync();
+      await this.sqlite.execute('PRAGMA foreign_keys = OFF');
+      for (const table of [...this.PULL_TABLE_ORDER].reverse()) {
+        try {
+          await this.sqlite.execute(`DELETE FROM ${table}`);
+        } catch {
+          /* tabla ausente en esquemas antiguos */
+        }
+      }
+      await this.sqlite.execute('DELETE FROM sync_queue');
+      await this.sqlite.execute(
+        "DELETE FROM sync_meta WHERE key IN ('last_audit_log_id', 'pull_skipped_log_ids')"
+      );
+      await this.sqlite.execute(
+        "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_audit_log_id', '0')"
+      );
+      await this.sqlite.execute('PRAGMA foreign_keys = ON');
+      await this.ensureSystemCitiesAndPlaces();
+      invalidateAllLists();
+      this.hydrateMissCache.clear();
+      this.lastDeferredWarnSignature = '';
+      syncLog.warn('datos locales borrados; pull completo desde la nube');
+      await this.startSync(30000);
+      await this.sync();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message || String(e) };
+    }
   }
 
   private static chunkArray<T>(items: T[], chunkSize: number): T[][] {
@@ -386,8 +581,8 @@ export class SyncService {
     for (const chunk of this.chunkArray(uuids, this.PREFETCH_UUID_CHUNK_SIZE)) {
       const { data, error } = await this.supabase.client.from(table).select('*').in('uuid', chunk);
       if (error) {
-        const label = context === 'prefetch' ? 'Prefetch' : 'Batch hydration fetch';
-        console.warn(`[${this.instanceId}] [Pull] ${label} failed for ${table}:`, error.message);
+        const label = context === 'prefetch' ? 'prefetch' : 'hydrate';
+        syncLog.warn(`pull ${label} ${table}: ${error.message}`);
         continue;
       }
       for (const row of data || []) out.push(row as Record<string, unknown>);
@@ -409,18 +604,52 @@ export class SyncService {
     inner.set(uuid, row);
   }
 
+  private static async persistLocalRow(
+    table: string,
+    uuid: string,
+    resolvedRecord: Record<string, unknown>
+  ): Promise<void> {
+    const localData = filterRecordForLocalSQLite(table, resolvedRecord);
+    const localByUuid = await this.sqlite.query<{ id: number }>(
+      `SELECT id FROM ${table} WHERE uuid = ?`,
+      [uuid]
+    );
+
+    if (localByUuid.length > 0) {
+      await this.updateLocalRecord(table, localData);
+      return;
+    }
+
+    const naturalKeys = this.NATURAL_KEYS[table];
+    if (naturalKeys) {
+      const conditions = naturalKeys.map((k) => `${k} = ?`).join(' AND ');
+      const params = naturalKeys.map((k) => localData[k]);
+
+      if (params.every((p) => p !== undefined && p !== null)) {
+        const localByNaturalKey = await this.sqlite.query<{ id: number }>(
+          `SELECT id FROM ${table} WHERE ${conditions}`,
+          params
+        );
+
+        if (localByNaturalKey.length > 0) {
+          const localId = localByNaturalKey[0].id;
+          await this.sqlite.execute(`UPDATE ${table} SET uuid = ? WHERE id = ?`, [uuid, localId]);
+          await this.updateLocalRecord(table, localData);
+          return;
+        }
+      }
+    }
+
+    await this.insertLocalRecord(table, localData);
+  }
+
   private static async upsertLocalFromResolvedRow(
     table: string,
     resolved: Record<string, unknown>
   ): Promise<void> {
     const uuid = resolved.uuid;
     if (typeof uuid !== 'string') return;
-    const existing = await this.sqlite.query<{ id: number }>(
-      `SELECT id FROM ${table} WHERE uuid = ?`,
-      [uuid]
-    );
-    if (existing.length > 0) await this.updateLocalRecord(table, resolved);
-    else await this.insertLocalRecord(table, resolved);
+    await this.persistLocalRow(table, uuid, resolved);
   }
 
   /** INSERT/UPDATE logs only — DELETE does not need a remote row fetch. */
@@ -458,19 +687,93 @@ export class SyncService {
       }
     }
 
-    console.log(
-      `[${this.instanceId}] [Pull] Prefetched ${totalRows} row(s) across ${byTable.size} table(s).`
-    );
+    syncLog.debug(`pull prefetch: ${totalRows} fila(s), ${byTable.size} tabla(s)`);
     return cache;
+  }
+
+  private static pullLogTablePriority(tableName: string): number {
+    const idx = this.PULL_TABLE_ORDER.indexOf(tableName);
+    return idx >= 0 ? idx : 500;
+  }
+
+  /** Padres antes que hijos dentro del mismo batch (checkpoint sigue por id de audit log). */
+  private static sortPullLogsByDependency(logs: SyncAuditLog[]): SyncAuditLog[] {
+    return [...logs].sort((a, b) => {
+      const pa = this.pullLogTablePriority(a.table_name);
+      const pb = this.pullLogTablePriority(b.table_name);
+      if (pa !== pb) return pa - pb;
+      return a.id - b.id;
+    });
+  }
+
+  /** Encola padres FK ausentes en SQLite a partir de filas ya prefetched. */
+  private static async collectMissingFkParentsFromRowCache(
+    cache: RemoteRowCache
+  ): Promise<Map<string, Set<string>>> {
+    const queue = new Map<string, Set<string>>();
+
+    for (const [table, inner] of cache) {
+      const defs = this.FK_DEFINITIONS[table];
+      if (!defs) continue;
+
+      for (const row of inner.values()) {
+        for (const [fkColumn, targetTable] of Object.entries(defs)) {
+          const uuidColumn = fkColumn.replace('_id', '_uuid');
+          const parentUuid = await this.resolveFkTargetUuid(row, fkColumn, uuidColumn, targetTable);
+          if (!parentUuid) continue;
+
+          const local = await this.sqlite.query<{ id: number }>(
+            `SELECT id FROM ${targetTable} WHERE uuid = ?`,
+            [parentUuid]
+          );
+          if (local.length > 0) continue;
+
+          let st = queue.get(targetTable);
+          if (!st) {
+            st = new Set();
+            queue.set(targetTable, st);
+          }
+          st.add(parentUuid);
+
+          if (!cache.get(targetTable)?.has(parentUuid)) {
+            const rows = await this.fetchRemoteRowsByUuids(targetTable, [parentUuid], 'prefetch');
+            for (const r of rows) {
+              const u = r.uuid;
+              if (typeof u === 'string') {
+                this.putRowInRemoteCache(cache, targetTable, u, r);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return queue;
+  }
+
+  /** Hidrata padres referenciados por el batch antes de aplicar logs hijos. */
+  private static async prefetchFkParentsForBatch(rowCache: RemoteRowCache): Promise<void> {
+    for (let pass = 0; pass < 6; pass++) {
+      const queue = await this.collectMissingFkParentsFromRowCache(rowCache);
+      let pending = 0;
+      for (const s of queue.values()) pending += s.size;
+      if (pending === 0) return;
+
+      syncLog.debug(`pull prefetch FK: ${pending} padre(s), pasada ${pass + 1}`);
+      await this.flushParentHydrationQueue(queue, rowCache);
+    }
   }
 
   /**
    * Drain queued parent UUIDs fetched in bulk; re-queues nested parents until empty or max passes.
    */
-  private static async flushParentHydrationQueue(queue: Map<string, Set<string>>): Promise<void> {
+  private static async flushParentHydrationQueue(
+    queue: Map<string, Set<string>>,
+    rowCache?: RemoteRowCache
+  ): Promise<void> {
     if (!this.supabase.client) return;
 
-    const maxPasses = 8;
+    const maxPasses = 12;
     for (let pass = 0; pass < maxPasses; pass++) {
       let pending = 0;
       for (const s of queue.values()) pending += s.size;
@@ -495,15 +798,28 @@ export class SyncService {
 
         const rows = await this.fetchRemoteRowsByUuids(table, uuids, 'hydration');
         for (const row of rows) {
+          const rowUuid = row.uuid;
+          if (typeof rowUuid !== 'string') continue;
+
+          const localExists = await this.sqlite.query<{ id: number }>(
+            `SELECT id FROM ${table} WHERE uuid = ?`,
+            [rowUuid]
+          );
+          if (localExists.length > 0) continue;
+
           const resolved = await this.resolveForeignKeys(table, row, {
             attemptHydration: true,
             depth: 0,
             batchParentQueue: queue,
           });
-          if (!resolved) continue;
+          if (resolved) {
+            wroteAny = true;
+            await this.upsertLocalFromResolvedRow(table, resolved);
+            continue;
+          }
 
-          wroteAny = true;
-          await this.upsertLocalFromResolvedRow(table, resolved);
+          const ok = await this.ensureRemoteRecordLocal(table, rowUuid, 0, rowCache);
+          if (ok) wroteAny = true;
         }
       }
 
@@ -517,9 +833,7 @@ export class SyncService {
     let leftover = 0;
     for (const s of queue.values()) leftover += s.size;
     if (leftover > 0) {
-      console.warn(
-        `[${this.instanceId}] [Pull] Batch hydration stopped after ${maxPasses} pass(es); ${leftover} parent ref(s) still queued.`
-      );
+      syncLog.warn(`pull: ${leftover} FK padre sin resolver tras ${maxPasses} pasadas`);
     }
   }
 
@@ -544,6 +858,30 @@ export class SyncService {
     return undefined;
   }
 
+  /** Resuelve UUID del padre: columna *_uuid, UUID en *_id, o lookup por id entero remoto. */
+  private static async resolveFkTargetUuid(
+    data: Record<string, unknown>,
+    fkColumn: string,
+    uuidColumn: string,
+    targetTable: string
+  ): Promise<string | undefined> {
+    const direct = this.fkTargetUuid(data, fkColumn, uuidColumn);
+    if (direct) return direct;
+
+    const remoteId = data[fkColumn];
+    if (typeof remoteId !== 'number' || !Number.isFinite(remoteId) || !this.supabase.client) {
+      return undefined;
+    }
+
+    const { data: row, error } = await this.supabase.client
+      .from(targetTable)
+      .select('uuid')
+      .eq('id', remoteId)
+      .maybeSingle();
+    if (error || !row?.uuid) return undefined;
+    return String(row.uuid);
+  }
+
   /**
    * FK columns that are NOT NULL in SQLite; if still null/invalid after resolve, defer pull
    * (circuit_id / first_player_id are optional and omitted here).
@@ -553,6 +891,7 @@ export class SyncService {
     match_players: ['match_id', 'player_id'],
     match_results: ['match_id', 'player_id'],
     player_byes: ['tournament_id', 'player_id'],
+    tournament_knockout_seeds: ['tournament_id', 'player_id'],
     rounds: ['tournament_id'],
     tournament_configs: ['tournament_id'],
     matches: ['round_id'],
@@ -578,9 +917,10 @@ export class SyncService {
   private static readonly FK_DEFINITIONS: Record<string, Record<string, string>> = {
     tournaments: { circuit_id: 'circuits', place_id: 'places' },
     places: { city_id: 'cities' },
-    matches: { round_id: 'rounds', first_player_id: 'players' },
+    matches: { round_id: 'rounds', first_player_id: 'players', series_winner_id: 'players' },
     rounds: { tournament_id: 'tournaments' },
     tournament_players: { tournament_id: 'tournaments', player_id: 'players' },
+    tournament_knockout_seeds: { tournament_id: 'tournaments', player_id: 'players' },
     match_players: { match_id: 'matches', player_id: 'players' },
     match_results: { match_id: 'matches', player_id: 'players' },
     player_byes: { tournament_id: 'tournaments', player_id: 'players' },
@@ -606,12 +946,13 @@ export class SyncService {
     const resolvedData: Record<string, unknown> = { ...data };
     const attemptHydration = opts?.attemptHydration === true;
     const depth = opts?.depth ?? 0;
-    const maxDepth = 5;
+    const maxDepth = 10;
     const batchQ = opts?.batchParentQueue;
+    let needsBatchDefer = false;
 
     for (const [fkColumn, targetTable] of Object.entries(definitions)) {
       const uuidColumn = fkColumn.replace('_id', '_uuid');
-      const targetUuid = this.fkTargetUuid(data, fkColumn, uuidColumn);
+      const targetUuid = await this.resolveFkTargetUuid(data, fkColumn, uuidColumn, targetTable);
 
       if (targetUuid) {
         let targetRecord = await this.sqlite.query<{ id: number }>(
@@ -632,7 +973,8 @@ export class SyncService {
               batchQ.set(targetTable, st);
             }
             st.add(targetUuid);
-            return null;
+            needsBatchDefer = true;
+            continue;
           }
           await this.ensureRemoteRecordLocal(targetTable, targetUuid, depth + 1);
           targetRecord = await this.sqlite.query<{ id: number }>(
@@ -643,11 +985,10 @@ export class SyncService {
 
         if (targetRecord && targetRecord.length > 0) {
           resolvedData[fkColumn] = targetRecord[0].id;
+        } else if (needsBatchDefer && batchQ) {
+          continue;
         } else {
-          // If dependency missing, skip this record for now
-          console.warn(
-            `🔍 [Dependency Check] Table ${table} needs ${targetTable} (uuid: ${targetUuid}), but it was not found locally.`
-          );
+          syncLog.debug(`pull ${table}: falta ${targetTable} (${targetUuid.slice(0, 8)}…)`);
           return null;
         }
       } else {
@@ -655,13 +996,320 @@ export class SyncService {
       }
     }
 
+    if (needsBatchDefer && batchQ) return null;
+
     return resolvedData;
+  }
+
+  /** FKs NOT NULL en Supabase que el push debe resolver antes de INSERT. */
+  private static readonly PUSH_REQUIRED_FKS: Record<string, string[]> = {
+    tournament_knockout_seeds: ['tournament_id', 'player_id'],
+  };
+
+  /**
+   * Rellena *_uuid en el payload desde la fila local (p. ej. seeds en cola antigua sin UUIDs).
+   */
+  private static async enrichPushPayloadFromLocal(
+    table: string,
+    payload: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const fkDefs = this.FK_DEFINITIONS[table];
+    if (!fkDefs) return payload;
+
+    const out = { ...payload };
+    let localRow: Record<string, unknown> | null = null;
+
+    if (table === 'tournament_knockout_seeds' && typeof out.uuid === 'string') {
+      const rows = await this.sqlite.query<{ tournament_id: number; player_id: number }>(
+        'SELECT tournament_id, player_id FROM tournament_knockout_seeds WHERE uuid = ?',
+        [out.uuid]
+      );
+      localRow = rows[0] ?? null;
+    }
+
+    for (const [fkColumn, targetTable] of Object.entries(fkDefs)) {
+      const uuidColumn = fkColumn.replace('_id', '_uuid');
+      if (out[uuidColumn]) continue;
+
+      let localId = out[fkColumn] as number | undefined;
+      if (localId == null && localRow) {
+        localId = localRow[fkColumn] as number | undefined;
+      }
+      if (localId == null) continue;
+
+      const related = await this.sqlite.query<{ uuid: string }>(
+        `SELECT uuid FROM ${targetTable} WHERE id = ?`,
+        [localId]
+      );
+      if (related[0]?.uuid) {
+        out[uuidColumn] = related[0].uuid;
+      }
+    }
+
+    return out;
+  }
+
+  /**
+   * Resuelve IDs enteros en Supabase a partir de *_uuid (IDs locales ≠ IDs remotos).
+   * Necesario cuando el trigger remoto no hidrata o tablas nuevas (KO seeds).
+   */
+  private static async hydrateRemotePayloadFromUuids(
+    table: string,
+    payload: Record<string, unknown>
+  ): Promise<{ payload: Record<string, unknown>; ready: boolean }> {
+    const definitions = this.FK_DEFINITIONS[table];
+    const client = this.supabase.client;
+    if (!definitions || !client) return { payload, ready: true };
+
+    const out: Record<string, unknown> = { ...payload };
+    let ready = true;
+
+    for (const [fkColumn, targetTable] of Object.entries(definitions)) {
+      if (out[fkColumn] != null) continue;
+      const uuidColumn = fkColumn.replace('_id', '_uuid');
+      const targetUuid = this.fkTargetUuid(out, fkColumn, uuidColumn);
+      if (!targetUuid) {
+        ready = false;
+        continue;
+      }
+
+      const { data, error } = await client
+        .from(targetTable)
+        .select('id')
+        .eq('uuid', targetUuid)
+        .maybeSingle();
+
+      if (error) {
+        syncLog.debug(`push hydrate ${table}.${fkColumn}: ${error.message}`);
+        ready = false;
+        continue;
+      }
+      if (data?.id != null) {
+        out[fkColumn] = data.id;
+      } else {
+        ready = false;
+      }
+    }
+
+    const required = this.PUSH_REQUIRED_FKS[table];
+    if (required) {
+      for (const col of required) {
+        if (out[col] == null) ready = false;
+      }
+    }
+
+    return { payload: out, ready };
+  }
+
+  private static async getLocalRowByUuid(
+    table: string,
+    uuid: string
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      const rows = await this.sqlite.query<Record<string, unknown>>(
+        `SELECT * FROM ${table} WHERE uuid = ?`,
+        [uuid]
+      );
+      return rows[0] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Local primero (pendiente de push), remoto después. */
+  private static async getRowForPullResolution(
+    table: string,
+    uuid: string,
+    rowCache: RemoteRowCache
+  ): Promise<Record<string, unknown> | null> {
+    const cached = rowCache.get(table)?.get(uuid);
+    if (cached) return cached;
+
+    const local = await this.getLocalRowByUuid(table, uuid);
+    if (local) {
+      this.putRowInRemoteCache(rowCache, table, uuid, local);
+      return local;
+    }
+
+    return this.fetchRemoteRowForHydration(table, uuid, rowCache);
+  }
+
+  private static async fetchRemoteRowForHydration(
+    table: string,
+    uuid: string,
+    rowCache: RemoteRowCache
+  ): Promise<Record<string, unknown> | null> {
+    const cached = rowCache.get(table)?.get(uuid);
+    if (cached) return cached;
+    if (!this.supabase.client) return null;
+
+    const { data, error } = await this.supabase.client
+      .from(table)
+      .select('*')
+      .eq('uuid', uuid)
+      .maybeSingle();
+    if (error || !data) return null;
+
+    const row = data as Record<string, unknown>;
+    this.putRowInRemoteCache(rowCache, table, uuid, row);
+    return row;
+  }
+
+  private static async collectAncestorUuids(
+    table: string,
+    record: Record<string, unknown>,
+    rowCache: RemoteRowCache,
+    out: Map<string, Set<string>>,
+    visited: Set<string>
+  ): Promise<void> {
+    const defs = this.FK_DEFINITIONS[table];
+    if (!defs) return;
+
+    for (const [fkColumn, targetTable] of Object.entries(defs)) {
+      const uuidColumn = fkColumn.replace('_id', '_uuid');
+      const parentUuid = await this.resolveFkTargetUuid(record, fkColumn, uuidColumn, targetTable);
+      if (!parentUuid) continue;
+
+      const visitKey = `${targetTable}:${parentUuid}`;
+      if (visited.has(visitKey)) continue;
+      visited.add(visitKey);
+
+      let set = out.get(targetTable);
+      if (!set) {
+        set = new Set();
+        out.set(targetTable, set);
+      }
+      set.add(parentUuid);
+
+      const parentRow = await this.getRowForPullResolution(targetTable, parentUuid, rowCache);
+      if (parentRow) {
+        await this.collectAncestorUuids(targetTable, parentRow, rowCache, out, visited);
+      }
+    }
+  }
+
+  private static async hydrateFullAncestorChain(
+    table: string,
+    remoteRecord: Record<string, unknown>,
+    rowCache: RemoteRowCache
+  ): Promise<void> {
+    const ancestors = new Map<string, Set<string>>();
+    await this.collectAncestorUuids(table, remoteRecord, rowCache, ancestors, new Set());
+
+    const orderedTables = [
+      ...this.PULL_TABLE_ORDER.filter((t) => ancestors.has(t)),
+      ...[...ancestors.keys()].filter((t) => !this.PULL_TABLE_ORDER.includes(t)),
+    ];
+
+    for (const ancestorTable of orderedTables) {
+      for (const uuid of ancestors.get(ancestorTable) || []) {
+        const local = await this.sqlite.query<{ id: number }>(
+          `SELECT id FROM ${ancestorTable} WHERE uuid = ?`,
+          [uuid]
+        );
+        if (local.length === 0) {
+          await this.ensureRemoteRecordLocal(ancestorTable, uuid, 0, rowCache);
+        }
+      }
+    }
+  }
+
+  private static async isPullLogStaleOnRemote(
+    table: string,
+    remoteRecord: Record<string, unknown>,
+    rowCache: RemoteRowCache,
+    visited: Set<string> = new Set()
+  ): Promise<boolean> {
+    const defs = this.FK_DEFINITIONS[table];
+    if (!defs || !this.supabase.client) return false;
+
+    for (const [fkColumn, targetTable] of Object.entries(defs)) {
+      const uuidColumn = fkColumn.replace('_id', '_uuid');
+      const parentUuid = await this.resolveFkTargetUuid(
+        remoteRecord,
+        fkColumn,
+        uuidColumn,
+        targetTable
+      );
+      if (!parentUuid) continue;
+
+      const visitKey = `${targetTable}:${parentUuid}`;
+      if (visited.has(visitKey)) continue;
+      visited.add(visitKey);
+
+      const local = await this.sqlite.query<{ id: number }>(
+        `SELECT id FROM ${targetTable} WHERE uuid = ?`,
+        [parentUuid]
+      );
+      if (local.length > 0) {
+        const localRow = await this.getLocalRowByUuid(targetTable, parentUuid);
+        if (
+          localRow &&
+          (await this.isPullLogStaleOnRemote(targetTable, localRow, rowCache, visited))
+        ) {
+          return true;
+        }
+        continue;
+      }
+
+      const remote = await this.fetchRemoteRowForHydration(targetTable, parentUuid, rowCache);
+      if (!remote) {
+        syncLog.debug(
+          `pull ${table}: ancestro ${targetTable}:${parentUuid.slice(0, 8)} ni local ni remoto (log huérfano)`
+        );
+        return true;
+      }
+
+      if (await this.isPullLogStaleOnRemote(targetTable, remote, rowCache, visited)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /** Hidrata recursivamente padres NOT NULL antes de aplicar un log hijo. */
+  private static async ensureRequiredParentsLocal(
+    table: string,
+    remoteRecord: Record<string, unknown>,
+    rowCache?: RemoteRowCache
+  ): Promise<void> {
+    if (rowCache) {
+      await this.hydrateFullAncestorChain(table, remoteRecord, rowCache);
+      return;
+    }
+
+    const required = this.PULL_REQUIRED_INTEGER_FKS[table];
+    const definitions = this.FK_DEFINITIONS[table];
+    if (!required || !definitions) return;
+
+    for (const fkColumn of required) {
+      const targetTable = definitions[fkColumn];
+      if (!targetTable) continue;
+      const uuidColumn = fkColumn.replace('_id', '_uuid');
+      const parentUuid = await this.resolveFkTargetUuid(
+        remoteRecord,
+        fkColumn,
+        uuidColumn,
+        targetTable
+      );
+      if (!parentUuid) continue;
+
+      const local = await this.sqlite.query<{ id: number }>(
+        `SELECT id FROM ${targetTable} WHERE uuid = ?`,
+        [parentUuid]
+      );
+      if (local.length === 0) {
+        await this.ensureRemoteRecordLocal(targetTable, parentUuid, 0);
+      }
+    }
   }
 
   private static async ensureRemoteRecordLocal(
     table: string,
     uuid: string,
-    depth: number
+    depth: number,
+    rowCache?: RemoteRowCache
   ): Promise<boolean> {
     const local = await this.sqlite.query<{ id: number }>(
       `SELECT id FROM ${table} WHERE uuid = ?`,
@@ -670,6 +1318,9 @@ export class SyncService {
     if (local.length > 0) return true;
     if (!this.supabase.client) return false;
 
+    const missKey = `${table}:${uuid}`;
+    if (this.hydrateMissCache.has(missKey)) return false;
+
     const { data: remoteRecord, error } = await this.supabase
       .client!.from(table)
       .select('*')
@@ -677,26 +1328,191 @@ export class SyncService {
       .maybeSingle();
 
     if (error || !remoteRecord) {
-      console.warn(
-        `⚠️ [Hydration] Could not fetch parent ${table} (${uuid}) from remote: ${error?.message || 'not found'}`
-      );
+      const localRow = await this.getLocalRowByUuid(table, uuid);
+      if (localRow) return true;
+      this.hydrateMissCache.add(missKey);
+      syncLog.debug(`pull hydrate ${table} ${uuid.slice(0, 8)}…: ausente (local y remoto)`);
       return false;
+    }
+
+    if (rowCache) {
+      this.putRowInRemoteCache(rowCache, table, uuid, remoteRecord as Record<string, unknown>);
+      await this.hydrateFullAncestorChain(table, remoteRecord as Record<string, unknown>, rowCache);
     }
 
     const resolved = await this.resolveForeignKeys(table, remoteRecord as Record<string, unknown>, {
       attemptHydration: true,
       depth,
     });
-    if (!resolved) return false;
+    let resolvedRow = resolved;
+    if (!resolvedRow) {
+      await this.ensureRequiredParentsLocal(
+        table,
+        remoteRecord as Record<string, unknown>,
+        rowCache
+      );
+      resolvedRow = await this.resolveForeignKeys(table, remoteRecord as Record<string, unknown>, {
+        attemptHydration: true,
+        depth: 0,
+      });
+    }
+    if (!resolvedRow) return false;
 
-    await this.upsertLocalFromResolvedRow(table, resolved);
+    try {
+      await this.upsertLocalFromResolvedRow(table, resolvedRow);
+    } catch (e) {
+      syncLog.debug(
+        `pull hydrate upsert ${table} ${uuid.slice(0, 8)}…: ${(e as Error).message?.slice(0, 80)}`
+      );
+      return false;
+    }
     return true;
+  }
+
+  private static async getRemoteRowForPullLog(
+    log: SyncAuditLog,
+    rowCache: RemoteRowCache
+  ): Promise<Record<string, unknown> | null> {
+    const table = log.table_name;
+    const uuid = log.record_uuid;
+    if (!uuid) return null;
+
+    let remoteRecord: Record<string, unknown> | null = rowCache.get(table)?.get(uuid) ?? null;
+    if (remoteRecord || !this.supabase.client) return remoteRecord;
+
+    const { data } = await this.supabase.client
+      .from(table)
+      .select('*')
+      .eq('uuid', uuid)
+      .maybeSingle();
+    remoteRecord = (data as Record<string, unknown> | null) ?? null;
+    if (remoteRecord) {
+      this.putRowInRemoteCache(rowCache, table, uuid, remoteRecord);
+    }
+    return remoteRecord;
+  }
+
+  /**
+   * Audit logs que no se pueden aplicar (padre borrado en remoto, datos ajenos en tienda).
+   * Se marcan procesados para desbloquear el checkpoint.
+   */
+  private static async shouldAdvancePastPullLog(
+    log: SyncAuditLog,
+    rowCache: RemoteRowCache
+  ): Promise<boolean> {
+    if (!log.record_uuid || log.operation === 'DELETE') return false;
+
+    const remoteRecord = await this.getRemoteRowForPullLog(log, rowCache);
+    if (!remoteRecord) return true;
+
+    if (
+      await shouldSkipPullLogInStoreMode(
+        this.sqlite,
+        this.supabase,
+        log.table_name,
+        remoteRecord,
+        rowCache
+      )
+    ) {
+      return true;
+    }
+
+    if (await this.isPullLogStaleOnRemote(log.table_name, remoteRecord, rowCache)) {
+      return true;
+    }
+
+    return this.isPullLogUnrecoverable(log.table_name, remoteRecord, rowCache);
+  }
+
+  /** Padre requerido ausente en SQLite y en Supabase → audit log irrecuperable. */
+  private static async isPullLogUnrecoverable(
+    table: string,
+    remoteRecord: Record<string, unknown>,
+    rowCache: RemoteRowCache
+  ): Promise<boolean> {
+    if (await this.isPullLogStaleOnRemote(table, remoteRecord, rowCache)) return true;
+
+    const required = this.PULL_REQUIRED_INTEGER_FKS[table];
+    const definitions = this.FK_DEFINITIONS[table];
+    if (!required || !definitions) return false;
+
+    let anyRequiredMissing = false;
+    for (const fkColumn of required) {
+      const targetTable = definitions[fkColumn];
+      if (!targetTable) continue;
+      const uuidColumn = fkColumn.replace('_id', '_uuid');
+      const parentUuid = await this.resolveFkTargetUuid(
+        remoteRecord,
+        fkColumn,
+        uuidColumn,
+        targetTable
+      );
+      if (!parentUuid) continue;
+
+      const local = await this.sqlite.query<{ id: number }>(
+        `SELECT id FROM ${targetTable} WHERE uuid = ?`,
+        [parentUuid]
+      );
+      if (local.length > 0) return false;
+
+      const remote = await this.fetchRemoteRowForHydration(targetTable, parentUuid, rowCache);
+      if (remote) return false;
+
+      anyRequiredMissing = true;
+    }
+
+    return anyRequiredMissing;
+  }
+
+  private static async describePullDeferralReason(
+    table: string,
+    remoteRecord: Record<string, unknown>
+  ): Promise<string | undefined> {
+    const required = this.PULL_REQUIRED_INTEGER_FKS[table];
+    const definitions = this.FK_DEFINITIONS[table];
+    if (!required || !definitions) return undefined;
+
+    const missing: string[] = [];
+    for (const fkColumn of required) {
+      const targetTable = definitions[fkColumn];
+      if (!targetTable) continue;
+      const uuidColumn = fkColumn.replace('_id', '_uuid');
+      const parentUuid = await this.resolveFkTargetUuid(
+        remoteRecord,
+        fkColumn,
+        uuidColumn,
+        targetTable
+      );
+      if (!parentUuid) {
+        missing.push(`${fkColumn}(?)`);
+        continue;
+      }
+      const local = await this.sqlite.query<{ id: number }>(
+        `SELECT id FROM ${targetTable} WHERE uuid = ?`,
+        [parentUuid]
+      );
+      if (local.length === 0) {
+        missing.push(`${targetTable}:${parentUuid.slice(0, 8)}`);
+      }
+    }
+    return missing.length > 0 ? missing.join(', ') : undefined;
+  }
+
+  private static summarizeDeferredLogs(logs: SyncAuditLog[]): string {
+    const counts = new Map<string, number>();
+    for (const log of logs) {
+      counts.set(log.table_name, (counts.get(log.table_name) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([table, n]) => `${table}:${n}`)
+      .join(', ');
   }
 
   private static async applyPullLog(
     log: SyncAuditLog,
     rowCache: RemoteRowCache,
-    batchParentQueue: Map<string, Set<string>>
+    batchParentQueue?: Map<string, Set<string>>
   ): Promise<PullProcessResult> {
     const table = log.table_name;
     const uuid = log.record_uuid;
@@ -716,7 +1532,7 @@ export class SyncService {
         .eq('uuid', uuid)
         .maybeSingle();
       if (recordError) {
-        console.warn(`⚠️ Record ${uuid} fallback fetch error in ${table}:`, recordError.message);
+        syncLog.debug(`pull fetch ${table} ${uuid.slice(0, 8)}…: ${recordError.message}`);
       }
       remoteRecord = (data as Record<string, unknown> | null) ?? null;
       if (remoteRecord) {
@@ -725,65 +1541,58 @@ export class SyncService {
     }
 
     if (!remoteRecord) {
-      // Common after cascades/deletes on related tables; keep quiet to avoid noisy logs.
       return 'processed';
     }
 
-    const resolvedRecord = await this.resolveForeignKeys(table, remoteRecord, {
+    // Store mode: skip foreign tournaments before FK resolution (avoids deferral loops).
+    if (
+      await shouldSkipPullLogInStoreMode(this.sqlite, this.supabase, table, remoteRecord, rowCache)
+    ) {
+      return 'processed';
+    }
+
+    if (await this.isPullLogStaleOnRemote(table, remoteRecord, rowCache)) {
+      syncLog.debug(`pull ${table} omitido: cadena FK ausente en remoto`);
+      return 'processed';
+    }
+
+    if (!batchParentQueue) {
+      await this.hydrateFullAncestorChain(table, remoteRecord, rowCache);
+    }
+
+    let resolvedRecord = await this.resolveForeignKeys(table, remoteRecord, {
       attemptHydration: true,
       depth: 0,
       batchParentQueue,
     });
 
+    if (!resolvedRecord && !batchParentQueue) {
+      await this.ensureRequiredParentsLocal(table, remoteRecord, rowCache);
+      resolvedRecord = await this.resolveForeignKeys(table, remoteRecord, {
+        attemptHydration: true,
+        depth: 0,
+      });
+    }
+
     if (!resolvedRecord) {
+      const reason = await this.describePullDeferralReason(table, remoteRecord);
+      if (reason) syncLog.debug(`pull ${table} aplazado: falta ${reason}`);
       return 'deferred';
     }
 
     if (this.resolvedRowMissingRequiredFks(table, resolvedRecord)) {
-      return 'deferred';
+      await this.ensureRequiredParentsLocal(table, remoteRecord, rowCache);
+      resolvedRecord = await this.resolveForeignKeys(table, remoteRecord, {
+        attemptHydration: true,
+        depth: 0,
+      });
+      if (!resolvedRecord || this.resolvedRowMissingRequiredFks(table, resolvedRecord)) {
+        return 'deferred';
+      }
     }
 
-    // Check if exists locally
-    const localByUuid = await this.sqlite.query<{ id: number }>(
-      `SELECT id FROM ${table} WHERE uuid = ?`,
-      [uuid]
-    );
-
-    const persistRow = async () => {
-      if (localByUuid.length > 0) {
-        await this.updateLocalRecord(table, resolvedRecord);
-        return;
-      }
-
-      const naturalKeys = this.NATURAL_KEYS[table];
-      let merged = false;
-
-      if (naturalKeys) {
-        const conditions = naturalKeys.map((k) => `${k} = ?`).join(' AND ');
-        const params = naturalKeys.map((k) => resolvedRecord[k]);
-
-        if (params.every((p) => p !== undefined && p !== null)) {
-          const localByNaturalKey = await this.sqlite.query<{ id: number }>(
-            `SELECT id FROM ${table} WHERE ${conditions}`,
-            params
-          );
-
-          if (localByNaturalKey.length > 0) {
-            const localId = localByNaturalKey[0].id;
-            await this.sqlite.execute(`UPDATE ${table} SET uuid = ? WHERE id = ?`, [uuid, localId]);
-            await this.updateLocalRecord(table, resolvedRecord);
-            merged = true;
-          }
-        }
-      }
-
-      if (!merged) {
-        await this.insertLocalRecord(table, resolvedRecord);
-      }
-    };
-
     try {
-      await persistRow();
+      await this.persistLocalRow(table, uuid, resolvedRecord);
     } catch (e) {
       const msg = ((e as Error)?.message || '').toLowerCase();
       if (
@@ -791,8 +1600,8 @@ export class SyncService {
         msg.includes('constraint') ||
         msg.includes('not null')
       ) {
-        console.warn(
-          `[${this.instanceId}] [Pull] Log ${log.id} persist deferred (constraint): ${(e as Error).message?.slice(0, 160)}`
+        syncLog.debug(
+          `pull log ${log.id} aplazado (constraint): ${(e as Error).message?.slice(0, 120)}`
         );
         return 'deferred';
       }
@@ -810,6 +1619,7 @@ export class SyncService {
     tournaments: ['circuit_id', 'place_id', 'date'],
     tournament_configs: ['tournament_id'],
     tournament_players: ['tournament_id', 'player_id'],
+    tournament_knockout_seeds: ['tournament_id', 'player_id'],
     rounds: ['tournament_id', 'round_number'],
     matches: ['round_id', 'match_number'],
     match_players: ['match_id', 'player_id'],
@@ -831,14 +1641,12 @@ export class SyncService {
         );
         if (meta.length > 0) lastAuditLogId = parseInt(meta[0].value);
       } catch {
-        console.warn('⚠️ sync_meta table not ready locally.');
+        syncLog.warn('sync_meta local no disponible');
         return false;
       }
 
       const checkpointBefore = lastAuditLogId;
 
-      // 2. Fetch new audit logs
-      console.log(`🔍 Checking for remote changes (since Log ID: ${lastAuditLogId})...`);
       const { data: logs, error: logsError } = await this.supabase
         .client!.from('sync_audit_logs')
         .select('*')
@@ -847,13 +1655,11 @@ export class SyncService {
         .limit(this.PULL_LOG_BATCH_SIZE);
 
       if (logsError) {
-        console.error(`[${this.instanceId}] [Pull] Failed to fetch sync audit logs:`, logsError);
+        syncLog.error('pull audit logs', logsError);
         return false;
       }
 
-      console.log(
-        `[${this.instanceId}] [Pull] Fetched ${logs?.length || 0} logs (batch max ${this.PULL_LOG_BATCH_SIZE}).`
-      );
+      syncLog.debug(`pull: ${logs?.length || 0} log(s) desde id ${lastAuditLogId}`);
 
       // 2.1. Detect Remote Reset
       if ((!logs || logs.length === 0) && lastAuditLogId > 0) {
@@ -865,8 +1671,8 @@ export class SyncService {
 
         const remoteMaxId = maxIdData && maxIdData.length > 0 ? maxIdData[0].id : 0;
         if (remoteMaxId < lastAuditLogId) {
-          console.warn(
-            `🔄 Remote audit logs reset (Remote: ${remoteMaxId}, Local: ${lastAuditLogId}). Resetting pointer to 0.`
+          syncLog.warn(
+            `audit remoto reseteado (remoto=${remoteMaxId}, local=${lastAuditLogId}); pointer→0`
           );
           await this.sqlite.execute(
             "UPDATE sync_meta SET value = '0' WHERE key = 'last_audit_log_id'"
@@ -876,22 +1682,28 @@ export class SyncService {
       }
 
       if (!logs || logs.length === 0) {
-        console.log(`✅ Remote is up to date (since Log ID: ${lastAuditLogId}).`);
+        syncLog.debug(`pull al día (desde id ${lastAuditLogId})`);
         return false;
       }
 
-      console.log(`📑 Processing ${logs.length} remote changes...`);
+      syncLog.debug(`pull: aplicando ${logs.length} cambio(s)`);
 
+      const skippedLogIds = await this.loadPullSkippedLogIds();
       const rowCache = await this.prefetchRemoteRowsForLogs(logs as SyncAuditLog[]);
+      await this.prefetchFkParentsForBatch(rowCache);
 
-      const pending = [...(logs as SyncAuditLog[])];
+      let pending = this.sortPullLogsByDependency(
+        (logs as SyncAuditLog[]).filter((log) => !skippedLogIds.has(log.id))
+      );
       const processedIds = new Set<number>();
+      for (const log of logs as SyncAuditLog[]) {
+        if (skippedLogIds.has(log.id)) processedIds.add(log.id);
+      }
       let totalProcessed = 0;
       let totalDeferred = 0;
       let round = 0;
-      const MAX_ROUNDS = 5;
 
-      while (pending.length > 0 && round < MAX_ROUNDS) {
+      while (pending.length > 0 && round < this.MAX_PULL_DEFERRAL_ROUNDS) {
         round++;
         const roundSize = pending.length;
         let roundProcessed = 0;
@@ -900,13 +1712,7 @@ export class SyncService {
         const progressEvery = this.pullLogProgressEvery();
         let deferredInRound = 0;
 
-        const traceHint =
-          import.meta.env?.MODE === 'test'
-            ? ''
-            : ` (progress cada ${progressEvery}; localStorage sync_pull_trace=1 para ver todos)`;
-        console.log(
-          `[${this.instanceId}] [Pull] Round ${round}: applying ${roundSize} log(s)${traceHint}.`
-        );
+        syncLog.debug(`pull ronda ${round}: ${roundSize} log(s)`);
 
         for (let i = 0; i < roundSize; i++) {
           const log = pending[i];
@@ -916,8 +1722,8 @@ export class SyncService {
             i === roundSize - 1 ||
             (i + 1) % progressEvery === 0
           ) {
-            console.log(
-              `📑 [Round ${round}] (${i + 1}/${roundSize}) Log ${log.id}: ${log.operation} ${log.table_name} (${log.record_uuid || 'no-uuid'})`
+            syncLog.debug(
+              `pull [${round}] ${i + 1}/${roundSize} #${log.id} ${log.operation} ${log.table_name}`
             );
           }
           try {
@@ -930,34 +1736,94 @@ export class SyncService {
               deferredInRound++;
             }
           } catch (err) {
-            console.error(`❌ Error in Log ${log.id}:`, err);
+            syncLog.error(`pull log #${log.id} ${log.table_name} ${log.operation}`, err);
             nextPending.push(log);
           }
         }
 
         if (deferredInRound > 0) {
-          console.log(
-            `[${this.instanceId}] [Pull] Round ${round}: ${deferredInRound} log(s) deferred (FK order); batch-hydrating parents…`
-          );
+          syncLog.debug(`pull ronda ${round}: ${deferredInRound} aplazado(s) por FK`);
         }
 
-        await this.flushParentHydrationQueue(batchParentQueue);
+        await this.flushParentHydrationQueue(batchParentQueue, rowCache);
 
         totalProcessed += roundProcessed;
         if (roundProcessed === 0) {
           totalDeferred = nextPending.length;
-          console.warn(
-            `⏳ [Pull] No progress in round ${round}. Deferred logs remaining: ${nextPending.length}.`
+          syncLog.debug(
+            `pull ronda ${round} sin avance; ${nextPending.length} log(s) pendiente(s)`
           );
           break;
         }
 
         pending.length = 0;
-        pending.push(...nextPending);
+        pending.push(...this.sortPullLogsByDependency(nextPending));
       }
 
-      // Advance checkpoint only through the processed prefix in fetched order.
-      // (IDs may not always be strictly consecutive due to retention/cleanup policies.)
+      // Fallback: recursive parent hydration (no batch queue) for stubborn deferrals.
+      if (pending.length > 0) {
+        await this.prefetchFkParentsForBatch(rowCache);
+        pending = this.sortPullLogsByDependency(pending);
+        syncLog.debug(`pull: reintento directo para ${pending.length} log(s) aplazado(s)`);
+        const stillPending: SyncAuditLog[] = [];
+        for (const log of pending) {
+          try {
+            const result = await this.applyPullLog(log, rowCache);
+            if (result === 'processed') {
+              processedIds.add(log.id);
+              totalProcessed++;
+            } else {
+              stillPending.push(log);
+            }
+          } catch (err) {
+            syncLog.error(`pull log #${log.id} ${log.table_name} ${log.operation}`, err);
+            stillPending.push(log);
+          }
+        }
+        pending.length = 0;
+        pending.push(...stillPending);
+        totalDeferred = stillPending.length;
+
+        if (stillPending.length > 0) {
+          const advancedPast: SyncAuditLog[] = [];
+          const newlySkipped: number[] = [];
+          for (const log of stillPending) {
+            if (await this.shouldAdvancePastPullLog(log, rowCache)) {
+              processedIds.add(log.id);
+              newlySkipped.push(log.id);
+              totalProcessed++;
+            } else {
+              advancedPast.push(log);
+            }
+          }
+          if (newlySkipped.length > 0) {
+            await this.addPullSkippedLogIds(newlySkipped);
+            syncLog.warn(
+              `pull: ${newlySkipped.length} log(s) huérfanos omitidos (${this.summarizeDeferredLogs(
+                stillPending.filter((l) => newlySkipped.includes(l.id))
+              )})`
+            );
+          }
+          pending.length = 0;
+          pending.push(...advancedPast);
+          totalDeferred = advancedPast.length;
+
+          if (advancedPast.length > 0) {
+            const sig = advancedPast
+              .map((l) => l.id)
+              .sort((a, b) => a - b)
+              .join(',');
+            if (sig !== this.lastDeferredWarnSignature) {
+              this.lastDeferredWarnSignature = sig;
+              syncLog.warn(
+                `pull: ${advancedPast.length} log(s) aplazados (${this.summarizeDeferredLogs(advancedPast)}); reintento en próximo sync`
+              );
+            }
+          }
+        }
+      }
+
+      // Advance checkpoint: procesados + omitidos cuentan (prefijo consecutivo).
       let checkpoint = lastAuditLogId;
       for (const log of logs as SyncAuditLog[]) {
         if (processedIds.has(log.id)) checkpoint = log.id;
@@ -974,16 +1840,20 @@ export class SyncService {
         totalDeferred = pending.length;
       }
 
-      console.log(
-        `[${this.instanceId}] [Pull] Summary: processed=${totalProcessed}, deferred=${totalDeferred}, checkpoint=${checkpoint}, startedAt=${lastAuditLogId}`
+      syncLog.debug(
+        `pull resumen: +${totalProcessed} aplazados=${totalDeferred} checkpoint=${checkpoint}`
       );
+
+      if (totalProcessed > 0) {
+        this._pullRowsAppliedThisSession += totalProcessed;
+      }
 
       const advanced = checkpoint > checkpointBefore;
       const batchFull = logs.length >= this.PULL_LOG_BATCH_SIZE;
       // Without checkpoint advance, do not chain: avoids spinning on the same stuck batch.
       return batchFull && advanced;
     } catch (err) {
-      console.error('❌ Error in pullChanges:', err);
+      syncLog.error('pullChanges', err);
       return false;
     }
   }
@@ -1004,12 +1874,7 @@ export class SyncService {
     const values = keys.map((k) => this.sanitizeValue(fields[k as keyof typeof fields]));
     values.push(data.uuid as string);
 
-    try {
-      await this.sqlite.execute(`UPDATE ${table} SET ${setClause} WHERE uuid = ?`, values);
-    } catch (e) {
-      console.error(`❌ Failed to update ${table}:`, e);
-      throw e;
-    }
+    await this.sqlite.execute(`UPDATE ${table} SET ${setClause} WHERE uuid = ?`, values);
   }
 
   private static async insertLocalRecord(table: string, data: Record<string, unknown>) {
@@ -1019,26 +1884,145 @@ export class SyncService {
     const placeholders = keys.map(() => '?').join(', ');
     const values = keys.map((k) => this.sanitizeValue(fields[k as keyof typeof fields]));
 
-    try {
-      await this.sqlite.execute(
-        `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`,
-        values
-      );
-    } catch (e) {
-      console.error(`❌ Failed to insert into ${table}:`, e);
-      throw e;
-    }
+    await this.sqlite.execute(
+      `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`,
+      values
+    );
   }
 
   /**
-   * Get current sync status
+   * Get current sync status (sync fields + last known progress snapshot).
    */
   static getSyncStatus() {
     return {
       isSyncing: this.isSyncing,
       isOnline: this._isOnline,
       isConfigured: isRemoteSyncReady(),
+      progress: { ...this._syncProgress },
     };
+  }
+
+  /** Fetch remote audit max id (cached briefly during active sync). */
+  private static async fetchRemoteAuditMaxId(): Promise<number | null> {
+    if (!this.supabase.client) return null;
+    try {
+      const { data, error } = await this.supabase.client
+        .from('sync_audit_logs')
+        .select('id')
+        .order('id', { ascending: false })
+        .limit(1);
+      if (error) return null;
+      return data && data.length > 0 ? (data[0].id as number) : 0;
+    } catch {
+      return null;
+    }
+  }
+
+  private static async readPullCheckpoint(): Promise<number> {
+    try {
+      const meta = await this.sqlite.query<{ value: string }>(
+        "SELECT value FROM sync_meta WHERE key = 'last_audit_log_id'"
+      );
+      if (meta.length > 0) return parseInt(meta[0].value, 10) || 0;
+    } catch {
+      /* ignore */
+    }
+    return 0;
+  }
+
+  /** true cuando el checkpoint local alcanzó el último audit id remoto. */
+  private static isPullFullyCaughtUp(): boolean {
+    const pullMax = this._syncProgress.pullRemoteMax;
+    const checkpoint = this._syncProgress.pullCheckpoint;
+    return pullMax != null && checkpoint >= pullMax;
+  }
+
+  /** Re-inserta Online/Offline tras borrar datos locales (migración main no re-corre). */
+  private static async ensureSystemCitiesAndPlaces(): Promise<void> {
+    const systemCities = [
+      { uuid: SYSTEM_CITY_UUIDS.online, name: 'Online' },
+      { uuid: SYSTEM_CITY_UUIDS.offline, name: 'Offline' },
+    ];
+    for (const city of systemCities) {
+      await this.sqlite.execute('INSERT OR IGNORE INTO cities (uuid, name) VALUES (?, ?)', [
+        city.uuid,
+        city.name,
+      ]);
+    }
+    const places = [
+      {
+        uuid: '00000000-0000-0000-0000-100000000001',
+        name: 'Online',
+        cityUuid: SYSTEM_CITY_UUIDS.online,
+      },
+      {
+        uuid: '00000000-0000-0000-0000-100000000002',
+        name: 'Offline',
+        cityUuid: SYSTEM_CITY_UUIDS.offline,
+      },
+    ];
+    for (const place of places) {
+      const cityRows = await this.sqlite.query<{ id: number }>(
+        'SELECT id FROM cities WHERE uuid = ? LIMIT 1',
+        [place.cityUuid]
+      );
+      if (cityRows.length === 0) continue;
+      await this.sqlite.execute(
+        'INSERT OR IGNORE INTO places (uuid, name, city_id) VALUES (?, ?, ?)',
+        [place.uuid, place.name, cityRows[0].id]
+      );
+    }
+  }
+
+  private static computeProgressPercent(): number | null {
+    const pullMax = this._syncProgress.pullRemoteMax;
+    const checkpoint = this._syncProgress.pullCheckpoint;
+    const pullPart =
+      pullMax != null && pullMax > 0
+        ? Math.min(100, Math.round((checkpoint / pullMax) * 100))
+        : null;
+
+    const pushStart = this._pushQueueAtSessionStart;
+    const pushDone = this._syncProgress.pushProcessedThisSession;
+    const pushRemaining = this._syncProgress.pushPending;
+    const pushPart =
+      pushStart > 0
+        ? Math.min(100, Math.round((pushDone / pushStart) * 100))
+        : pushRemaining === 0
+          ? 100
+          : null;
+
+    if (
+      pullPart != null &&
+      pushPart != null &&
+      pushStart > 0 &&
+      pullMax != null &&
+      checkpoint < pullMax
+    ) {
+      return Math.round((pullPart + pushPart) / 2);
+    }
+    if (pushStart > 0 && pushRemaining > 0 && pushPart != null) return pushPart;
+    if (pullPart != null && (pullMax == null || checkpoint < pullMax)) return pullPart;
+    if (pushRemaining === 0 && (pullMax == null || checkpoint >= pullMax)) return 100;
+    if (pushPart != null) return pushPart;
+    return pullPart;
+  }
+
+  private static async refreshPullProgress(): Promise<void> {
+    this._syncProgress.pullCheckpoint = await this.readPullCheckpoint();
+    this._syncProgress.pullRemoteMax = await this.fetchRemoteAuditMaxId();
+    this._syncProgress.percent = this.computeProgressPercent();
+  }
+
+  /**
+   * Live sync progress for UI (pull checkpoint vs remote tail, push queue drain).
+   */
+  static async getSyncProgress(): Promise<SyncProgress> {
+    await this.refreshPullProgress();
+    this._syncProgress.pushPending = await this.getQueueSize();
+    this._syncProgress.isSyncing = this.isSyncing;
+    this._syncProgress.percent = this.computeProgressPercent();
+    return { ...this._syncProgress };
   }
 
   /**
@@ -1052,38 +2036,67 @@ export class SyncService {
   }
 
   /**
-   * PUSH: Send pending local changes to Supabase
+   * PUSH: Send pending local changes to Supabase.
+   * @returns true when more items remain in queue (caller may continue until deadline).
    */
-  private static async pushChanges() {
-    console.log(`[${this.instanceId}] [Push] Starting...`);
+  private static async pushChanges(deadlineMs?: number): Promise<boolean> {
+    syncLog.debug('push iniciado');
+    await this.supabase.ensureSyncSession();
     let processedCount = 0;
-    const MAX_PER_SYNC = 200;
+    let hitItemCap = false;
 
-    while (processedCount < MAX_PER_SYNC) {
-      console.log(`[Push] calling query...`);
-      const queue = await this.sqlite.query<SyncQueueItem>(
-        "SELECT * FROM sync_queue WHERE status IN ('pending', 'failed') AND retry_count < 5 ORDER BY id ASC LIMIT 20"
-      );
-      console.log(`[Push] query returned queue of length ${queue?.length}`);
-
-      if (queue.length === 0) {
-        console.log('[Push] Queue is empty, nothing to sync.');
+    while (processedCount < this.MAX_PUSH_ITEMS_PER_SYNC) {
+      if (deadlineMs != null && Date.now() >= deadlineMs) {
+        syncLog.debug('push: tiempo de burst agotado');
         break;
       }
 
-      console.log(
-        `⬆️ Pushing ${queue.length} items to Supabase (Total this run: ${processedCount})`
+      const queue = await this.sqlite.query<SyncQueueItem>(
+        `SELECT * FROM sync_queue
+         WHERE status IN ('pending', 'failed') AND retry_count < 5
+         ORDER BY
+           CASE table_name
+             WHEN 'cities' THEN 10
+             WHEN 'circuits' THEN 20
+             WHEN 'players' THEN 30
+             WHEN 'places' THEN 40
+             WHEN 'tournaments' THEN 50
+             WHEN 'tournament_configs' THEN 60
+             WHEN 'tournament_players' THEN 70
+             WHEN 'rounds' THEN 80
+             WHEN 'matches' THEN 90
+             WHEN 'match_players' THEN 100
+             WHEN 'match_results' THEN 110
+             WHEN 'player_byes' THEN 120
+             WHEN 'tournament_knockout_seeds' THEN 130
+             ELSE 500
+           END,
+           id ASC
+         LIMIT ${this.PUSH_QUERY_BATCH_SIZE}`
       );
+      if (queue.length === 0) {
+        syncLog.debug('push: cola vacía');
+        return false;
+      }
+
+      syncLog.debug(`push: ${queue.length} ítem(s) (run=${processedCount})`);
 
       for (const item of queue) {
+        if (deadlineMs != null && Date.now() >= deadlineMs) break;
+        if (processedCount >= this.MAX_PUSH_ITEMS_PER_SYNC) {
+          hitItemCap = true;
+          break;
+        }
+
         processedCount++;
         try {
           await this.sqlite.execute("UPDATE sync_queue SET status = 'processing' WHERE id = ?", [
             item.id,
           ]);
 
-          const payload = JSON.parse(item.payload);
           const table = item.table_name;
+          let payload = JSON.parse(item.payload) as Record<string, unknown>;
+          payload = await this.enrichPushPayloadFromLocal(table, payload);
           const supabaseClient = this.supabase.client;
 
           if (!supabaseClient) throw new Error('Supabase client not initialized');
@@ -1123,13 +2136,24 @@ export class SyncService {
             }
           }
 
+          const { payload: remotePayload, ready: remoteReady } =
+            await this.hydrateRemotePayloadFromUuids(table, apiPayload);
+
+          if (!remoteReady && item.operation === 'INSERT') {
+            syncLog.debug(`push ${table}#${item.id}: aplazado (padre no en remoto)`);
+            await this.sqlite.execute("UPDATE sync_queue SET status = 'pending' WHERE id = ?", [
+              item.id,
+            ]);
+            continue;
+          }
+
           // Convert any boolean values to integers (1/0) for Supabase compatibility
-          for (const key of Object.keys(apiPayload)) {
-            if (typeof apiPayload[key] === 'boolean') {
-              apiPayload[key] = apiPayload[key] ? 1 : 0;
+          for (const key of Object.keys(remotePayload)) {
+            if (typeof remotePayload[key] === 'boolean') {
+              remotePayload[key] = remotePayload[key] ? 1 : 0;
             }
           }
-          if (!apiPayload.uuid && payload.uuid) apiPayload.uuid = payload.uuid;
+          if (!remotePayload.uuid && payload.uuid) remotePayload.uuid = payload.uuid;
 
           let result;
           if (item.operation === 'INSERT') {
@@ -1141,47 +2165,58 @@ export class SyncService {
             if (existing) {
               // Success (already exists)
             } else {
-              result = await supabaseClient.from(table).insert(apiPayload).select();
+              result = await supabaseClient.from(table).insert(remotePayload).select();
             }
           } else if (item.operation === 'UPDATE') {
             if (payload.uuid) {
               result = await supabaseClient
                 .from(table)
-                .update(apiPayload)
+                .update(remotePayload)
                 .eq('uuid', payload.uuid)
                 .select();
             }
           } else if (item.operation === 'DELETE') {
             if (payload.uuid) {
-              console.log(
-                `[${this.instanceId}] [Push] Syncing ${table} operation ${item.operation} for ${payload.uuid}`
-              );
+              syncLog.debug(`push DELETE ${table} ${payload.uuid}`);
               result = await supabaseClient.from(table).delete().eq('uuid', payload.uuid).select();
             }
           }
 
           if (result && result.error) throw result.error;
 
-          console.log(`✅ Successfully synced ${table} (item ${item.id})`);
+          syncLog.debug(`push ok ${table}#${item.id}`);
           await this.sqlite.execute('DELETE FROM sync_queue WHERE id = ?', [item.id]);
+          this._syncProgress.pushProcessedThisSession++;
+          this._syncProgress.percent = this.computeProgressPercent();
         } catch (error: unknown) {
           const err = error as { message?: string; details?: string; hint?: string };
-          let errorDetails = err.message || 'Unknown error';
-          if (err.details) errorDetails += ` (${err.details})`;
-          if (err.hint) errorDetails += ` [Hint: ${err.hint}]`;
+          let errorDetails = formatSyncError(err);
+          if (err.details && !errorDetails.includes(err.details)) {
+            errorDetails += ` — ${err.details}`;
+          }
+          if (err.hint && !errorDetails.includes(err.hint)) {
+            errorDetails += ` (${err.hint})`;
+          }
 
-          console.error(`❌ Failed to push item ${item.id}:`, errorDetails, error);
+          syncLog.error(`push ${item.table_name}#${item.id}: ${errorDetails}`);
           await this.sqlite.execute(
             "UPDATE sync_queue SET status = 'failed', retry_count = retry_count + 1, last_error = ? WHERE id = ?",
             [errorDetails, item.id]
           );
         }
       }
+
+      if (deadlineMs != null && Date.now() >= deadlineMs) break;
+      if (hitItemCap) break;
     }
 
-    if (processedCount >= MAX_PER_SYNC) {
-      console.warn('⚠️ Sync reached MAX_PER_SYNC limit. Some items remain in queue.');
+    const remaining = await this.getQueueSize();
+    if (hitItemCap || processedCount >= this.MAX_PUSH_ITEMS_PER_SYNC) {
+      syncLog.warn(
+        `push: límite ${this.MAX_PUSH_ITEMS_PER_SYNC} ítems/ciclo; quedan ${remaining} en cola`
+      );
     }
+    return remaining > 0;
   }
 
   /**

@@ -63,6 +63,14 @@ export default function Players() {
   }, [loadPlayers]);
 
   useEffect(() => {
+    const onSyncDataChanged = () => {
+      loadPlayers();
+    };
+    window.addEventListener('sync:data-changed', onSyncDataChanged);
+    return () => window.removeEventListener('sync:data-changed', onSyncDataChanged);
+  }, [loadPlayers]);
+
+  useEffect(() => {
     if (searchTerm) {
       const filtered = players.filter(
         (p) =>

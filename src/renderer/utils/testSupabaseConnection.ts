@@ -3,8 +3,11 @@ import { SupabaseClient } from '@api/clients/SupabaseClient';
 import {
   isSupabaseConfigured,
   isRemoteSyncReady,
+  isSyncAuthConfigured,
+  hasSupabaseCredentials,
   getConfigError,
 } from '@api/clients/supabaseConfig';
+import { isStoreMode } from '@utils/storeMode';
 
 /**
  * Utilidad para probar la conexión con Supabase
@@ -59,19 +62,37 @@ export function getCurrentApiClientInfo(): {
   configured: boolean;
   message: string;
 } {
-  const supabaseConfigured = isSupabaseConfigured();
-
-  if (supabaseConfigured) {
+  if (isRemoteSyncReady()) {
     return {
       type: 'cloud-sync',
       configured: true,
       message: 'Base de datos Local (SQLite) + Sincronización Nube (Supabase)',
     };
-  } else {
+  }
+
+  if (hasSupabaseCredentials() && !isSyncAuthConfigured()) {
+    const storeHint = isStoreMode()
+      ? ' El instalador tienda debe compilarse con VITE_SUPABASE_SYNC_EMAIL y VITE_SUPABASE_SYNC_PASSWORD en .env.colombia.'
+      : ' Añade VITE_SUPABASE_SYNC_EMAIL y VITE_SUPABASE_SYNC_PASSWORD en .env.colombia y reinicia.';
     return {
       type: 'local',
-      configured: false,
-      message: 'Base de datos Local (SQLite) - Sin sincronización',
+      configured: true,
+      message: `SQLite local — URL/key de Supabase presentes, pero faltan credenciales de sync.${storeHint}`,
     };
   }
+
+  if (isSupabaseConfigured()) {
+    return {
+      type: 'cloud-sync',
+      configured: false,
+      message: 'Sincronización deshabilitada en ajustes (solo SQLite local activo).',
+    };
+  }
+
+  return {
+    type: 'local',
+    configured: false,
+    message:
+      'Base de datos Local (SQLite) - Sin sincronización (falta VITE_SUPABASE_URL / PUBLISHABLE_KEY)',
+  };
 }

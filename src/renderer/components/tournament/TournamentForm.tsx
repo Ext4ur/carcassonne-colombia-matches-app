@@ -15,8 +15,13 @@ import type { CompetitionFormat } from '../../types/knockout';
 export interface TournamentFormRef {
   submit: () => void;
   /** Validates and returns form data without calling onSave. */
-  validateAndGet: () => Partial<Tournament> | null;
+  validateAndGet: () => TournamentFormResult | null;
 }
+
+export type TournamentFormResult = Partial<Tournament> & {
+  store_city_name?: string;
+  store_place_name?: string;
+};
 
 interface TournamentFormProps {
   tournament?: Tournament;
@@ -25,6 +30,8 @@ interface TournamentFormProps {
   mode?: 'quick' | 'advanced';
   /** When true, buttons are not rendered (e.g. when parent puts them in modal footer). */
   hideActions?: boolean;
+  /** Modo tienda: pedir ciudad y lugar como texto (se crean al guardar). */
+  storeLocationMode?: boolean;
 }
 
 const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(function TournamentForm(
@@ -34,6 +41,7 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     onCancel: _onCancel,
     mode = 'quick',
     hideActions = false,
+    storeLocationMode = false,
   },
   ref
 ) {
@@ -48,6 +56,8 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     players_per_match: tournament?.players_per_match || 2,
     number_of_rounds: tournament?.number_of_rounds?.toString() || '',
     place_id: tournament?.place_id?.toString() || '',
+    store_city_name: '',
+    store_place_name: '',
     competition_format: (tournament?.competition_format || 'swiss') as CompetitionFormat,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -62,15 +72,16 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     places.find((p) => p.id?.toString() === placeId)?.name ?? '';
 
   useEffect(() => {
+    if (storeLocationMode) return;
     if (places.length > 0 && !formData.place_id) {
       const defaultPlace = places.find((p) => p.name === DEFAULT_PLACE_NAME);
       if (defaultPlace?.id)
         setFormData((prev) => ({ ...prev, place_id: defaultPlace.id!.toString() }));
     }
-  }, [places, formData.place_id]);
+  }, [places, formData.place_id, storeLocationMode]);
 
   useEffect(() => {
-    if (mode !== 'quick' || nameManuallyEdited) return;
+    if (mode !== 'quick' || nameManuallyEdited || storeLocationMode) return;
     const autoName = buildQuickTournamentName(resolvePlaceName(formData.place_id), formData.date);
     if (autoName !== formData.name) {
       setFormData((prev) => ({ ...prev, name: autoName }));
@@ -110,7 +121,14 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
       newErrors.date = t('tournaments.form.date_req');
     }
 
-    if (!formData.place_id) {
+    if (storeLocationMode) {
+      if (!formData.store_city_name.trim()) {
+        newErrors.store_city_name = t('tournaments.form.city_req');
+      }
+      if (!formData.store_place_name.trim()) {
+        newErrors.store_place_name = t('tournaments.form.place_req');
+      }
+    } else if (!formData.place_id) {
       newErrors.place_id = t('tournaments.form.place_req');
     }
 
@@ -122,39 +140,32 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
     return Object.keys(newErrors).length === 0;
   };
 
+  const buildResult = (): TournamentFormResult => ({
+    name: formData.name.trim(),
+    type: storeLocationMode ? 'qualifier' : formData.type,
+    circuit_id:
+      formData.type === 'circuit' && formData.circuit_id ? Number(formData.circuit_id) : undefined,
+    date: formData.date,
+    players_per_match: formData.players_per_match,
+    number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
+    place_id: storeLocationMode
+      ? undefined
+      : formData.place_id
+        ? Number(formData.place_id)
+        : undefined,
+    store_city_name: storeLocationMode ? formData.store_city_name.trim() : undefined,
+    store_place_name: storeLocationMode ? formData.store_place_name.trim() : undefined,
+    competition_format: formData.competition_format as 'swiss' | 'swiss_knockout',
+  });
+
   const handleSubmit = () => {
     if (!validateForm()) return;
-
-    onSave({
-      name: formData.name.trim(),
-      type: formData.type,
-      circuit_id:
-        formData.type === 'circuit' && formData.circuit_id
-          ? Number(formData.circuit_id)
-          : undefined,
-      date: formData.date,
-      players_per_match: formData.players_per_match,
-      number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
-      place_id: formData.place_id ? Number(formData.place_id) : undefined,
-      competition_format: formData.competition_format as 'swiss' | 'swiss_knockout',
-    });
+    onSave(buildResult());
   };
 
-  const validateAndGet = (): Partial<Tournament> | null => {
+  const validateAndGet = (): TournamentFormResult | null => {
     if (!validateForm()) return null;
-    return {
-      name: formData.name.trim(),
-      type: formData.type,
-      circuit_id:
-        formData.type === 'circuit' && formData.circuit_id
-          ? Number(formData.circuit_id)
-          : undefined,
-      date: formData.date,
-      players_per_match: formData.players_per_match,
-      number_of_rounds: formData.number_of_rounds ? Number(formData.number_of_rounds) : undefined,
-      place_id: formData.place_id ? Number(formData.place_id) : undefined,
-      competition_format: formData.competition_format as 'swiss' | 'swiss_knockout',
-    };
+    return buildResult();
   };
 
   useImperativeHandle(ref, () => ({
@@ -171,10 +182,9 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
           const newName = e.target.value;
           setFormData({ ...formData, name: newName });
           if (mode === 'quick') {
-            const autoName = buildQuickTournamentName(
-              resolvePlaceName(formData.place_id),
-              formData.date
-            );
+            const autoName = storeLocationMode
+              ? buildQuickTournamentName(formData.store_place_name, formData.date)
+              : buildQuickTournamentName(resolvePlaceName(formData.place_id), formData.date);
             setNameManuallyEdited(newName !== autoName);
           }
         }}
@@ -210,9 +220,10 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
           { value: 'qualifier', label: t('tournaments.types.qualifier') },
           { value: 'circuit', label: t('tournaments.types.circuit') },
         ]}
+        disabled={storeLocationMode}
       />
 
-      {formData.type === 'circuit' && (
+      {formData.type === 'circuit' && !storeLocationMode && (
         <Select
           label={t('tournaments.form.circuit_label')}
           value={formData.circuit_id}
@@ -227,16 +238,45 @@ const TournamentForm = forwardRef<TournamentFormRef, TournamentFormProps>(functi
         />
       )}
 
-      <Select
-        label={t('tournaments.form.place_label')}
-        value={formData.place_id}
-        onChange={(e) => setFormData({ ...formData, place_id: e.target.value })}
-        options={[
-          { value: '', label: t('tournaments.form.select_place') },
-          ...places.map((p) => ({ value: p.id!.toString(), label: p.name })),
-        ]}
-        error={errors.place_id}
-      />
+      {storeLocationMode ? (
+        <>
+          <Input
+            label={t('tournaments.form.city_label')}
+            value={formData.store_city_name}
+            onChange={(e) => setFormData((prev) => ({ ...prev, store_city_name: e.target.value }))}
+            error={errors.store_city_name}
+            required
+          />
+          <Input
+            label={t('tournaments.form.place_label')}
+            value={formData.store_place_name}
+            onChange={(e) => {
+              const place = e.target.value;
+              setFormData((prev) => {
+                const next = { ...prev, store_place_name: place };
+                if (mode === 'quick' && !nameManuallyEdited) {
+                  next.name = buildQuickTournamentName(place, prev.date);
+                }
+                return next;
+              });
+            }}
+            error={errors.store_place_name}
+            helperText={t('tournaments.form.store_place_help')}
+            required
+          />
+        </>
+      ) : (
+        <Select
+          label={t('tournaments.form.place_label')}
+          value={formData.place_id}
+          onChange={(e) => setFormData({ ...formData, place_id: e.target.value })}
+          options={[
+            { value: '', label: t('tournaments.form.select_place') },
+            ...places.map((p) => ({ value: p.id!.toString(), label: p.name })),
+          ]}
+          error={errors.place_id}
+        />
+      )}
 
       <Input
         label={t('tournaments.form.date_label')}

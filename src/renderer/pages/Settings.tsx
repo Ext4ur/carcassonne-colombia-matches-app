@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import Button from '../components/common/Button';
@@ -11,8 +11,7 @@ import BackupImportModal from '../components/settings/BackupImportModal';
 import DatabaseStatus from '../components/common/DatabaseStatus';
 import { useTranslation } from 'react-i18next';
 import Select from '../components/common/Select';
-import githubIcon from '../assets/icons/github.svg';
-import bgaIcon from '../assets/icons/bga_icon.png';
+import AboutSection from '../components/common/AboutSection';
 import TournamentConfigComponent from '../components/tournament/TournamentConfig';
 import { TournamentConfig, normalizeBuchholzByeMode } from '../types/tournament';
 import { getDefaultScoringSystem } from '../utils/scoring';
@@ -22,11 +21,15 @@ import {
   readQuickTournamentDefaults,
   writeQuickTournamentDefaults,
 } from '../utils/quickTournamentDefaults';
-import packageJson from '../../../package.json';
 import { formatUserError } from '../utils/formatUserError';
+import { isLocalOnlyMode, isStoreMode } from '../utils/storeMode';
+import { ensureStoreModeSyncDefaults, isRemoteSyncReady } from '../api/clients/supabaseConfig';
+import { SyncService } from '../services/syncService';
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
+  const storeMode = isStoreMode();
+  ensureStoreModeSyncDefaults();
   const { theme, toggleTheme } = useTheme();
   const { addNotification } = useNotifications();
   const [isExporting, setIsExporting] = useState(false);
@@ -39,23 +42,7 @@ export default function Settings() {
   /** índices de data.tournaments */
   const [importCheckedIndices, setImportCheckedIndices] = useState<Set<number>>(new Set());
   const [importDupByIndex, setImportDupByIndex] = useState<Map<number, boolean>>(new Map());
-  const [appVersion, setAppVersion] = useState<string>(packageJson.version);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const v = await window.electronAPI.getVersion();
-        const resolved = (v && String(v).trim()) || packageJson.version;
-        if (!cancelled) setAppVersion(resolved);
-      } catch {
-        if (!cancelled) setAppVersion(packageJson.version);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
   const [quickDefaultsPpm, setQuickDefaultsPpm] = useState(2);
   const [quickDefaultsVersion, setQuickDefaultsVersion] = useState(0);
 
@@ -112,14 +99,38 @@ export default function Settings() {
     });
   };
 
+  const [cloudResyncBusy, setCloudResyncBusy] = useState(false);
+
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(() => {
     const saved = localStorage.getItem('cloud_sync_enabled');
     if (saved === null) {
-      // Default to true for Colombia, false for International
       return import.meta.env.VITE_APP_ENV !== 'international';
     }
     return saved === 'true';
   });
+
+  const handleCloudResync = async () => {
+    if (!window.confirm(t('settings.cloud_resync_confirm'))) return;
+    setCloudResyncBusy(true);
+    try {
+      const result = await SyncService.resetLocalDataForCloudResync();
+      if (result.ok) {
+        addNotification({ message: t('settings.cloud_resync_success'), type: 'success' });
+      } else {
+        addNotification({
+          message: t('settings.cloud_resync_error', { detail: result.error ?? '' }),
+          type: 'error',
+        });
+      }
+    } catch (error) {
+      addNotification({
+        message: formatUserError(error, t('settings.cloud_resync_error', { detail: '' })),
+        type: 'error',
+      });
+    } finally {
+      setCloudResyncBusy(false);
+    }
+  };
 
   const openExportModal = async () => {
     try {
@@ -294,36 +305,57 @@ export default function Settings() {
         {/* Synchronization Settings */}
         <div className="card">
           <h2 className="text-xl font-bold mb-4">{t('settings.sync')}</h2>
-          <div className="flex items-center justify-between">
-            <div className="flex-1 mr-4">
-              <p className="font-medium">{t('settings.sync_enabled')}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">{t('settings.sync_desc')}</p>
-            </div>
-            <button
-              onClick={() => {
-                const newValue = !cloudSyncEnabled;
-                setCloudSyncEnabled(newValue);
-                localStorage.setItem('cloud_sync_enabled', String(newValue));
-                addNotification({
-                  message: newValue
-                    ? t('settings.errors.sync_enabled_msg')
-                    : t('settings.errors.sync_disabled_msg'),
-                  type: 'info',
-                });
-                // Reload or notify sync service? Reload is safest to restart background processes
-                setTimeout(() => window.location.reload(), 1000);
-              }}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                cloudSyncEnabled ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  cloudSyncEnabled ? 'translate-x-6' : 'translate-x-1'
+          {isLocalOnlyMode() ? (
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {storeMode ? t('settings.sync_store_local') : t('settings.sync_hq_local')}
+            </p>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex-1 mr-4">
+                <p className="font-medium">{t('settings.sync_enabled')}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {t('settings.sync_desc')}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const newValue = !cloudSyncEnabled;
+                  setCloudSyncEnabled(newValue);
+                  localStorage.setItem('cloud_sync_enabled', String(newValue));
+                  addNotification({
+                    message: newValue
+                      ? t('settings.errors.sync_enabled_msg')
+                      : t('settings.errors.sync_disabled_msg'),
+                    type: 'info',
+                  });
+                  // Reload or notify sync service? Reload is safest to restart background processes
+                  setTimeout(() => window.location.reload(), 1000);
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                  cloudSyncEnabled ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
                 }`}
-              />
-            </button>
-          </div>
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    cloudSyncEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
+          {!isLocalOnlyMode() && cloudSyncEnabled && isRemoteSyncReady() && (
+            <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <p className="font-medium">{t('settings.cloud_resync_title')}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                {t('settings.cloud_resync_desc')}
+              </p>
+              <Button variant="secondary" disabled={cloudResyncBusy} onClick={handleCloudResync}>
+                {cloudResyncBusy
+                  ? t('settings.cloud_resync_busy')
+                  : t('settings.cloud_resync_action')}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Database Status */}
@@ -425,51 +457,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* About */}
-        <div className="card">
-          <h2 className="text-xl font-bold mb-4">{t('settings.about')}</h2>
-          <div className="space-y-2">
-            <p className="font-semibold text-gray-800 dark:text-gray-200">
-              {t('settings.app_name', { version: appVersion })}
-            </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {t('settings.developed_by')} <strong>Ext4ur</strong>
-              <span className="text-gray-500 dark:text-gray-500">
-                {t('settings.developed_by_version_suffix', { version: appVersion })}
-              </span>
-            </p>
-            <div className="flex space-x-6 mt-4">
-              <a
-                href="https://github.com/Ext4ur"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center text-sm text-primary-600 dark:text-primary-400 hover:underline"
-              >
-                <img
-                  src={githubIcon}
-                  alt=""
-                  aria-hidden
-                  className="w-5 h-5 mr-2 dark:invert transition-all"
-                />
-                <span>{t('settings.links.github')}</span>
-              </a>
-              <a
-                href="https://boardgamearena.com/player?id=88813461"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center text-sm text-primary-600 dark:text-primary-400 hover:underline"
-              >
-                <img
-                  src={bgaIcon}
-                  alt=""
-                  aria-hidden
-                  className="w-5 h-5 mr-2 rounded-sm object-contain"
-                />
-                <span>{t('settings.links.board_game_arena')}</span>
-              </a>
-            </div>
-          </div>
-        </div>
+        <AboutSection />
       </div>
     </div>
   );

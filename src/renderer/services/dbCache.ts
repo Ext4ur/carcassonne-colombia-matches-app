@@ -45,3 +45,10 @@ export const LIST_KEYS = {
   places: 'list:places',
   cities: 'list:cities',
 } as const;
+
+/** Invalida todos los listados en caché (p. ej. tras pull masivo desde la nube). */
+export function invalidateAllLists(): void {
+  for (const key of Object.values(LIST_KEYS)) {
+    cache.delete(key);
+  }
+}

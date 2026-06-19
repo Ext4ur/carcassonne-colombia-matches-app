@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Tournament, TournamentConfig } from '../../types/tournament';
+import { TournamentConfig } from '../../types/tournament';
 import { Player } from '../../types/player';
 import { buildQuickConfigDraft } from '../../utils/quickTournamentDefaults';
-import TournamentForm, { TournamentFormRef } from './TournamentForm';
+import { isStoreMode } from '../../utils/storeMode';
+import TournamentForm, { TournamentFormRef, TournamentFormResult } from './TournamentForm';
 import PlayerRegistration, { PlayerRegistrationRef } from './PlayerRegistration';
 import Button from '../common/Button';
 
@@ -12,7 +13,7 @@ type ConfigDraft = Partial<TournamentConfig> & {
 };
 
 export type QuickTournamentPayload = {
-  tournament: Partial<Tournament>;
+  tournament: TournamentFormResult;
   config: ConfigDraft;
   players: Player[];
   numberOfRounds: number;
@@ -30,6 +31,7 @@ export default function QuickTournamentWizard({
   onCompleteAndAnother,
 }: QuickTournamentWizardProps) {
   const { t } = useTranslation();
+  const storeMode = isStoreMode();
   const formRef = useRef<TournamentFormRef>(null);
   const registrationRef = useRef<PlayerRegistrationRef>(null);
   const [registrationPlayers, setRegistrationPlayers] = useState<Player[]>([]);
@@ -66,6 +68,7 @@ export default function QuickTournamentWizard({
             ref={formRef}
             mode="quick"
             hideActions
+            storeLocationMode={storeMode}
             onSave={() => {}}
             onCancel={onCancel}
           />
@@ -92,12 +95,14 @@ export default function QuickTournamentWizard({
         <Button variant="secondary" onClick={onCancel}>
           {t('common.cancel')}
         </Button>
-        <Button
-          variant="secondary"
-          onClick={() => registrationRef.current?.requestCompleteAndAnother()}
-        >
-          {t('tournaments.wizard.create_and_another')}
-        </Button>
+        {!storeMode && (
+          <Button
+            variant="secondary"
+            onClick={() => registrationRef.current?.requestCompleteAndAnother()}
+          >
+            {t('tournaments.wizard.create_and_another')}
+          </Button>
+        )}
         <Button variant="primary" onClick={() => registrationRef.current?.requestComplete()}>
           {t('tournaments.registration.continue_with_count', {
             count: registrationPlayers.length,

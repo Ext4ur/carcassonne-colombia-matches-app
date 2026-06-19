@@ -106,12 +106,14 @@
       "load": "Hiba a városok betöltésekor",
       "name_required": "A név megadása kötelező",
       "save": "Hiba a város mentésekor",
-      "save_success": "Város frissítve"
+      "save_success": "Város frissítve",
+      "system_city_locked": "Az Online és Offline rendszervárosok nem módosíthatók"
     },
     "form": {
       "name": "Név *"
     },
     "loading": "Betöltés...",
+    "system_city_label": "Rendszer",
     "modal": {
       "cancel_btn": "Mégsem",
       "create_btn": "Létrehozás",
@@ -184,6 +186,8 @@
   "home": {
     "circuits_desc": "Sorozatok és versenyek kezelése",
     "description": "Kezelje profi módon a személyes Carcassonne versenyeit.",
+    "store_description": "Hozza létre és játssza le a Devir üzlet selejtezőjét. Befejezéskor exportáljon JSON-t és Excelt, és küldje el a fájlokat a Devirnek.",
+    "hq_description": "Üzleti selejtezők összesítése: importálja az exportált JSON fájlokat, tekintse meg a versenyeket és játékosokat. Minden helyi, felhő nélkül.",
     "players_desc": "Játékos adatbázis kezelése",
     "tournaments_desc": "Hozzon létre és kezeljen selejtező vagy sorozat versenyeket",
     "welcome": "Üdvözöljük a Carcassonne Versenykezelőben"
@@ -418,6 +422,16 @@
     "sync": "Szinkronizálás",
     "sync_enabled": "Felhőalapú Szinkronizálás",
     "sync_desc": "Szinkronizálja adatait a Supabase-szel a biztonsági mentéshez és a több eszközről való eléréshez.",
+    "sync_store_required": "Az üzleti telepítőben a Supabase szinkron kötelező (kód beváltás és eredmények). Ha kapcsolati hibát lát, a buildnek tartalmaznia kell a VITE_SUPABASE_SYNC_EMAIL és VITE_SUPABASE_SYNC_PASSWORD értékeket.",
+    "sync_store_local": "Helyi mód — az adatok ezen az eszközön maradnak. A verseny végén exportáljon JSON-t és Excelt, és küldje el a fájlokat a Devirnek.",
+    "sync_hq_local": "Devir központi mód — csak helyi. Importálja az üzleti JSON fájlokat az Adatok menüben; nincs felhőkapcsolat.",
+    "cloud_resync_title": "Helyi adatok visszaállítása a felhőből",
+    "cloud_resync_desc": "Törli a tornákat, játékosokat, meccseket és a feltöltési sort ezen az eszközön, majd újra letölt mindent a Supabase-ből. Akkor hasznos, ha a szinkron inkonzisztens adatokon akadt el.",
+    "cloud_resync_confirm": "Törli az összes helyi torna/játékos adatot és újra letölti a felhőből? Ez nem vonható vissza.",
+    "cloud_resync_action": "Helyi törlés és újra letöltés",
+    "cloud_resync_busy": "Visszaállítás…",
+    "cloud_resync_success": "Helyi adatok törölve. Szinkronizálás a felhőből…",
+    "cloud_resync_error": "Visszaállítás sikertelen: {{detail}}",
     "links": {
       "github": "GitHub",
       "board_game_arena": "Board Game Arena"
@@ -468,7 +482,9 @@
     "sync_ok": "Szinkronizálva",
     "synced": "Szinkronizálva",
     "syncing": "Változtatások szinkronizálása...",
-    "syncing_label": "Szinkronizálás..."
+    "syncing_label": "Szinkronizálás...",
+    "syncing_label_percent": "Szinkronizálás… {{percent}}%",
+    "syncing_percent": "Szinkronizálás… {{percent}}%"
   },
   "theme": {
     "dark": "Sötét mód",
@@ -582,6 +598,7 @@
       "finalize_confirm": "Biztosan befejezi a versenyt? A befejezés után már nem lehet módosítani.",
       "finalize_error": "Hiba a verseny befejezésekor",
       "finalize_success": "A verseny sikeresen befejeződött. További módosítások nem lehetségesek.",
+      "finalize_success_store": "A verseny befejeződött. Mentse el a JSON-t és az Excelt, és küldje el a fájlokat a Devirnek. A hozzáférés csak olvasható.",
       "finish_tournament": "Verseny Befejezése",
       "fourth_place": "4. Helyezett",
       "generate_first_round": "Első Forduló Generálása",
@@ -658,6 +675,10 @@
       "name_auto_help": "Automatikusan a helyszín és dátum alapján; szerkeszthető",
       "place_label": "Helyszín *",
       "place_req": "Ki kell választani egy helyszínt",
+      "city_label": "Város *",
+      "city_req": "A város megadása kötelező",
+      "store_place_help": "Devir üzlet neve (megjelenik az exportban)",
+      "store_location_error": "Adja meg a várost és a helyszínt a selejtező létrehozásához",
       "players_label": "Játékosok Mérkőzésenként *",
       "players_range": "2 és 4 közötti játékosszám szükséges",
       "rounds_help": "A 2 hatványaként lesz kiszámolva a játékosok száma alapján, ha üres",
@@ -922,6 +943,39 @@
     },
     "match": {
       "game_n": "{{n}}. játszma a párharcban"
+    }
+  },
+  "store_finalize": {
+    "title": "Eredmények exportálása",
+    "intro": "A selejtező lezárásához mindkét fájlt el kell menteni. Küldje el a Devirnek, amikor kész.",
+    "step_json": "Verseny JSON mentés mentése",
+    "step_excel": "Excel jelentés mentése",
+    "step_done": "kész",
+    "save_json_btn": "JSON mentése…",
+    "save_excel_btn": "Excel mentése…",
+    "done_btn": "Tovább",
+    "now_excel": "JSON mentve. Most mentse az Excel fájlt.",
+    "all_done": "Mindkét fájl mentve. Az alkalmazás csak olvasható.",
+    "canceled_json": "Megszakította a JSON mentését. Próbálja újra a folytatáshoz.",
+    "canceled_excel": "Megszakította az Excel mentését. Próbálja újra a folytatáshoz.",
+    "error_json": "Nem sikerült menteni a JSON-t. Próbálja újra.",
+    "error_excel": "Nem sikerült menteni az Excelt. Próbálja újra."
+  },
+  "store_activation": {
+    "title": "Devir aktiválás",
+    "hint": "Adja meg a kapott kódot az üzlet selejtezőjének eléréséhez. Az első alkalommal internetkapcsolat szükséges.",
+    "code_label": "Aktiválási kód",
+    "code_placeholder": "DEVIR-BOG-2026-A1B2",
+    "submit": "Aktiválás",
+    "sync_not_ready_title": "A szinkron nincs beállítva ezen a telepítésen",
+    "sync_not_ready_hint": "A build nem tartalmazza a szinkron hitelesítő adatokat. A telepítő készítőjének hozzá kell adnia a VITE_SUPABASE_SYNC_EMAIL és VITE_SUPABASE_SYNC_PASSWORD változókat a .env.colombia fájlhoz, majd újra futtatnia az npm run dist:win:store parancsot.",
+    "errors": {
+      "invalid_code": "Érvénytelen kód. Ellenőrizze és próbálja újra.",
+      "expired": "Ez a kód lejárt. Lépjen kapcsolatba a szervezővel.",
+      "tournament_missing": "A hozzárendelt verseny még nem érhető el a szerveren. Próbáljon később szinkronizálni.",
+      "sync_not_configured": "A szinkronizáció nincs beállítva ezen a telepítésen.",
+      "auth_failed": "Nem sikerült csatlakozni a szinkronizációs szerverhez.",
+      "redeem_failed": "Nem sikerült beváltani a kódot. Ellenőrizze a kapcsolatot és próbálja újra."
     }
   },
   "swiss": {

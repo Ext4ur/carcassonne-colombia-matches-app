@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { calculateNumberOfRounds, getMaxPlayersForRounds } from '../utils/tournament';
+import {
+  calculateNumberOfRounds,
+  getEffectiveNumberOfRounds,
+  getMaxPlayersForRounds,
+} from '../utils/tournament';
 
 describe('Tournament Utils (AC-47)', () => {
   describe('calculateNumberOfRounds', () => {
@@ -38,6 +42,17 @@ describe('Tournament Utils (AC-47)', () => {
       expect(calculateNumberOfRounds(65)).toBe(7);
       expect(calculateNumberOfRounds(128)).toBe(7);
       expect(calculateNumberOfRounds(256)).toBe(7);
+    });
+  });
+
+  describe('getEffectiveNumberOfRounds', () => {
+    it('uses stored value when set', () => {
+      expect(getEffectiveNumberOfRounds(5, 6)).toBe(5);
+    });
+
+    it('calculates from player count when stored is missing (not 1)', () => {
+      expect(getEffectiveNumberOfRounds(null, 6)).toBe(3);
+      expect(getEffectiveNumberOfRounds(undefined, 6)).toBe(3);
     });
   });
 

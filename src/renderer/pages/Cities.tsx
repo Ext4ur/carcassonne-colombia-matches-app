@@ -9,6 +9,7 @@ import { Column } from '../components/common/Table';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
 import { formatUserError } from '../utils/formatUserError';
+import { isSystemCity } from '../constants';
 
 export default function Cities() {
   const { t } = useTranslation();
@@ -70,6 +71,10 @@ export default function Cities() {
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
+    if (editingCity && isSystemCity(editingCity)) {
+      addNotification({ message: t('cities.errors.system_city_locked'), type: 'error' });
+      return;
+    }
     try {
       setIsLoading(true);
       if (editingCity?.id) {
@@ -94,6 +99,10 @@ export default function Cities() {
 
   const handleDelete = async (city: City) => {
     if (!city.id) return;
+    if (isSystemCity(city)) {
+      addNotification({ message: t('cities.errors.system_city_locked'), type: 'error' });
+      return;
+    }
     if (!confirm(t('cities.alerts.delete_confirm', { name: city.name }))) return;
     try {
       setIsLoading(true);
@@ -118,12 +127,20 @@ export default function Cities() {
       header: t('cities.columns.actions'),
       render: (city) => (
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" onClick={() => handleOpenModal(city)}>
-            {t('cities.actions.edit')}
-          </Button>
-          <Button variant="danger" size="sm" onClick={() => handleDelete(city)}>
-            {t('cities.actions.delete')}
-          </Button>
+          {!isSystemCity(city) ? (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => handleOpenModal(city)}>
+                {t('cities.actions.edit')}
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => handleDelete(city)}>
+                {t('cities.actions.delete')}
+              </Button>
+            </>
+          ) : (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {t('cities.system_city_label')}
+            </span>
+          )}
         </div>
       ),
     },

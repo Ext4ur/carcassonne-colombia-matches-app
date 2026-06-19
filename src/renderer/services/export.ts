@@ -157,7 +157,9 @@ export class ExportService {
    * circuitos que tienen al menos uno de esos torneos (solo IDs incluidos en el JSON).
    * @throws {ExportSubsetError} si la lista efectiva está vacía
    */
-  static async exportSubset(tournamentIds: number[]): Promise<void> {
+  static async exportSubsetToFile(
+    tournamentIds: number[]
+  ): Promise<{ success: boolean; canceled?: boolean; error?: string }> {
     const idSet = new Set(tournamentIds.filter((id) => id != null && id > 0));
     if (idSet.size === 0) {
       throw new ExportSubsetError();
@@ -196,6 +198,15 @@ export class ExportService {
     const data = JSON.stringify(exportData, null, 2);
     const filename = `carcassonne_backup_${getLocalDateString()}_${idSet.size}t.json`;
 
-    await window.electronAPI.saveFile(data, filename, 'json');
+    const result = await window.electronAPI.saveFile(data, filename, 'json');
+    if (result.canceled) return { success: false, canceled: true };
+    if (!result.success) return { success: false, error: result.error || 'save_failed' };
+    return { success: true };
+  }
+
+  static async exportSubset(tournamentIds: number[]): Promise<void> {
+    const r = await this.exportSubsetToFile(tournamentIds);
+    if (r.canceled) return;
+    if (!r.success) throw new Error(r.error || 'export_failed');
   }
 }

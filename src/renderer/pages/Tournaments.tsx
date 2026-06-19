@@ -29,6 +29,13 @@ import { useNotifications } from '../contexts/NotificationContext';
 import { ExportService, isExportSubsetError } from '../services/export';
 import { useTranslation } from 'react-i18next';
 import { formatUserError } from '../utils/formatUserError';
+import { isStoreMode } from '../utils/storeMode';
+import { getEffectiveNumberOfRounds } from '../utils/tournament';
+import {
+  canCreateStoreTournament,
+  filterTournamentsForStoreKiosk,
+} from '../services/storeLifecycle';
+import { resolveStorePlaceId } from '../services/storeLocation';
 
 type WizardStep = 'quick' | 'form' | 'config' | 'registration' | null;
 
@@ -40,6 +47,7 @@ export default function Tournaments() {
   const navigate = useNavigate();
   const { addNotification } = useNotifications();
   const { t } = useTranslation();
+  const storeMode = isStoreMode();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<WizardStep>(null);
@@ -80,7 +88,17 @@ export default function Tournaments() {
       .catch(() => {});
   }, [loadTournaments]);
 
+  useEffect(() => {
+    const onSyncDataChanged = () => {
+      loadTournaments();
+    };
+    window.addEventListener('sync:data-changed', onSyncDataChanged);
+    return () => window.removeEventListener('sync:data-changed', onSyncDataChanged);
+  }, [loadTournaments]);
+
   const handleCreateTournament = (createMode: 'quick' | 'advanced') => {
+    if (storeMode && !canCreateStoreTournament(tournaments)) return;
+    if (storeMode && createMode === 'advanced') return;
     setMode(createMode);
     setTournamentDraft(null);
     setConfigDraft(null);
@@ -158,14 +176,26 @@ export default function Tournaments() {
       addNotification({ message: t('tournaments.wizard.missing_data'), type: 'error' });
       return null;
     }
+    let placeId = draft.place_id;
+    if (storeMode) {
+      try {
+        placeId = await resolveStorePlaceId(placeId, {
+          cityName: (draft as { store_city_name?: string }).store_city_name ?? '',
+          placeName: (draft as { store_place_name?: string }).store_place_name ?? '',
+        });
+      } catch {
+        addNotification({ message: t('tournaments.form.store_location_error'), type: 'error' });
+        return null;
+      }
+    }
     const tournamentId = await DatabaseService.createTournament({
       name: draft.name,
       type: draft.type,
       circuit_id: draft.circuit_id,
       date: draft.date,
       players_per_match: draft.players_per_match || 2,
-      number_of_rounds: numberOfRounds,
-      place_id: draft.place_id,
+      number_of_rounds: getEffectiveNumberOfRounds(numberOfRounds, players.length),
+      place_id: placeId,
       competition_format: draft.competition_format || 'swiss',
     });
     if (config) {
@@ -387,13 +417,15 @@ export default function Tournaments() {
           >
             <ExportIcon />
           </IconActionButton>
-          <IconActionButton
-            label={t('common.delete')}
-            onClick={() => handleDelete(tournament)}
-            variant="danger"
-          >
-            <TrashIcon />
-          </IconActionButton>
+          {!storeMode && (
+            <IconActionButton
+              label={t('common.delete')}
+              onClick={() => handleDelete(tournament)}
+              variant="danger"
+            >
+              <TrashIcon />
+            </IconActionButton>
+          )}
         </div>
       ),
     },
@@ -404,14 +436,16 @@ export default function Tournaments() {
       ? tournaments.filter((t) => t.place_id != null && selectedPlaceIds.includes(t.place_id))
       : tournaments;
 
-  const filteredTournaments = searchTerm.trim()
-    ? filteredByPlace.filter((t) => {
-        const term = searchTerm.toLowerCase();
-        const name = (t.name ?? '').toLowerCase();
-        const placeName = (t.place_name ?? '').toLowerCase();
-        return name.includes(term) || placeName.includes(term);
-      })
-    : filteredByPlace;
+  const filteredTournaments = filterTournamentsForStoreKiosk(
+    searchTerm.trim()
+      ? filteredByPlace.filter((t) => {
+          const term = searchTerm.toLowerCase();
+          const name = (t.name ?? '').toLowerCase();
+          const placeName = (t.place_name ?? '').toLowerCase();
+          return name.includes(term) || placeName.includes(term);
+        })
+      : filteredByPlace
+  );
 
   const getWizardTitle = () => {
     switch (wizardStep) {
@@ -433,14 +467,22 @@ export default function Tournaments() {
       <div className="card">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">{t('tournaments.title')}</h1>
-          <div className="flex space-x-2">
-            <Button variant="secondary" onClick={() => handleCreateTournament('quick')}>
-              {t('tournaments.quick_tournament')}
-            </Button>
-            <Button onClick={() => handleCreateTournament('advanced')}>
-              {t('tournaments.new')}
-            </Button>
-          </div>
+          {storeMode ? (
+            canCreateStoreTournament(tournaments) && (
+              <Button onClick={() => handleCreateTournament('quick')}>
+                {t('tournaments.quick_tournament')}
+              </Button>
+            )
+          ) : (
+            <div className="flex space-x-2">
+              <Button variant="secondary" onClick={() => handleCreateTournament('quick')}>
+                {t('tournaments.quick_tournament')}
+              </Button>
+              <Button onClick={() => handleCreateTournament('advanced')}>
+                {t('tournaments.new')}
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="mb-4 flex flex-wrap items-end gap-4">
@@ -451,7 +493,7 @@ export default function Tournaments() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          {places.length > 0 && (
+          {!storeMode && places.length > 0 && (
             <MultiSelect
               label={t('tournaments.filter_place')}
               options={places.map((p) => ({ value: p.id!, label: p.name }))}

@@ -30,7 +30,8 @@ export class SupabaseClient implements IApiClient {
     }
   }
 
-  private async ensureSyncSession(): Promise<void> {
+  /** Asegura sesión Supabase Auth del usuario sync (requerido para RLS 029+). */
+  async ensureSyncSession(): Promise<void> {
     if (!this._client) return;
     if (this._authReady) {
       await this._authReady;

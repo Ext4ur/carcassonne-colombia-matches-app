@@ -7,10 +7,24 @@ import { randomUUID } from 'crypto';
 
 let db: Database.Database | null = null;
 
+function isStoreBuild(): boolean {
+  return (process.env.DEVIR_STORE_MODE || '').toLowerCase() === 'true';
+}
+
+function isDevirHqBuild(): boolean {
+  return (process.env.DEVIR_HQ_MODE || '').toLowerCase() === 'true';
+}
+
 export function getDatabase(): Database.Database {
   if (!db) {
     const env = (process.env.APP_ENV || 'colombia').toLowerCase();
-    const dbName = env === 'international' ? 'tournament_int.db' : 'tournament_co.db';
+    const dbName = isStoreBuild()
+      ? 'tournament_store.db'
+      : isDevirHqBuild()
+        ? 'tournament_devir.db'
+        : env === 'international'
+          ? 'tournament_int.db'
+          : 'tournament_co.db';
     const userDataPath = app.getPath('userData');
     const dbPath = path.join(userDataPath, dbName);
     console.log(`[DB] Environment: ${env}`);
@@ -25,6 +39,8 @@ export function getDatabase(): Database.Database {
 
     db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
+    // Evita que lecturas UI queden bloqueadas durante bursts largos de sync.
+    db.pragma('busy_timeout = 10000');
 
     // Initialize schema
     initializeSchema(db);
@@ -655,7 +671,9 @@ function runMigrations(database: Database.Database) {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uuid TEXT,
             match_id INTEGER NOT NULL,
+            match_uuid TEXT,
             player_id INTEGER NOT NULL,
+            player_uuid TEXT,
             position INTEGER NOT NULL,
             points INTEGER NOT NULL,
             tournament_points REAL NOT NULL,
@@ -665,9 +683,12 @@ function runMigrations(database: Database.Database) {
             FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
           )
         `);
+        const mrColNames = new Set(mrCols.map((c) => c.name));
+        const copyMatchUuid = mrColNames.has('match_uuid') ? 'match_uuid' : 'NULL';
+        const copyPlayerUuid = mrColNames.has('player_uuid') ? 'player_uuid' : 'NULL';
         database.exec(`
-          INSERT INTO match_results__m14 (id, uuid, match_id, player_id, position, points, tournament_points, game_number)
-          SELECT id, uuid, match_id, player_id, position, points, tournament_points, 1
+          INSERT INTO match_results__m14 (id, uuid, match_id, match_uuid, player_id, player_uuid, position, points, tournament_points, game_number)
+          SELECT id, uuid, match_id, ${copyMatchUuid}, player_id, ${copyPlayerUuid}, position, points, tournament_points, 1
           FROM match_results
         `);
         database.exec('DROP TABLE match_results');
@@ -789,7 +810,55 @@ function runMigrations(database: Database.Database) {
     console.warn('⚠️ [Migration 16] Warning:', error?.message || error);
   }
 
-  // Final Step: Default Data Initialization (Ensuring all columns exist)
+  // Migration 17: match_results sync UUIDs (Migration 14 rebuild omitted match_uuid/player_uuid)
+  try {
+    const applied = database
+      .prepare(`SELECT 1 FROM sync_meta WHERE key = 'migration_17_match_results_uuids'`)
+      .get() as { 1: number } | undefined;
+    if (applied) {
+      console.log('ℹ️ Migration 17: match_results UUID columns already applied');
+    } else {
+      const addCol = (sql: string) => {
+        try {
+          database.exec(sql);
+        } catch (e: any) {
+          if (!String(e.message || '').includes('duplicate column')) throw e;
+        }
+      };
+      addCol(`ALTER TABLE match_results ADD COLUMN match_uuid TEXT`);
+      addCol(`ALTER TABLE match_results ADD COLUMN player_uuid TEXT`);
+      database.exec(`
+        UPDATE match_results
+        SET match_uuid = (SELECT uuid FROM matches WHERE id = match_results.match_id)
+        WHERE match_uuid IS NULL AND match_id IS NOT NULL
+      `);
+      database.exec(`
+        UPDATE match_results
+        SET player_uuid = (SELECT uuid FROM players WHERE id = match_results.player_id)
+        WHERE player_uuid IS NULL AND player_id IS NOT NULL
+      `);
+      database
+        .prepare(
+          `INSERT OR REPLACE INTO sync_meta (key, value, updated_at) VALUES ('migration_17_match_results_uuids', '1', CURRENT_TIMESTAMP)`
+        )
+        .run();
+      console.log('✅ [Migration 17] match_results match_uuid/player_uuid restored');
+    }
+  } catch (error: any) {
+    console.warn('⚠️ [Migration 17] Warning:', error?.message || error);
+  }
+
+  // Final Step: Default cities/places (admin builds only — tienda kiosk empieza vacía)
+  if (isStoreBuild()) {
+    console.log('[DB] Store build: skipping default Online/Offline seed');
+    try {
+      database.pragma('wal_checkpoint(RESTART)');
+    } catch (e) {
+      console.warn('Could not checkpoint WAL:', e);
+    }
+    return;
+  }
+
   try {
     console.log(`[DB] Configuring final default cities and places (Online/Offline)`);
 

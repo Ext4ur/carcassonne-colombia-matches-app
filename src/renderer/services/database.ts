@@ -6,6 +6,7 @@ import { DELETE_BLOCKED_BY_TOURNAMENTS_MESSAGE } from '../constants/deleteGuards
 import * as dbCache from './dbCache';
 import { getPlayerDisplayName } from '@utils/playerDisplayName';
 import { SyncService } from './syncService';
+import { isStoreMode } from '../utils/storeMode';
 import {
   MatchWithResults,
   TiebreakCriterion,
@@ -663,6 +664,9 @@ export class DatabaseService {
   }
 
   static async deleteTournament(id: number) {
+    if (isStoreMode()) {
+      throw new Error('STORE_TOURNAMENT_DELETE_FORBIDDEN');
+    }
     const uuid = await this.getUuid('tournaments', id);
     if (!uuid) throw new Error(`Tournament ${id} has no UUID`);
 

@@ -80,6 +80,23 @@ export type ByeSelection = (typeof BYE_SELECTION_OPTIONS)[number];
 /** Nombre del lugar por defecto creado por migración (no se puede eliminar). */
 export const DEFAULT_PLACE_NAME = 'Online';
 
+/** Ciudades del sistema (sembradas en migración; no editables). */
+export const SYSTEM_CITY_UUIDS = {
+  online: '00000000-0000-0000-0000-000000000001',
+  offline: '00000000-0000-0000-0000-000000000002',
+} as const;
+
+export const SYSTEM_CITY_NAMES = ['Online', 'Offline'] as const;
+
+export function isSystemCity(city: { uuid?: string | null; name?: string | null }): boolean {
+  const uuid = city.uuid?.toLowerCase();
+  if (uuid === SYSTEM_CITY_UUIDS.online || uuid === SYSTEM_CITY_UUIDS.offline) {
+    return true;
+  }
+  const name = city.name?.trim();
+  return name === 'Online' || name === 'Offline';
+}
+
 /**
  * Configuración de base de datos
  *

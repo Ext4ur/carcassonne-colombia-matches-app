@@ -3,9 +3,18 @@ import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import SyncStatus from './SyncStatus';
+import AboutSection from './AboutSection';
+import { isLocalOnlyMode, isStoreMode } from '../../utils/storeMode';
 
 interface LayoutProps {
   children: ReactNode;
+}
+
+const STORE_HIDDEN_PATHS = new Set(['/circuits', '/places', '/cities', '/settings']);
+
+function isNavVisibleInStoreMode(path: string): boolean {
+  if (!isStoreMode()) return true;
+  return !STORE_HIDDEN_PATHS.has(path);
 }
 
 export default function Layout({ children }: LayoutProps) {
@@ -42,7 +51,7 @@ export default function Layout({ children }: LayoutProps) {
             {/* Desktop Menu */}
             <div className="hidden lg:flex lg:space-x-4 lg:flex-1 lg:justify-end lg:items-center">
               {navItems
-                .filter((item) => item.path !== '/')
+                .filter((item) => item.path !== '/' && isNavVisibleInStoreMode(item.path))
                 .map((item) => (
                   <Link
                     key={item.path}
@@ -58,10 +67,12 @@ export default function Layout({ children }: LayoutProps) {
                   </Link>
                 ))}
 
-              {/* Sync Status (Desktop) */}
-              <div className="hidden lg:flex items-center mx-4">
-                <SyncStatus />
-              </div>
+              {/* Sync Status (Desktop) — oculto en modo tienda local */}
+              {!isLocalOnlyMode() && (
+                <div className="hidden lg:flex items-center mx-4">
+                  <SyncStatus />
+                </div>
+              )}
 
               {/* Theme Toggle (Desktop) */}
               <button
@@ -132,7 +143,7 @@ export default function Layout({ children }: LayoutProps) {
           <div className="lg:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-200 dark:border-gray-700">
               {navItems
-                .filter((item) => item.path !== '/')
+                .filter((item) => item.path !== '/' && isNavVisibleInStoreMode(item.path))
                 .map((item) => (
                   <Link
                     key={item.path}
@@ -149,15 +160,20 @@ export default function Layout({ children }: LayoutProps) {
                   </Link>
                 ))}
 
-              {/* Sync Status (Mobile) */}
-              <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700">
-                <SyncStatus />
-              </div>
+              {/* Sync Status (Mobile) — oculto en modo tienda local */}
+              {!isLocalOnlyMode() && (
+                <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700">
+                  <SyncStatus />
+                </div>
+              )}
             </div>
           </div>
         )}
       </nav>
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 mb-16">{children}</main>
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 mb-16">
+        {children}
+        {isStoreMode() && <AboutSection variant="footer" />}
+      </main>
     </div>
   );
 }

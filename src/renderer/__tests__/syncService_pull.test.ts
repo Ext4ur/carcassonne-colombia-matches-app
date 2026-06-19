@@ -334,4 +334,124 @@ describe('SyncService Pull', () => {
     );
     expect(inserts.length).toBe(2);
   });
+
+  it('pullChanges hydrates FK parents before child tournament_players', async () => {
+    const tournament = {
+      uuid: 't-1',
+      name: 'T1',
+      date: '2026-01-01',
+      id: 1,
+    };
+    const player = { uuid: 'p-1', name: 'P1', id: 2 };
+    const tp = {
+      uuid: 'tp-1',
+      tournament_uuid: 't-1',
+      player_uuid: 'p-1',
+      tournament_id: 1,
+      player_id: 2,
+      id: 3,
+    };
+    const logs = [
+      {
+        id: 10,
+        table_name: 'tournament_players',
+        record_uuid: 'tp-1',
+        operation: 'INSERT' as const,
+      },
+    ];
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sync_audit_logs') return createMockChain(logs);
+      if (table === 'tournament_players') return createMockChain([tp]);
+      if (table === 'tournaments') return createMockChain([tournament]);
+      if (table === 'players') return createMockChain([player]);
+      return createMockChain();
+    });
+
+    mockQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('SELECT id FROM tournament_players WHERE uuid = ?')) return [];
+      if (sql.includes('SELECT id FROM tournaments WHERE uuid = ?')) {
+        if (params?.[0] === 't-1') return [{ id: 1 }];
+        return [];
+      }
+      if (sql.includes('SELECT id FROM players WHERE uuid = ?')) {
+        if (params?.[0] === 'p-1') return [{ id: 2 }];
+        return [];
+      }
+      if (sql.includes('SELECT id FROM tournaments WHERE id = ?')) return [];
+      if (sql.includes('SELECT id FROM players WHERE id = ?')) return [];
+      if (sql.includes('SELECT id FROM tournaments WHERE uuid = ?')) return [{ id: 1 }];
+      return [];
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (SyncService as any).pullChanges();
+
+    const inserts = mockExecute.mock.calls.filter((c) =>
+      String(c[0]).toLowerCase().includes('insert into tournament_players')
+    );
+    expect(inserts.length).toBe(1);
+  });
+
+  it('parent hydration merges player by name when uuid differs', async () => {
+    const player = { uuid: 'remote-p', name: 'Alice', id: 99 };
+    const mp = {
+      uuid: 'mp-1',
+      match_uuid: 'm-1',
+      player_uuid: 'remote-p',
+      match_id: 1,
+      player_id: 99,
+      id: 1,
+    };
+    const match = {
+      uuid: 'm-1',
+      round_uuid: 'r-1',
+      round_id: 1,
+      match_number: 1,
+      id: 1,
+    };
+    const round = { uuid: 'r-1', tournament_uuid: 't-1', tournament_id: 1, round_number: 1, id: 1 };
+    const tournament = { uuid: 't-1', name: 'T', date: '2026-01-01', id: 1 };
+    const logs = [
+      { id: 1, table_name: 'match_players', record_uuid: 'mp-1', operation: 'INSERT' as const },
+    ];
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'sync_audit_logs') return createMockChain(logs);
+      if (table === 'match_players') return createMockChain([mp]);
+      if (table === 'matches') return createMockChain([match]);
+      if (table === 'rounds') return createMockChain([round]);
+      if (table === 'tournaments') return createMockChain([tournament]);
+      if (table === 'players') return createMockChain([player]);
+      return createMockChain();
+    });
+
+    mockQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
+      if (sql.includes("FROM sync_meta WHERE key = 'last_audit_log_id'")) return [{ value: '0' }];
+      if (sql.includes('SELECT id FROM match_players WHERE uuid = ?')) return [];
+      if (sql.includes('SELECT id FROM players WHERE name = ?')) return [{ id: 5 }];
+      if (sql.includes('SELECT id FROM players WHERE uuid = ?')) {
+        if (params?.[0] === 'remote-p') return [];
+        return [];
+      }
+      if (sql.includes('SELECT id FROM matches WHERE uuid = ?') && params?.[0] === 'm-1') {
+        return [{ id: 10 }];
+      }
+      if (sql.includes('SELECT id FROM rounds WHERE uuid = ?') && params?.[0] === 'r-1') {
+        return [{ id: 20 }];
+      }
+      if (sql.includes('SELECT id FROM tournaments WHERE uuid = ?')) return [{ id: 30 }];
+      if (sql.includes('SELECT id FROM matches WHERE round_id = ?')) return [];
+      return [];
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (SyncService as any).pullChanges();
+
+    expect(mockExecute).toHaveBeenCalledWith(
+      expect.stringMatching(/UPDATE players SET uuid = \? WHERE id = \?/i),
+      ['remote-p', 5]
+    );
+  });
 });

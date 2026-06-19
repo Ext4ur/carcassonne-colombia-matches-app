@@ -1,10 +1,13 @@
+import { isLocalOnlyMode } from '@utils/storeMode';
+
 /**
  * Configuración de Supabase
  *
  * Para usar Supabase, necesitas:
  * 1. Crear un proyecto en https://supabase.com
  * 2. Obtener la URL y la publishable key desde Settings > API
- * 3. Configurar las variables de entorno o usar valores por defecto aquí
+ * 3. Usuario Auth dedicado (migración 029): VITE_SUPABASE_SYNC_EMAIL / VITE_SUPABASE_SYNC_PASSWORD
+ * 4. Variables en `.env.colombia` (dev) o embebidas al compilar `dist:win:store`
  */
 
 /**
@@ -36,9 +39,20 @@ export function isSyncAuthConfigured(): boolean {
   return !!(email && password);
 }
 
+export function hasSupabaseCredentials(): boolean {
+  return !!(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+}
+
+/** Perfiles local-only: fuerza cloud_sync_enabled=false en localStorage. */
+export function ensureStoreModeSyncDefaults(): void {
+  if (!isLocalOnlyMode()) return;
+  localStorage.setItem('cloud_sync_enabled', 'false');
+}
+
 export function isSupabaseConfigured(): boolean {
-  const hasConfig = !!(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
-  if (!hasConfig) return false;
+  if (isLocalOnlyMode()) return false;
+
+  if (!hasSupabaseCredentials()) return false;
 
   const syncEnabled = localStorage.getItem('cloud_sync_enabled');
   if (syncEnabled === null) {

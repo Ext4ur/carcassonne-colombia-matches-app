@@ -4,6 +4,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 
 import es from './locales/es.json';
 import en from './locales/en.json';
+import de from './locales/de.json';
 import hu from './locales/hu.json';
 
 // Determine default language based on build mode
@@ -18,6 +19,7 @@ i18n
     resources: {
       es: { translation: es },
       en: { translation: en },
+      de: { translation: de },
       hu: { translation: hu },
     },
     fallbackLng: defaultLng,

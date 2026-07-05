@@ -87,7 +87,7 @@ for (const file of files) {
         if (isFix) {
             missing.forEach((k) => {
                 let fallbackValue = `TODO: ${k}`;
-                for (const f of ['en.json', 'es.json', 'hu.json']) {
+                for (const f of ['en.json', 'es.json', 'de.json', 'hu.json']) {
                     if (f !== file && data[f]) {
                         const val = getNestedValue(data[f], k);
                         if (val !== undefined) {

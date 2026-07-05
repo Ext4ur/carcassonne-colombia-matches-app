@@ -555,6 +555,10 @@
     "detail": {
       "rounds_planned_one": "{{count}} ronda prevista",
       "rounds_planned_other": "{{count}} rondas previstas",
+      "rounds_planned_auto_one": "{{count}} ronda prevista (automática)",
+      "rounds_planned_auto_other": "{{count}} rondas previstas (automáticas)",
+      "rounds_auto_hint": "Con {{players}} jugadores inscritos se jugarán {{count}} rondas suizas (cálculo automático). Puedes fijar otro número en Ajustes del torneo.",
+      "rounds_manual_hint": "Rondas fijadas manualmente: {{count}}. Cambia a automático en Ajustes del torneo si lo prefieres.",
       "rounds_progress": "Ronda {{current}} de {{total}}",
       "delete_last_round": "Eliminar última ronda",
       "delete_last_round_title": "Solo la última ronda: aún no hay partidas multijugador terminadas (el bye automático no impide). Permite regenerar emparejamientos.",
@@ -683,6 +687,8 @@
       "players_range": "Debe ser entre 2 y 4 jugadores",
       "rounds_help": "Se calculará como potencia de 2 según el número de jugadores si se deja vacío",
       "rounds_label": "Número de Rondas (opcional, se calculará automáticamente si se deja vacío)",
+      "rounds_auto_label": "Calcular rondas automáticamente según jugadores inscritos",
+      "rounds_auto_helper": "Con {{players}} jugadores inscritos: {{count}} rondas (potencia de 2). Se actualiza al inscribir o retirar jugadores antes de la ronda 1.",
       "select_circuit": "Seleccionar circuito...",
       "select_place": "Seleccionar lugar...",
       "type_label": "Tipo de Torneo *",
@@ -747,7 +753,8 @@
       "table_number": "Mesa",
       "rematch_inevitable": "Revancha inevitable: {{p1}} vs {{p2}}",
       "rematch_inevitable_generic": "Revancha detectada en mesa: {{match}}",
-      "rematch_detected": "Partida repetida"
+      "rematch_detected": "Partida repetida",
+      "backtracking_failed": "No se encontró una solución sin muchas revanchas mediante búsqueda avanzada. Usando sistema básico."
     },
     "quick_tournament": "Torneo Rápido",
     "registration": {

@@ -294,6 +294,7 @@ export default function Settings() {
                   options={[
                     { value: 'es', label: 'es - Español' },
                     { value: 'en', label: 'en - English' },
+                    { value: 'de', label: 'de - Deutsch' },
                     { value: 'hu', label: 'hu - Magyar' },
                   ]}
                 />

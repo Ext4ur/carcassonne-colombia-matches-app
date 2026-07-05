@@ -799,12 +799,7 @@ export class SwissPairingService {
     } else {
       // Greedy logic (used as primary or fallback)
       if (useBacktrackingSearch) {
-        warnings.push(
-          i18n.t('tournaments.preview.backtracking_failed', {
-            defaultValue:
-              'No se encontró una solución sin muchas revanchas mediante búsqueda avanzada. Usando sistema básico.',
-          })
-        );
+        warnings.push(i18n.t('tournaments.preview.backtracking_failed'));
       }
 
       const { pointGroups, sortedPoints } = this.groupPlayersByPoints(availablePlayers);

@@ -555,6 +555,10 @@
     "detail": {
       "rounds_planned_one": "{{count}} tervezett forduló",
       "rounds_planned_other": "{{count}} tervezett forduló",
+      "rounds_planned_auto_one": "{{count}} tervezett forduló (automatikus)",
+      "rounds_planned_auto_other": "{{count}} tervezett forduló (automatikus)",
+      "rounds_auto_hint": "{{players}} regisztrált játékossal {{count}} svájci forduló lesz (automatikus számítás). Felülírható a Versenybeállításokban.",
+      "rounds_manual_hint": "Kézzel beállított fordulók: {{count}}. Automatikus módra válthat a Versenybeállításokban.",
       "rounds_progress": "{{current}}. forduló / {{total}}",
       "delete_last_round": "Utolsó forduló törlése",
       "delete_last_round_title": "Csak az utolsó forduló: még nincs befejezett többjátékos mérkőzés (a bye automatikus győzelem nem akadály). Új párosítás generálható.",
@@ -683,6 +687,8 @@
       "players_range": "2 és 4 közötti játékosszám szükséges",
       "rounds_help": "A 2 hatványaként lesz kiszámolva a játékosok száma alapján, ha üres",
       "rounds_label": "Fordulók száma (opcionális, automatikusan számítva, ha üres)",
+      "rounds_auto_label": "Fordulók automatikus számítása a regisztrált játékosok alapján",
+      "rounds_auto_helper": "{{players}} regisztrált játékossal: {{count}} forduló (2 hatvány). Frissül játékos hozzáadásakor vagy eltávolításakor az 1. forduló előtt.",
       "select_circuit": "Válasszon sorozatot...",
       "select_place": "Válasszon helyszínt...",
       "type_label": "Verseny Típusa *",
@@ -747,7 +753,8 @@
       "table_number": "ASZTAL",
       "rematch_inevitable": "Ismétlődő párosítás elkerülhetetlen: {{p1}} vs {{p2}}",
       "rematch_inevitable_generic": "Ismétlődő párosítás észlelve az asztalon: {{match}}",
-      "rematch_detected": "Ismétlődő párosítás"
+      "rematch_detected": "Ismétlődő párosítás",
+      "backtracking_failed": "A fejlett párosítás nem tudta elkerülni a visszavágókat. Alap rendszert használunk."
     },
     "quick_tournament": "Gyors Verseny",
     "registration": {

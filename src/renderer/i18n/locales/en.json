@@ -555,6 +555,10 @@
     "detail": {
       "rounds_planned_one": "{{count}} round planned",
       "rounds_planned_other": "{{count}} rounds planned",
+      "rounds_planned_auto_one": "{{count}} round planned (automatic)",
+      "rounds_planned_auto_other": "{{count}} rounds planned (automatic)",
+      "rounds_auto_hint": "With {{players}} registered players, {{count}} Swiss rounds will be played (automatic). You can override this in Tournament settings.",
+      "rounds_manual_hint": "Rounds set manually: {{count}}. Switch to automatic in Tournament settings if you prefer.",
       "rounds_progress": "Round {{current}} of {{total}}",
       "delete_last_round": "Delete last round",
       "delete_last_round_title": "Only the last round: no finished multi-player matches yet (bye auto-win does not block). Regenerates pairings.",
@@ -683,6 +687,8 @@
       "players_range": "Must be between 2 and 4 players",
       "rounds_help": "Calculated as power of 2 based on player count if empty",
       "rounds_label": "Number of Rounds (optional, auto-calculated if left blank)",
+      "rounds_auto_label": "Calculate rounds automatically from registered players",
+      "rounds_auto_helper": "With {{players}} registered players: {{count}} rounds (power of 2). Updates when adding or removing players before round 1.",
       "select_circuit": "Select circuit...",
       "select_place": "Select place...",
       "type_label": "Tournament Type *",
@@ -747,7 +753,8 @@
       "table_number": "Table",
       "rematch_inevitable": "Rematch inevitable: {{p1}} vs {{p2}}",
       "rematch_inevitable_generic": "Rematch detected at table: {{match}}",
-      "rematch_detected": "Repeated match"
+      "rematch_detected": "Repeated match",
+      "backtracking_failed": "Advanced pairing could not avoid rematches. Using basic pairing."
     },
     "quick_tournament": "Quick Tournament",
     "registration": {

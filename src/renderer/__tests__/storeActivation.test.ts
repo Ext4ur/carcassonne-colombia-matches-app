@@ -31,49 +31,35 @@ describe('storeActivation', () => {
     for (const k of Object.keys(storage)) delete storage[k];
   });
 
-  it('filterTournamentsForStoreMode devuelve solo el torneo asignado qualifier', async () => {
+  it('getAssignedTournamentUuid returns assigned uuid in store mode', async () => {
     vi.stubEnv('VITE_DEVIR_STORE_MODE', 'true');
-    const { setStoreActivation, filterTournamentsForStoreMode } =
+    const { setStoreActivation, getAssignedTournamentUuid } =
       await import('../services/storeActivation');
     setStoreActivation({
       code: 'DEVIR-TEST',
       tournament_uuid: 'aaa-bbb',
       mode: 'manage',
     });
-    const list = filterTournamentsForStoreMode([
-      { uuid: 'aaa-bbb', type: 'qualifier', name: 'Mine' },
-      { uuid: 'other', type: 'qualifier', name: 'Other' },
-      { uuid: 'aaa-bbb', type: 'circuit', name: 'Wrong type' },
-    ]);
-    expect(list).toHaveLength(1);
-    expect(list[0].name).toBe('Mine');
+    expect(getAssignedTournamentUuid()).toBe('aaa-bbb');
   });
 
-  it('canManageAssignedTournament respeta modo readonly', async () => {
-    vi.stubEnv('VITE_DEVIR_STORE_MODE', 'true');
-    const { setStoreActivation, canManageAssignedTournament } =
+  it('getAssignedTournamentUuid is null outside store mode', async () => {
+    vi.stubEnv('VITE_DEVIR_STORE_MODE', '');
+    const { setStoreActivation, getAssignedTournamentUuid } =
       await import('../services/storeActivation');
     setStoreActivation({
       code: 'DEVIR-TEST',
-      tournament_uuid: 'uuid-1',
-      mode: 'readonly',
+      tournament_uuid: 'aaa-bbb',
+      mode: 'manage',
     });
-    expect(canManageAssignedTournament('uuid-1')).toBe(false);
-    setStoreActivation({
-      code: 'DEVIR-TEST',
-      tournament_uuid: 'uuid-1',
-      mode: 'join',
-    });
-    expect(canManageAssignedTournament('uuid-1')).toBe(true);
+    expect(getAssignedTournamentUuid()).toBeNull();
   });
 
-  it('sin modo tienda no filtra torneos', async () => {
-    vi.stubEnv('VITE_DEVIR_STORE_MODE', '');
-    const { filterTournamentsForStoreMode } = await import('../services/storeActivation');
-    const input = [
-      { uuid: 'a', type: 'qualifier' },
-      { uuid: 'b', type: 'circuit' },
-    ];
-    expect(filterTournamentsForStoreMode(input)).toEqual(input);
+  it('getMachineFingerprint persists across calls', async () => {
+    const { getMachineFingerprint } = await import('../services/storeActivation');
+    const a = getMachineFingerprint();
+    const b = getMachineFingerprint();
+    expect(a).toBe(b);
+    expect(a.startsWith('fp-')).toBe(true);
   });
 });

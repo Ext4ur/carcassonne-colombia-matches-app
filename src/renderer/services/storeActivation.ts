@@ -28,10 +28,6 @@ export function setStoreActivation(state: StoreActivationState): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-export function clearStoreActivation(): void {
-  localStorage.removeItem(STORAGE_KEY);
-}
-
 export function getAssignedTournamentUuid(): string | null {
   if (!isStoreMode()) return null;
   return getStoreActivation()?.tournament_uuid ?? null;
@@ -44,30 +40,4 @@ export function getMachineFingerprint(): string {
     localStorage.setItem(FINGERPRINT_KEY, fp);
   }
   return fp;
-}
-
-/** Tienda puede editar resultados / rondas del torneo asignado. */
-export function canManageAssignedTournament(tournamentUuid?: string | null): boolean {
-  if (!isStoreMode()) return true;
-  const activation = getStoreActivation();
-  if (!activation) return false;
-  if (!tournamentUuid || tournamentUuid !== activation.tournament_uuid) return false;
-  return activation.mode === 'manage' || activation.mode === 'join';
-}
-
-export function isStoreReadOnlyForTournament(tournamentUuid?: string | null): boolean {
-  if (!isStoreMode()) return false;
-  const activation = getStoreActivation();
-  if (!activation || !tournamentUuid) return true;
-  if (tournamentUuid !== activation.tournament_uuid) return true;
-  return activation.mode === 'readonly';
-}
-
-export function filterTournamentsForStoreMode<T extends { uuid?: string; type?: string }>(
-  tournaments: T[]
-): T[] {
-  if (!isStoreMode()) return tournaments;
-  const assigned = getAssignedTournamentUuid();
-  if (!assigned) return [];
-  return tournaments.filter((t) => t.uuid === assigned && t.type === 'qualifier');
 }

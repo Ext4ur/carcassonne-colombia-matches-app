@@ -302,26 +302,6 @@ describe('TiebreakService', () => {
     });
   });
 
-  describe('calculateHeadToHeadFromData', () => {
-    it('returns 1 if player1 beat player2', () => {
-      // In match 101, Player 1 (pos 1) beat Player 2 (pos 2)
-      const result = TiebreakService.calculateHeadToHeadFromData(mockData, 1, 2);
-      expect(result).toBe(1);
-    });
-
-    it('returns -1 if player2 beat player1', () => {
-      // In match 101, Player 2 lost to Player 1
-      const result = TiebreakService.calculateHeadToHeadFromData(mockData, 2, 1);
-      expect(result).toBe(-1);
-    });
-
-    it('returns 0 if players never played', () => {
-      // Player 1 and 3 played different matches
-      const result = TiebreakService.calculateHeadToHeadFromData(mockData, 1, 3);
-      expect(result).toBe(0);
-    });
-  });
-
   describe('calculatePointDifferenceFromData', () => {
     it('calculates difference correctly', () => {
       // Match 101: P1(100) vs P2(50). Diff for P1 = 100 - 50 = 50.

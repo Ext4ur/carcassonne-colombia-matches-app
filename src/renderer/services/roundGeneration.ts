@@ -31,17 +31,6 @@ export class RoundGenerationService {
     return calculateNumberOfRounds(players.length);
   }
 
-  static async canGenerateSwissNextRound(tournamentId: number): Promise<boolean> {
-    const [tournament, rounds] = await Promise.all([
-      DatabaseService.getTournamentById(tournamentId),
-      DatabaseService.getTournamentRounds(tournamentId),
-    ]);
-    if (!tournament) return false;
-    if (isKnockoutPhaseActive(tournament, rounds)) return false;
-    const maxSwiss = await this.getEffectiveMaxSwissRounds(tournament);
-    return countSwissRounds(rounds) < maxSwiss;
-  }
-
   static async previewNextRound(tournamentId: number) {
     const tournament = await DatabaseService.getTournamentById(tournamentId);
     const rounds = await DatabaseService.getTournamentRounds(tournamentId);

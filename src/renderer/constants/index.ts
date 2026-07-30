@@ -1,6 +1,5 @@
 import { TiebreakCriterion } from '../types/tournament';
 import { ScoringSystem } from '../types/tournament';
-import { isSupabaseConfigured } from '@api/clients/supabaseConfig';
 
 /**
  * Criterios de desempate por defecto
@@ -47,36 +46,6 @@ export function getDefaultScoringSystem(playersPerMatch: number): ScoringSystem 
   return DEFAULT_SCORING_SYSTEMS[playersPerMatch] || DEFAULT_SCORING_SYSTEMS[2];
 }
 
-/**
- * Estados posibles de un torneo
- */
-export const TOURNAMENT_STATUSES = ['draft', 'in_progress', 'completed'] as const;
-export type TournamentStatus = (typeof TOURNAMENT_STATUSES)[number];
-
-/**
- * Estados posibles de una ronda
- */
-export const ROUND_STATUSES = ['pending', 'in_progress', 'completed'] as const;
-export type RoundStatus = (typeof ROUND_STATUSES)[number];
-
-/**
- * Estados posibles de una partida
- */
-export const MATCH_STATUSES = ['pending', 'completed'] as const;
-export type MatchStatus = (typeof MATCH_STATUSES)[number];
-
-/**
- * Tipos de torneo
- */
-export const TOURNAMENT_TYPES = ['qualifier', 'circuit'] as const;
-export type TournamentType = (typeof TOURNAMENT_TYPES)[number];
-
-/**
- * Opciones de selección de bye
- */
-export const BYE_SELECTION_OPTIONS = ['worst', 'random', 'round_robin'] as const;
-export type ByeSelection = (typeof BYE_SELECTION_OPTIONS)[number];
-
 /** Nombre del lugar por defecto creado por migración (no se puede eliminar). */
 export const DEFAULT_PLACE_NAME = 'Online';
 
@@ -86,8 +55,6 @@ export const SYSTEM_CITY_UUIDS = {
   offline: '00000000-0000-0000-0000-000000000002',
 } as const;
 
-export const SYSTEM_CITY_NAMES = ['Online', 'Offline'] as const;
-
 export function isSystemCity(city: { uuid?: string | null; name?: string | null }): boolean {
   const uuid = city.uuid?.toLowerCase();
   if (uuid === SYSTEM_CITY_UUIDS.online || uuid === SYSTEM_CITY_UUIDS.offline) {
@@ -96,23 +63,3 @@ export function isSystemCity(city: { uuid?: string | null; name?: string | null 
   const name = city.name?.trim();
   return name === 'Online' || name === 'Offline';
 }
-
-/**
- * Configuración de base de datos
- *
- * Modos disponibles:
- * - 'local': Solo SQLite local (fallback cuando Supabase no está configurado)
- * - 'remote': Solo Supabase remoto (cuando VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY están configurados)
- * - 'dual': SQLite + Supabase con sincronización (pendiente Sprint 3)
- *
- * El modo se deriva automáticamente de la configuración: si Supabase está configurado, usa 'remote';
- * si no, usa 'local' para degradar correctamente a SQLite sin fallos en runtime.
- */
-export const DB_CONFIG = {
-  get mode(): 'local' | 'remote' | 'dual' {
-    return isSupabaseConfigured() ? 'remote' : 'local';
-  },
-  syncOnStartup: true,
-  syncInterval: 30000, // 30 segundos
-  conflictResolution: 'last-write-wins' as 'last-write-wins' | 'manual',
-} as const;

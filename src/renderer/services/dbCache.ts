@@ -5,13 +5,10 @@
  * Se invalida al escribir para mantener coherencia.
  */
 
-import { incrementCacheHitCount } from '../api/clients/queryCounter';
-
 const cache = new Map<string, any>();
 
 export function get<T = any>(key: string): T | undefined {
   if (!cache.has(key)) return undefined;
-  incrementCacheHitCount();
   return cache.get(key) as T;
 }
 

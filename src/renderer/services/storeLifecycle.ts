@@ -32,17 +32,6 @@ export function canCreateStoreTournament(tournaments: StoreTournamentRow[]): boo
   return true;
 }
 
-export function canDeleteStoreTournament(): boolean {
-  return !isStoreMode();
-}
-
-/** Torneo en solo lectura tras finalizar (o flag kiosk). */
-export function isStoreKioskLocked(tournaments: StoreTournamentRow[]): boolean {
-  if (!isStoreMode()) return false;
-  if (isStoreKioskLockedFlag()) return true;
-  return tournaments.some((t) => t.status === 'completed');
-}
-
 export function isStoreTournamentReadOnly(status?: string | null): boolean {
   if (!isStoreMode()) return false;
   if (isStoreKioskLockedFlag()) return true;

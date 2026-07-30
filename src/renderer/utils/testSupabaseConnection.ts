@@ -27,17 +27,26 @@ export async function testSupabaseConnection(): Promise<{
   }
 
   try {
-    const client = new SupabaseClient();
+    const wrapper = new SupabaseClient();
+    const client = wrapper.client;
+    if (!client) {
+      return {
+        success: false,
+        message: 'Supabase no está configurado',
+        details: getConfigError(),
+      };
+    }
 
-    // Intentar una query simple para verificar la conexión
-    // Probamos con la tabla 'players' que debería existir después de las migraciones
-    const result = await client.query('SELECT COUNT(*) as count FROM players');
+    const { count, error } = await client
+      .from('players')
+      .select('*', { count: 'exact', head: true });
+    if (error) throw error;
 
     return {
       success: true,
       message: 'Conexión con Supabase exitosa',
       details: {
-        playersCount: result[0]?.count || 0,
+        playersCount: count || 0,
         timestamp: new Date().toISOString(),
       },
     };

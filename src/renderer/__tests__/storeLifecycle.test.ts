@@ -31,12 +31,10 @@ describe('storeLifecycle', () => {
     for (const k of Object.keys(storage)) delete storage[k];
   });
 
-  it('admin mode: can always create and delete', async () => {
+  it('admin mode: can always create and edit', async () => {
     vi.stubEnv('VITE_DEVIR_STORE_MODE', 'false');
     const mod = await import('../services/storeLifecycle');
     expect(mod.canCreateStoreTournament([{ type: 'qualifier' }])).toBe(true);
-    expect(mod.canDeleteStoreTournament()).toBe(true);
-    expect(mod.isStoreKioskLocked([])).toBe(false);
     expect(mod.canEditStoreTournament('completed')).toBe(true);
   });
 
@@ -56,21 +54,14 @@ describe('storeLifecycle', () => {
     expect(mod.isStoreKioskLockedFlag()).toBe(false);
   });
 
-  it('store mode: cannot delete tournaments', async () => {
+  it('store mode: readonly when completed or flag set', async () => {
     vi.stubEnv('VITE_DEVIR_STORE_MODE', 'true');
     const mod = await import('../services/storeLifecycle');
-    expect(mod.canDeleteStoreTournament()).toBe(false);
-  });
-
-  it('store mode: locked when completed or flag set', async () => {
-    vi.stubEnv('VITE_DEVIR_STORE_MODE', 'true');
-    const mod = await import('../services/storeLifecycle');
-    expect(mod.isStoreKioskLocked([{ status: 'in_progress', type: 'qualifier' }])).toBe(false);
-    expect(mod.isStoreKioskLocked([{ status: 'completed', type: 'qualifier' }])).toBe(true);
     expect(mod.isStoreTournamentReadOnly('completed')).toBe(true);
     expect(mod.canEditStoreTournament('completed')).toBe(false);
+    expect(mod.isStoreTournamentReadOnly('in_progress')).toBe(false);
     mod.setStoreKioskLocked();
-    expect(mod.isStoreKioskLocked([{ status: 'in_progress', type: 'qualifier' }])).toBe(true);
+    expect(mod.isStoreTournamentReadOnly('in_progress')).toBe(true);
   });
 
   it('store mode: filters to qualifier tournaments only', async () => {

@@ -330,11 +330,6 @@ export class DatabaseService {
     return data;
   }
 
-  static async getCityById(id: number): Promise<City | null> {
-    const results = await this.query<City>('SELECT * FROM cities WHERE id = ?', [id]);
-    return results[0] || null;
-  }
-
   static async createCity(city: { name: string }) {
     const uuid = self.crypto.randomUUID();
     const result = await this.execute('INSERT INTO cities (uuid, name) VALUES (?, ?)', [
@@ -507,13 +502,6 @@ export class DatabaseService {
 
     dbCache.set(dbCache.LIST_KEYS.tournaments, data);
     return data;
-  }
-
-  static async getTournamentByNameAndDate(name: string, date: string): Promise<Tournament[]> {
-    return this.query<Tournament>('SELECT * FROM tournaments WHERE name = ? AND date = ?', [
-      name,
-      date,
-    ]);
   }
 
   static async getTournamentByNameDateAndPlace(
@@ -1430,20 +1418,6 @@ export class DatabaseService {
     return res;
   }
 
-  static async deleteMatchResult(resultId: number) {
-    const row = await this.query<{ uuid: string }>('SELECT uuid FROM match_results WHERE id = ?', [
-      resultId,
-    ]);
-    const uuid = row[0]?.uuid;
-
-    const res = await this.execute('DELETE FROM match_results WHERE id = ?', [resultId]);
-
-    if (uuid) {
-      await SyncService.addToQueue('match_results', 'DELETE', { uuid });
-    }
-    return res;
-  }
-
   static async deleteMatchResults(matchId: number) {
     // We need UUIDs of deleted results to sync DELETE
     const results = await this.query<{ uuid: string }>(
@@ -1750,24 +1724,6 @@ export class DatabaseService {
     return res;
   }
 
-  static async removePlayerFromMatch(matchId: number, playerId: number) {
-    const row = await this.query<{ uuid: string }>(
-      'SELECT uuid FROM match_players WHERE match_id=? AND player_id=?',
-      [matchId, playerId]
-    );
-    const uuid = row[0]?.uuid;
-
-    const res = await this.execute(
-      'DELETE FROM match_players WHERE match_id = ? AND player_id = ?',
-      [matchId, playerId]
-    );
-
-    if (uuid) {
-      await SyncService.addToQueue('match_players', 'DELETE', { uuid });
-    }
-    return res;
-  }
-
   static async setMatchPlayers(matchId: number, playerIds: number[]) {
     // Get existing UUIDs for delete sync
     const existing = await this.query<{ uuid: string }>(
@@ -1874,18 +1830,5 @@ export class DatabaseService {
   static async addPlayerBye(_tournamentId: number, _playerId: number, _roundNumber: number) {
     // No-op: Bye is implicitly recorded via createMatchResult for a solo match.
     return { lastInsertRowid: 0, changes: 0 };
-  }
-
-  static async hasPlayerReceivedBye(tournamentId: number, playerId: number): Promise<boolean> {
-    const byes = await this.getPlayerByes(tournamentId);
-    return byes.some((b) => b.player_id === playerId);
-  }
-
-  static async getTournamentPlayerCount(tournamentId: number): Promise<number> {
-    const rows = await this.query<{ count: number }>(
-      'SELECT COUNT(*) as count FROM tournament_players WHERE tournament_id = ? AND active = 1',
-      [tournamentId]
-    );
-    return rows[0]?.count || 0;
   }
 }

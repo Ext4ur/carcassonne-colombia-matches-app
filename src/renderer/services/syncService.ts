@@ -484,18 +484,6 @@ export class SyncService {
     }
   }
 
-  /**
-   * Helper to reset the sync pointer from the console.
-   * Usage: window.SyncService.resetSync()
-   */
-  static async resetSync() {
-    syncLog.warn('pointer audit reseteado a 0; re-sincronizando');
-    await this.sqlite.execute(
-      "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_audit_log_id', '0')"
-    );
-    this.sync();
-  }
-
   private static async loadPullSkippedLogIds(): Promise<Set<number>> {
     try {
       const rows = await this.sqlite.query<{ value: string }>(

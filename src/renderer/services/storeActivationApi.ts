@@ -77,16 +77,3 @@ export async function redeemStoreActivation(
   setStoreActivation(state);
   return { ok: true, state };
 }
-
-export async function completeStoreActivation(code: string): Promise<void> {
-  if (!isRemoteSyncReady()) return;
-  const client = supabase.client;
-  if (!client) return;
-
-  const { error } = await client.rpc('complete_store_activation', {
-    p_code: code.trim().toUpperCase(),
-  });
-  if (error) {
-    console.error('complete_store_activation:', error);
-  }
-}

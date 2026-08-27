@@ -8,7 +8,7 @@ export interface IElectronAPI {
   saveFile: (
     data: any,
     filename: string,
-    type: 'excel' | 'csv' | 'pdf' | 'image' | 'json'
+    type: 'excel' | 'csv' | 'image' | 'json'
   ) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>;
   openFile: (
     filters?: { name: string; extensions: string[] }[]

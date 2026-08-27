@@ -762,10 +762,8 @@ export class SwissPairingService {
     }> = [];
     const warnings: string[] = [];
 
-    const pairingAlgorithm = config?.pairing_algorithm || 'greedy';
     const avoidRematches = config?.avoid_rematches ?? true;
-    const useBacktrackingSearch =
-      pairingAlgorithm === 'backtracking' || (pairingAlgorithm === 'greedy' && avoidRematches);
+    const useBacktrackingSearch = avoidRematches;
 
     let results: PlayerStanding[][] | null = null;
     const sortedAvailable = [...availablePlayers].sort((a, b) => b.total_points - a.total_points);
@@ -1214,7 +1212,7 @@ export class SwissPairingService {
     for (const criterion of criteria) {
       if (!criterion.enabled) continue;
 
-      const calculatedInfo = await TiebreakService.calculate(
+      const calculatedInfo = TiebreakService.calculate(
         criterion.id,
         standingsList,
         roundsSorted,

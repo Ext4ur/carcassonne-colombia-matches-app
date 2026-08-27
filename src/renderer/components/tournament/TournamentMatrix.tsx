@@ -1,14 +1,9 @@
-import { useState, useEffect, type ReactNode } from 'react';
-import { DatabaseService } from '../../services/database';
-import {
-  PlayerStanding,
-  MatchResultWithPlayer,
-  Match,
-  BuchholzByeMode,
-} from '../../types/tournament';
-import { TiebreakService, TiebreakData, TiebreakCalculateOptions } from '../../services/tiebreak';
+import { useMemo, type ReactNode } from 'react';
+import { PlayerStanding } from '../../types/tournament';
+import { TiebreakService } from '../../services/tiebreak';
 import { getBuchholzModeMeta } from '../../utils/buchholzModeMeta';
 import { useTranslation } from 'react-i18next';
+import { useTournamentTiebreakMatrixData } from './useTournamentTiebreakMatrixData';
 
 interface TournamentMatrixProps {
   tournamentId: number;
@@ -17,117 +12,33 @@ interface TournamentMatrixProps {
 
 interface MatrixData {
   [playerId: number]: {
-    [opponentId: number]: number; // Times faced
+    [opponentId: number]: number;
   };
 }
 
 export default function TournamentMatrix({ tournamentId, standings }: TournamentMatrixProps) {
   const { t } = useTranslation();
-  const [matrixData, setMatrixData] = useState<MatrixData>({});
-  const [byeRoundsByPlayer, setByeRoundsByPlayer] = useState<Record<number, number[]>>({});
-  const [matrixTiebreakData, setMatrixTiebreakData] = useState<TiebreakData | null>(null);
-  const [buchholzOpts, setBuchholzOpts] = useState<TiebreakCalculateOptions | null>(null);
-  const [buchholzMode, setBuchholzMode] = useState<BuchholzByeMode>('legacy');
-  const [loading, setLoading] = useState(true);
+  const { loading, data } = useTournamentTiebreakMatrixData(tournamentId, standings);
 
-  useEffect(() => {
-    const fetchMatrixData = async () => {
-      setLoading(true);
-      try {
-        const [roundsRaw, config, tournament] = await Promise.all([
-          DatabaseService.getTournamentRounds(tournamentId),
-          DatabaseService.getTournamentConfig(tournamentId),
-          DatabaseService.getTournamentById(tournamentId),
-        ]);
-
-        const roundsSorted = [...roundsRaw].sort((a, b) => a.round_number - b.round_number);
-        const roundMatchesByRound: Match[][] = [];
-        const resultsByMatch: Record<number, MatchResultWithPlayer[]> = {};
-        const data: MatrixData = {};
-
-        for (const round of roundsSorted) {
-          const matches = await DatabaseService.getRoundMatches(round.id!);
-          roundMatchesByRound.push(matches);
-          for (const match of matches) {
-            const results = (await DatabaseService.getMatchResults(
-              match.id!,
-              tournamentId
-            )) as MatchResultWithPlayer[];
-            resultsByMatch[match.id!] = results;
-
-            results.forEach((res1) => {
-              if (!data[res1.player_id]) data[res1.player_id] = {};
-              results.forEach((res2) => {
-                if (res1.player_id !== res2.player_id) {
-                  data[res1.player_id][res2.player_id] =
-                    (data[res1.player_id][res2.player_id] || 0) + 1;
-                }
-              });
-            });
+  const matrixData = useMemo(() => {
+    if (!data) return {} as MatrixData;
+    const built: MatrixData = {};
+    Object.values(data.resultsByMatch).forEach((results) => {
+      results.forEach((res1) => {
+        if (!built[res1.player_id]) built[res1.player_id] = {};
+        results.forEach((res2) => {
+          if (res1.player_id !== res2.player_id) {
+            built[res1.player_id][res2.player_id] =
+              (built[res1.player_id][res2.player_id] || 0) + 1;
           }
-        }
-
-        const playerTotalPoints: Record<number, number> = {};
-        standings.forEach((s) => {
-          playerTotalPoints[s.player_id] = s.total_points;
         });
+      });
+    });
+    return built;
+  }, [data]);
 
-        const tiebreakData: TiebreakData = {
-          rounds: roundsSorted,
-          roundMatches: roundMatchesByRound,
-          resultsByMatch,
-          playerTotalPoints,
-        };
-
-        const mode = (config?.buchholz_bye_mode ?? 'legacy') as BuchholzByeMode;
-        setBuchholzMode(mode);
-        const scheduledN = tournament?.number_of_rounds ?? 0;
-        const maxRoundNo =
-          roundsSorted.length > 0 ? Math.max(...roundsSorted.map((r) => r.round_number)) : 0;
-        const numberOfRounds = Math.max(1, scheduledN, maxRoundNo, roundsSorted.length);
-        const avg =
-          standings.length > 0
-            ? standings.reduce((s, x) => s + x.total_points, 0) / standings.length
-            : 0;
-
-        const bOpts: TiebreakCalculateOptions = {
-          buchholzByeMode: mode,
-          numberOfRounds,
-          tournamentPointsAverage: avg,
-        };
-
-        const byeKeys = TiebreakService.byePlayerRoundKeys(
-          roundsSorted,
-          roundMatchesByRound,
-          resultsByMatch
-        );
-        const byeByPlayer: Record<number, number[]> = {};
-        byeKeys.forEach((key) => {
-          const [pidStr, rnStr] = key.split(':');
-          const pid = Number(pidStr);
-          const rn = Number(rnStr);
-          if (!byeByPlayer[pid]) byeByPlayer[pid] = [];
-          byeByPlayer[pid].push(rn);
-        });
-        Object.keys(byeByPlayer).forEach((k) => {
-          byeByPlayer[Number(k)]!.sort((a, b) => a - b);
-        });
-
-        setByeRoundsByPlayer(byeByPlayer);
-        setMatrixTiebreakData(tiebreakData);
-        setBuchholzOpts(bOpts);
-        setMatrixData(data);
-      } catch (error) {
-        console.error('Error fetching matrix data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchMatrixData();
-  }, [tournamentId, standings]);
-
-  if (loading) return <div className="p-4">{t('common.loading')}</div>;
+  if (loading || !data) return <div className="p-4">{t('common.loading')}</div>;
+  const { tiebreakData: matrixTiebreakData, buchholzOpts, buchholzMode, byeRoundsByPlayer } = data;
   const modeMeta = getBuchholzModeMeta(buchholzMode);
 
   return (

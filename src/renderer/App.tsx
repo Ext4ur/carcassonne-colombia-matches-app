@@ -10,7 +10,7 @@ import Places from './pages/Places';
 import Cities from './pages/Cities';
 import Settings from './pages/Settings';
 import Layout from './components/common/Layout';
-import { isStoreMode } from './utils/storeMode';
+import { isStoreMode } from './utils/appMode';
 import { ensureStoreModeSyncDefaults } from './api/clients/supabaseConfig';
 
 ensureStoreModeSyncDefaults();

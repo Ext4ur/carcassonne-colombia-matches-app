@@ -3,8 +3,6 @@ import { getDatabase } from './database';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as fs from 'fs';
 import ExcelJS from 'exceljs';
-import { createObjectCsvWriter } from 'csv-writer';
-import jsPDF from 'jspdf';
 
 export function setupIpcHandlers() {
   // Database handlers
@@ -60,12 +58,7 @@ export function setupIpcHandlers() {
   // File save handler
   ipcMain.handle(
     'file:save',
-    async (
-      event,
-      data: any,
-      filename: string,
-      type: 'excel' | 'csv' | 'pdf' | 'image' | 'json'
-    ) => {
+    async (event, data: any, filename: string, type: 'excel' | 'csv' | 'image' | 'json') => {
       const { filePath, canceled } = await dialog.showSaveDialog({
         defaultPath: filename,
         filters: [
@@ -75,21 +68,17 @@ export function setupIpcHandlers() {
                 ? 'Excel'
                 : type === 'csv'
                   ? 'CSV'
-                  : type === 'pdf'
-                    ? 'PDF'
-                    : type === 'image'
-                      ? 'Image'
-                      : 'JSON',
+                  : type === 'image'
+                    ? 'Image'
+                    : 'JSON',
             extensions: [
               type === 'excel'
                 ? 'xlsx'
                 : type === 'csv'
                   ? 'csv'
-                  : type === 'pdf'
-                    ? 'pdf'
-                    : type === 'image'
-                      ? 'png'
-                      : 'json',
+                  : type === 'image'
+                    ? 'png'
+                    : 'json',
             ],
           },
         ],
@@ -120,26 +109,12 @@ export function setupIpcHandlers() {
           }
           await workbook.xlsx.writeFile(filePath);
         } else if (type === 'csv') {
-          const csvWriter = createObjectCsvWriter({
-            path: filePath,
-            header: data.headers || [],
-          });
-          await csvWriter.writeRecords(data.rows || []);
-        } else if (type === 'pdf') {
-          // For PDF, we'll use jsPDF with HTML content
-          const doc = new jsPDF();
-          // Simple text-based PDF for now
-          const lines = data.split('\n');
-          let y = 10;
-          lines.forEach((line: string) => {
-            if (y > 280) {
-              doc.addPage();
-              y = 10;
-            }
-            doc.text(line.substring(0, 100), 10, y);
-            y += 7;
-          });
-          doc.save(filePath);
+          const headers: { id: string; title: string }[] = data.headers || [];
+          const headerLine = headers.map((h) => JSON.stringify(h.title ?? h.id)).join(',');
+          const rowLines = (data.rows || []).map((row: unknown[]) =>
+            row.map((cell) => JSON.stringify(cell ?? '')).join(',')
+          );
+          fs.writeFileSync(filePath, [headerLine, ...rowLines].join('\n'), 'utf8');
         } else if (type === 'image') {
           // For images, data should be a base64 string (data URL)
           if (typeof data === 'string') {

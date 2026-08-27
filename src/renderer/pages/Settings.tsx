@@ -6,8 +6,7 @@ import { ExportService, isExportSubsetError } from '../services/export';
 import { ImportService, type BackupImportData } from '../services/import';
 import { DatabaseService } from '../services/database';
 import { Tournament } from '../types/tournament';
-import BackupExportModal from '../components/settings/BackupExportModal';
-import BackupImportModal from '../components/settings/BackupImportModal';
+import BackupTournamentPickerModal from '../components/settings/BackupTournamentPickerModal';
 import DatabaseStatus from '../components/common/DatabaseStatus';
 import { useTranslation } from 'react-i18next';
 import Select from '../components/common/Select';
@@ -22,7 +21,7 @@ import {
   writeQuickTournamentDefaults,
 } from '../utils/quickTournamentDefaults';
 import { formatUserError } from '../utils/formatUserError';
-import { isLocalOnlyMode, isStoreMode } from '../utils/storeMode';
+import { isLocalOnlyMode, isStoreMode } from '../utils/appMode';
 import { ensureStoreModeSyncDefaults, isRemoteSyncReady } from '../api/clients/supabaseConfig';
 import { SyncService } from '../services/syncService';
 
@@ -387,37 +386,62 @@ export default function Settings() {
           </div>
         </div>
 
-        <BackupExportModal
+        <BackupTournamentPickerModal
           isOpen={exportModalOpen}
           onClose={() => setExportModalOpen(false)}
-          tournaments={exportList}
-          checkedIds={exportCheckedIds}
-          onToggleId={toggleExportId}
+          title={t('settings.export_modal_title')}
+          hint={t('settings.export_modal_hint')}
+          items={exportList.map((tm) => {
+            const id = tm.id!;
+            return {
+              key: id,
+              title: tm.name,
+              subtitle: [tm.date, tm.place_name].filter(Boolean).join(' · '),
+              checked: exportCheckedIds.has(id),
+              onToggle: () => toggleExportId(id),
+            };
+          })}
+          selectedCount={t('settings.export_selected_count', { count: exportCheckedIds.size })}
           onSelectAll={() =>
             setExportCheckedIds(new Set(exportList.map((x) => x.id!).filter(Boolean)))
           }
           onSelectNone={() => setExportCheckedIds(new Set())}
           onConfirm={handleExportConfirmed}
-          isExporting={isExporting}
+          confirmLabel={t('settings.export_confirm')}
+          cancelLabel={t('settings.export_cancel')}
+          busy={isExporting}
+          emptyMessage={t('settings.export_no_tournaments')}
         />
 
-        <BackupImportModal
+        <BackupTournamentPickerModal
           isOpen={importModalOpen}
-          onAbort={() => {
+          onClose={() => {
             setImportModalOpen(false);
             setPendingImportData(null);
           }}
-          pendingImportData={pendingImportData}
-          checkedIndices={importCheckedIndices}
-          duplicateByIndex={importDupByIndex}
-          onToggleIndex={toggleImportIndex}
+          title={t('settings.import_modal_title')}
+          hint={t('settings.import_modal_hint')}
+          items={(pendingImportData?.data.tournaments ?? []).map(
+            (tm: { name?: string; date?: string; place_name?: string }, idx: number) => ({
+              key: idx,
+              title: tm.name ?? '',
+              subtitle: [tm.date, tm.place_name].filter(Boolean).join(' · '),
+              duplicate: importDupByIndex.get(idx),
+              checked: importCheckedIndices.has(idx),
+              onToggle: () => toggleImportIndex(idx),
+            })
+          )}
+          selectedCount={t('settings.import_selected_count', { count: importCheckedIndices.size })}
           onSelectAll={() => {
             const n = pendingImportData?.data.tournaments.length ?? 0;
             setImportCheckedIndices(new Set(Array.from({ length: n }, (_, i) => i)));
           }}
           onSelectNone={() => setImportCheckedIndices(new Set())}
           onConfirm={handleImportConfirmed}
-          isImporting={isImporting}
+          confirmLabel={t('settings.import_confirm')}
+          cancelLabel={t('settings.import_cancel')}
+          busy={isImporting}
+          confirmDisabled={!pendingImportData || importCheckedIndices.size === 0}
         />
 
         {/* Quick tournament defaults */}

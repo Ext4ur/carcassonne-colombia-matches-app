@@ -17,7 +17,7 @@ try {
     },
 
     // File operations
-    saveFile: (data: any, filename: string, type: 'excel' | 'csv' | 'pdf' | 'image' | 'json') => {
+    saveFile: (data: any, filename: string, type: 'excel' | 'csv' | 'image' | 'json') => {
       return ipcRenderer.invoke('file:save', data, filename, type);
     },
     openFile: (filters?: { name: string; extensions: string[] }[]) => {

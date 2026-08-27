@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import SyncStatus from './SyncStatus';
 import AboutSection from './AboutSection';
-import { isLocalOnlyMode, isStoreMode } from '../../utils/storeMode';
+import { isLocalOnlyMode, isStoreMode } from '../../utils/appMode';
 
 interface LayoutProps {
   children: ReactNode;

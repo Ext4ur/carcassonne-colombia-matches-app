@@ -4,7 +4,7 @@ import App from './App';
 import './index.css';
 import i18n from './i18n/config';
 import { SyncService } from './services/syncService';
-import { isLocalOnlyMode } from './utils/storeMode';
+import { isLocalOnlyMode } from './utils/appMode';
 
 // Error boundary for React errors
 class ErrorBoundary extends React.Component<

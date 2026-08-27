@@ -36,7 +36,6 @@ interface TournamentConfigProps {
     config: Partial<TournamentConfig> & {
       bye_selection?: 'worst' | 'random' | 'round_robin';
       player_display_mode?: 'per_player' | 'names_only' | 'usernames_only';
-      pairing_algorithm?: 'greedy' | 'backtracking';
       buchholz_bye_mode?: BuchholzByeMode;
     }
   ) => void;
@@ -76,9 +75,6 @@ export default function TournamentConfigComponent({
   const [playerDisplayMode, setPlayerDisplayMode] = useState<
     'per_player' | 'names_only' | 'usernames_only'
   >(config?.player_display_mode ?? 'per_player');
-  const [pairingAlgorithm, setPairingAlgorithm] = useState<'greedy' | 'backtracking'>(
-    (config as any)?.pairing_algorithm ?? 'greedy'
-  );
   const [buchholzByeMode, setBuchholzByeMode] = useState<BuchholzByeMode>(
     (config as TournamentConfig)?.buchholz_bye_mode ?? 'legacy'
   );
@@ -123,7 +119,6 @@ export default function TournamentConfigComponent({
     setAvoidRematches(config.avoid_rematches ?? true);
     setByeSelection(config.bye_selection ?? 'worst');
     setPlayerDisplayMode(config.player_display_mode ?? 'per_player');
-    setPairingAlgorithm((config as any)?.pairing_algorithm ?? 'greedy');
     setBuchholzByeMode((config as TournamentConfig)?.buchholz_bye_mode ?? 'legacy');
     setKnockoutSize(String(config.knockout_size ?? 8));
     setKnockoutSeries((config.knockout_series as KnockoutSeries) ?? 'best_of_1');
@@ -174,7 +169,6 @@ export default function TournamentConfigComponent({
       scoring_system: scoringSystem,
       bye_selection: byeSelection,
       player_display_mode: playerDisplayMode,
-      pairing_algorithm: pairingAlgorithm,
       buchholz_bye_mode: buchholzByeMode,
       ...(showKnockoutOptions
         ? {
@@ -242,20 +236,6 @@ export default function TournamentConfigComponent({
               { value: 'usernames_only', label: t('tournaments.config.display_usernames') },
             ]}
             helperText={t('tournaments.config.display_help')}
-          />
-        </div>
-
-        <div>
-          <Select
-            label={t('tournaments.config.pairing_algorithm')}
-            value={pairingAlgorithm}
-            disabled={readOnly}
-            onChange={(e) => setPairingAlgorithm(e.target.value as 'greedy' | 'backtracking')}
-            options={[
-              { value: 'greedy', label: t('tournaments.config.pairing_greedy') },
-              { value: 'backtracking', label: t('tournaments.config.pairing_backtracking') },
-            ]}
-            helperText={t('tournaments.config.pairing_help')}
           />
         </div>
 

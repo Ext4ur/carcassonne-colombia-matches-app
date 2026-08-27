@@ -30,9 +30,6 @@
       "@services/*": [
         "src/renderer/services/*"
       ],
-      "@hooks/*": [
-        "src/renderer/hooks/*"
-      ],
       "@components/*": [
         "src/renderer/components/*"
       ],
@@ -45,14 +42,8 @@
       "@constants/*": [
         "src/renderer/constants/*"
       ],
-      "@config/*": [
-        "src/renderer/config/*"
-      ],
       "@api/*": [
         "src/renderer/api/*"
-      ],
-      "@auth/*": [
-        "src/renderer/auth/*"
       ],
       "@utils/*": [
         "src/renderer/utils/*"

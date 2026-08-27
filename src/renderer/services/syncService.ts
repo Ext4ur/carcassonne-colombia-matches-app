@@ -3,10 +3,10 @@ import { SupabaseClient } from '../api/clients/SupabaseClient';
 import { isSupabaseConfigured, isRemoteSyncReady } from '../api/clients/supabaseConfig';
 import { shouldSkipPullLogInStoreMode } from './storePullFilter';
 import { filterRecordForLocalSQLite } from './syncLocalSchema';
-import { formatSyncError, syncLog } from '../utils/syncLogger';
+import { formatSyncError, isSyncLogVerbose, syncLog } from '../utils/syncLogger';
 import { invalidateAllLists } from './dbCache';
 import { SYSTEM_CITY_UUIDS } from '../constants';
-import { isStoreMode } from '../utils/storeMode';
+import { isStoreMode } from '../utils/appMode';
 
 export interface SyncQueueItem {
   id: number;
@@ -129,7 +129,7 @@ export class SyncService {
       if (typeof localStorage !== 'undefined' && localStorage.getItem('sync_pull_trace') === '1') {
         return 1;
       }
-      if (typeof localStorage !== 'undefined' && localStorage.getItem('sync_log_verbose') === '1') {
+      if (isSyncLogVerbose()) {
         return 1;
       }
       const raw =
@@ -482,18 +482,6 @@ export class SyncService {
     } catch (e) {
       syncLog.error('recoverStoreCatalogIfEmpty', e);
     }
-  }
-
-  /**
-   * Helper to reset the sync pointer from the console.
-   * Usage: window.SyncService.resetSync()
-   */
-  static async resetSync() {
-    syncLog.warn('pointer audit reseteado a 0; re-sincronizando');
-    await this.sqlite.execute(
-      "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_audit_log_id', '0')"
-    );
-    this.sync();
   }
 
   private static async loadPullSkippedLogIds(): Promise<Set<number>> {

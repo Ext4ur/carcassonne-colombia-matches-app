@@ -1,7 +1,7 @@
 import type { SqliteClient } from '../api/clients/SqliteClient';
 import type { SupabaseClient } from '../api/clients/SupabaseClient';
 import { getAssignedTournamentUuid } from './storeActivation';
-import { isStoreMode } from '../utils/storeMode';
+import { isStoreMode } from '../utils/appMode';
 
 type RemoteRowCache = Map<string, Map<string, Record<string, unknown>>>;
 

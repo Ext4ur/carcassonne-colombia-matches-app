@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { TournamentConfig } from '../../types/tournament';
 import { Player } from '../../types/player';
 import { buildQuickConfigDraft } from '../../utils/quickTournamentDefaults';
-import { isStoreMode } from '../../utils/storeMode';
+import { isStoreMode } from '../../utils/appMode';
 import TournamentForm, { TournamentFormRef, TournamentFormResult } from './TournamentForm';
 import PlayerRegistration, { PlayerRegistrationRef } from './PlayerRegistration';
 import Button from '../common/Button';

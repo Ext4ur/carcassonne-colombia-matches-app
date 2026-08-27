@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { isDevirHqMode, isStoreMode } from '../utils/storeMode';
+import { isDevirHqMode, isStoreMode } from '../utils/appMode';
 
 export default function Home() {
   const { t } = useTranslation();

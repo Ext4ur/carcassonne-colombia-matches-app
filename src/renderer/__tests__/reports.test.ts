@@ -158,32 +158,6 @@ describe('ReportService', () => {
     });
   });
 
-  describe('generateTournamentPDF', () => {
-    it('generates HTML content containing key info', async () => {
-      const tId = 1;
-      (DatabaseService.getTournamentById as any).mockResolvedValue({
-        id: tId,
-        name: 'PDF Tournament',
-        date: '2024-05-05',
-      });
-      (DatabaseService.getTournamentConfig as any).mockReturnValue({});
-      (SwissPairingService.calculateStandings as any).mockResolvedValue([
-        { player_name: 'Champ', total_points: 5, wins: 5 },
-        { player_name: 'RunnerUp', total_points: 4, wins: 4 },
-        { player_name: 'Third', total_points: 3, wins: 3 },
-      ]);
-
-      const html = await ReportService.generateTournamentPDF(tId);
-
-      expect(html).toContain('PDF Tournament');
-      expect(html).toContain('Champ');
-      expect(html).toContain('5.00 pts'); // Fixed to expect .00 as per service logic (toFixed(2))
-      expect(html).toContain('RunnerUp');
-      expect(html).toContain('Third');
-      expect(html).toContain('<!DOCTYPE html>');
-    });
-  });
-
   describe('generateTournamentImage', () => {
     it('generates shareable HTML with podium and top players', async () => {
       const tId = 1;

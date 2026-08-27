@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { shouldSkipPullLogInStoreMode } from '../services/storePullFilter';
 
-vi.mock('../utils/storeMode', () => ({
+vi.mock('../utils/appMode', () => ({
   isStoreMode: vi.fn(() => true),
 }));
 

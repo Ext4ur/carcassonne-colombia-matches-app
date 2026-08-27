@@ -1,4 +1,4 @@
-import { isStoreMode } from '../utils/storeMode';
+import { isStoreMode } from '../utils/appMode';
 
 const KIOSK_LOCKED_KEY = 'store_kiosk_locked';
 
@@ -30,17 +30,6 @@ export function canCreateStoreTournament(tournaments: StoreTournamentRow[]): boo
   if (qualifiers.length > 0) return false;
   if (isStoreKioskLockedFlag()) clearStoreKioskLocked();
   return true;
-}
-
-export function canDeleteStoreTournament(): boolean {
-  return !isStoreMode();
-}
-
-/** Torneo en solo lectura tras finalizar (o flag kiosk). */
-export function isStoreKioskLocked(tournaments: StoreTournamentRow[]): boolean {
-  if (!isStoreMode()) return false;
-  if (isStoreKioskLockedFlag()) return true;
-  return tournaments.some((t) => t.status === 'completed');
 }
 
 export function isStoreTournamentReadOnly(status?: string | null): boolean {

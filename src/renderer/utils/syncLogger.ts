@@ -1,6 +1,6 @@
 /** Logs de sync: por defecto solo warn/error. Verbose: localStorage.sync_log_verbose = '1' */
 
-function isVerbose(): boolean {
+export function isSyncLogVerbose(): boolean {
   if (import.meta.env?.MODE === 'test') return false;
   try {
     return localStorage.getItem('sync_log_verbose') === '1';
@@ -25,7 +25,7 @@ export function formatSyncError(err: unknown): string {
 
 export const syncLog = {
   debug(...args: unknown[]): void {
-    if (isVerbose()) console.log('[Sync]', ...args);
+    if (isSyncLogVerbose()) console.log('[Sync]', ...args);
   },
 
   warn(message: string): void {

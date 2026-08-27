@@ -1,4 +1,4 @@
-import { isLocalOnlyMode } from '@utils/storeMode';
+import { isLocalOnlyMode } from '@utils/appMode';
 
 /**
  * Configuración de Supabase

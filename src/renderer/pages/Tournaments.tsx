@@ -29,7 +29,7 @@ import { useNotifications } from '../contexts/NotificationContext';
 import { ExportService, isExportSubsetError } from '../services/export';
 import { useTranslation } from 'react-i18next';
 import { formatUserError } from '../utils/formatUserError';
-import { isStoreMode } from '../utils/storeMode';
+import { isStoreMode } from '../utils/appMode';
 import { getEffectiveNumberOfRounds } from '../utils/tournament';
 import {
   canCreateStoreTournament,

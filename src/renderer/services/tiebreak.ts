@@ -1,4 +1,3 @@
-import { DatabaseService } from './database';
 import {
   Round,
   PlayerStanding,
@@ -33,7 +32,7 @@ export interface BuchholzVirtualSlot {
 
 export class TiebreakService {
   /** Calculate a specific tiebreak criterion for all players */
-  static async calculate(
+  static calculate(
     criterionId: string,
     standings: PlayerStanding[],
     rounds: Round[],
@@ -41,7 +40,7 @@ export class TiebreakService {
     resultsByMatch: Record<number, MatchResultWithPlayer[]>,
     players: Player[],
     buchholzOpts: TiebreakCalculateOptions
-  ): Promise<Record<number, number>> {
+  ): Record<number, number> {
     const playerTotalPoints: Record<number, number> = {};
     const result: Record<number, number> = {};
 
@@ -428,28 +427,6 @@ export class TiebreakService {
     );
   }
 
-  /** Head-to-head desde datos en memoria */
-  static calculateHeadToHeadFromData(
-    data: TiebreakData,
-    playerId1: number,
-    playerId2: number
-  ): number {
-    for (let r = 0; r < data.rounds.length; r++) {
-      const matches = data.roundMatches[r] || [];
-      for (const match of matches) {
-        const results = data.resultsByMatch[match.id!] || [];
-        const r1 = results.find((res) => res.player_id === playerId1);
-        const r2 = results.find((res) => res.player_id === playerId2);
-        if (r1 && r2) {
-          if (r1.position < r2.position) return 1;
-          if (r2.position < r1.position) return -1;
-          return 0;
-        }
-      }
-    }
-    return 0;
-  }
-
   /** Diferencia de puntos desde datos en memoria */
   static calculatePointDifferenceFromData(data: TiebreakData, playerId: number): number {
     let total = 0;
@@ -467,120 +444,6 @@ export class TiebreakService {
         }
       }
     }
-    return total;
-  }
-
-  static async calculateOpponentPoints(
-    tournamentId: number,
-    playerId: number,
-    dropWorst: boolean = false,
-    dropBest: boolean = false
-  ): Promise<number> {
-    const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-    const opponentPoints: number[] = [];
-
-    for (const round of rounds) {
-      const matches = await DatabaseService.getRoundMatches(round.id!);
-      for (const match of matches) {
-        const results = await DatabaseService.getMatchResults(match.id!);
-        const playerResult = results.find((r) => r.player_id === playerId);
-
-        if (playerResult) {
-          const opponents = results.filter((r) => r.player_id !== playerId);
-          for (const opponent of opponents) {
-            const opponentTotal = await this.getPlayerTotalPoints(tournamentId, opponent.player_id);
-            opponentPoints.push(opponentTotal);
-          }
-        }
-      }
-    }
-
-    if (opponentPoints.length === 0) return 0;
-
-    const points = [...opponentPoints].sort((a, b) => b - a);
-
-    if (dropWorst && points.length > 0) {
-      points.pop();
-    }
-
-    if (dropBest && points.length > 0) {
-      points.shift();
-    }
-
-    return points.reduce((sum, p) => sum + p, 0);
-  }
-
-  static async calculateHeadToHead(
-    tournamentId: number,
-    playerId1: number,
-    playerId2: number
-  ): Promise<number> {
-    const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-
-    for (const round of rounds) {
-      const roundMatches = await DatabaseService.getRoundMatches(round.id!);
-
-      for (const match of roundMatches) {
-        const results = await DatabaseService.getMatchResults(match.id!);
-        const player1Result = results.find((res) => res.player_id === playerId1);
-        const player2Result = results.find((r) => r.player_id === playerId2);
-
-        if (player1Result && player2Result) {
-          if (player1Result.position < player2Result.position) {
-            return 1;
-          } else if (player2Result.position < player1Result.position) {
-            return -1;
-          }
-          return 0;
-        }
-      }
-    }
-
-    return 0;
-  }
-
-  static async calculatePointDifference(tournamentId: number, playerId: number): Promise<number> {
-    const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-    let totalDifference = 0;
-
-    for (const round of rounds) {
-      const matches = await DatabaseService.getRoundMatches(round.id!);
-      for (const match of matches) {
-        const results = await DatabaseService.getMatchResults(match.id!);
-        const playerResult = results.find((r) => r.player_id === playerId);
-
-        if (playerResult) {
-          const playerPoints = playerResult.points;
-          const opponentPoints = results
-            .filter((r) => r.player_id !== playerId)
-            .reduce((sum, r) => sum + r.points, 0);
-
-          totalDifference += playerPoints - opponentPoints;
-        }
-      }
-    }
-
-    return totalDifference;
-  }
-
-  private static async getPlayerTotalPoints(
-    tournamentId: number,
-    playerId: number
-  ): Promise<number> {
-    const rounds = await DatabaseService.getTournamentRounds(tournamentId);
-    let total = 0;
-
-    for (const round of rounds) {
-      const matches = await DatabaseService.getRoundMatches(round.id!);
-      for (const match of matches) {
-        const results = await DatabaseService.getMatchResults(match.id!);
-        const playerResult = results.find((r) => r.player_id === playerId);
-        if (playerResult) {
-          total += playerResult.tournament_points;
-        }
-      }
-    }
-
     return total;
   }
 }

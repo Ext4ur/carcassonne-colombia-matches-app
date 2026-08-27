@@ -1,4 +1,4 @@
-import { isStoreMode } from '../utils/storeMode';
+import { isStoreMode } from '../utils/appMode';
 
 const KIOSK_LOCKED_KEY = 'store_kiosk_locked';
 

@@ -3,7 +3,6 @@ import { getDatabase } from './database';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as fs from 'fs';
 import ExcelJS from 'exceljs';
-import { createObjectCsvWriter } from 'csv-writer';
 
 export function setupIpcHandlers() {
   // Database handlers
@@ -110,11 +109,12 @@ export function setupIpcHandlers() {
           }
           await workbook.xlsx.writeFile(filePath);
         } else if (type === 'csv') {
-          const csvWriter = createObjectCsvWriter({
-            path: filePath,
-            header: data.headers || [],
-          });
-          await csvWriter.writeRecords(data.rows || []);
+          const headers: { id: string; title: string }[] = data.headers || [];
+          const headerLine = headers.map((h) => JSON.stringify(h.title ?? h.id)).join(',');
+          const rowLines = (data.rows || []).map((row: unknown[]) =>
+            row.map((cell) => JSON.stringify(cell ?? '')).join(',')
+          );
+          fs.writeFileSync(filePath, [headerLine, ...rowLines].join('\n'), 'utf8');
         } else if (type === 'image') {
           // For images, data should be a base64 string (data URL)
           if (typeof data === 'string') {

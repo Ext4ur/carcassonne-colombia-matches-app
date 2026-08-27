@@ -32,7 +32,7 @@ export interface BuchholzVirtualSlot {
 
 export class TiebreakService {
   /** Calculate a specific tiebreak criterion for all players */
-  static async calculate(
+  static calculate(
     criterionId: string,
     standings: PlayerStanding[],
     rounds: Round[],
@@ -40,7 +40,7 @@ export class TiebreakService {
     resultsByMatch: Record<number, MatchResultWithPlayer[]>,
     players: Player[],
     buchholzOpts: TiebreakCalculateOptions
-  ): Promise<Record<number, number>> {
+  ): Record<number, number> {
     const playerTotalPoints: Record<number, number> = {};
     const result: Record<number, number> = {};
 

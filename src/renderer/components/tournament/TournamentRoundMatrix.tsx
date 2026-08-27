@@ -1,14 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DatabaseService } from '../../services/database';
-import {
-  BuchholzByeMode,
-  Match,
-  MatchResultWithPlayer,
-  PlayerStanding,
-} from '../../types/tournament';
-import { TiebreakData, TiebreakService, TiebreakCalculateOptions } from '../../services/tiebreak';
+import { PlayerStanding } from '../../types/tournament';
+import { TiebreakService } from '../../services/tiebreak';
 import { getBuchholzModeMeta } from '../../utils/buchholzModeMeta';
+import { useTournamentTiebreakMatrixData } from './useTournamentTiebreakMatrixData';
 
 interface TournamentRoundMatrixProps {
   tournamentId: number;
@@ -20,115 +15,61 @@ export default function TournamentRoundMatrix({
   standings,
 }: TournamentRoundMatrixProps) {
   const { t } = useTranslation();
-  const [loading, setLoading] = useState(true);
-  const [buchholzMode, setBuchholzMode] = useState<BuchholzByeMode>('legacy');
-  const [roundNumbers, setRoundNumbers] = useState<number[]>([]);
-  const [realByPlayerRound, setRealByPlayerRound] = useState<
-    Record<number, Record<number, number>>
-  >({});
-  const [byeKeyList, setByeKeyList] = useState<string[]>([]);
-  const [roundMatrixData, setRoundMatrixData] = useState<TiebreakData | null>(null);
-  const [roundMatrixOpts, setRoundMatrixOpts] = useState<TiebreakCalculateOptions | null>(null);
+  const { loading, data } = useTournamentTiebreakMatrixData(tournamentId, standings);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [roundsRaw, config, tournament] = await Promise.all([
-          DatabaseService.getTournamentRounds(tournamentId),
-          DatabaseService.getTournamentConfig(tournamentId),
-          DatabaseService.getTournamentById(tournamentId),
-        ]);
-        const roundsSorted = [...roundsRaw].sort((a, b) => a.round_number - b.round_number);
-        const mode = (config?.buchholz_bye_mode ?? 'legacy') as BuchholzByeMode;
-        setBuchholzMode(mode);
+  const { roundNumbers, realByPlayerRound, byeSet } = useMemo(() => {
+    if (!data) {
+      return {
+        roundNumbers: [] as number[],
+        realByPlayerRound: {} as Record<number, Record<number, number>>,
+        byeSet: new Set<string>(),
+      };
+    }
+    const {
+      roundsSorted,
+      roundMatchesByRound,
+      resultsByMatch,
+      tiebreakData,
+      buchholzOpts,
+      byeKeys,
+    } = data;
+    const numberOfRounds = buchholzOpts.numberOfRounds;
+    const roundsPlanned = Array.from({ length: numberOfRounds }, (_, i) => i + 1);
+    const playerTotalPoints = tiebreakData.playerTotalPoints;
+    const realMap: Record<number, Record<number, number>> = {};
 
-        const roundMatchesByRound: Match[][] = [];
-        const resultsByMatch: Record<number, MatchResultWithPlayer[]> = {};
-        for (const round of roundsSorted) {
-          const matches = await DatabaseService.getRoundMatches(round.id!);
-          roundMatchesByRound.push(matches);
-          for (const match of matches) {
-            resultsByMatch[match.id!] = (await DatabaseService.getMatchResults(
-              match.id!,
-              tournamentId
-            )) as MatchResultWithPlayer[];
-          }
+    for (const s of standings) {
+      const pid = s.player_id;
+      realMap[pid] = {};
+      for (let rn = 1; rn <= numberOfRounds; rn++) {
+        if (byeKeys.has(`${pid}:${rn}`)) continue;
+        const idx = roundsSorted.findIndex((r) => r.round_number === rn);
+        if (
+          idx >= 0 &&
+          TiebreakService.playerPlayedRound(idx, pid, roundMatchesByRound, resultsByMatch)
+        ) {
+          realMap[pid][rn] = TiebreakService.opponentTournamentPointsSumInRound(
+            idx,
+            pid,
+            roundMatchesByRound,
+            resultsByMatch,
+            playerTotalPoints
+          );
         }
-
-        const scheduledN = tournament?.number_of_rounds ?? 0;
-        const maxRoundNo =
-          roundsSorted.length > 0 ? Math.max(...roundsSorted.map((r) => r.round_number)) : 0;
-        const numberOfRounds = Math.max(1, scheduledN, maxRoundNo, roundsSorted.length);
-        const roundsPlanned = Array.from({ length: numberOfRounds }, (_, i) => i + 1);
-        setRoundNumbers(roundsPlanned);
-
-        const playerTotalPoints: Record<number, number> = {};
-        standings.forEach((s) => {
-          playerTotalPoints[s.player_id] = s.total_points;
-        });
-        const avg =
-          standings.length > 0
-            ? standings.reduce((sum, p) => sum + p.total_points, 0) / standings.length
-            : 0;
-        const tData: TiebreakData = {
-          rounds: roundsSorted,
-          roundMatches: roundMatchesByRound,
-          resultsByMatch,
-          playerTotalPoints,
-        };
-        const opts: TiebreakCalculateOptions = {
-          buchholzByeMode: mode,
-          numberOfRounds,
-          tournamentPointsAverage: avg,
-        };
-
-        const byeKeys = TiebreakService.byePlayerRoundKeys(
-          roundsSorted,
-          roundMatchesByRound,
-          resultsByMatch
-        );
-
-        const realMap: Record<number, Record<number, number>> = {};
-
-        for (const s of standings) {
-          const pid = s.player_id;
-          realMap[pid] = {};
-          for (let rn = 1; rn <= numberOfRounds; rn++) {
-            if (byeKeys.has(`${pid}:${rn}`)) continue;
-            const idx = roundsSorted.findIndex((r) => r.round_number === rn);
-            if (
-              idx >= 0 &&
-              TiebreakService.playerPlayedRound(idx, pid, roundMatchesByRound, resultsByMatch)
-            ) {
-              realMap[pid][rn] = TiebreakService.opponentTournamentPointsSumInRound(
-                idx,
-                pid,
-                roundMatchesByRound,
-                resultsByMatch,
-                playerTotalPoints
-              );
-            }
-          }
-        }
-
-        setRealByPlayerRound(realMap);
-        setByeKeyList([...byeKeys]);
-        setRoundMatrixData(tData);
-        setRoundMatrixOpts(opts);
-      } catch (e) {
-        console.error('Error loading round matrix', e);
-      } finally {
-        setLoading(false);
       }
+    }
+
+    return {
+      roundNumbers: roundsPlanned,
+      realByPlayerRound: realMap,
+      byeSet: byeKeys,
     };
-    fetchData();
-  }, [tournamentId, standings]);
+  }, [data, standings]);
 
-  const byeSet = useMemo(() => new Set(byeKeyList), [byeKeyList]);
-
-  if (loading) return <div className="p-4">{t('common.loading')}</div>;
-  const modeMeta = getBuchholzModeMeta(buchholzMode);
+  if (loading || !data) return <div className="p-4">{t('common.loading')}</div>;
+  const modeMeta = getBuchholzModeMeta(data.buchholzMode);
+  const roundMatrixData = data.tiebreakData;
+  const roundMatrixOpts = data.buchholzOpts;
 
   return (
     <div className="flex flex-col gap-3">
@@ -163,7 +104,7 @@ export default function TournamentRoundMatrix({
                 </td>
                 {roundNumbers.map((rn) => {
                   const byeKey = `${player.player_id}:${rn}`;
-                  if (byeSet.has(byeKey) && roundMatrixData && roundMatrixOpts) {
+                  if (byeSet.has(byeKey)) {
                     const disp = TiebreakService.getBuchholzVirtualDisplayForByeRound(
                       rn,
                       roundMatrixData,

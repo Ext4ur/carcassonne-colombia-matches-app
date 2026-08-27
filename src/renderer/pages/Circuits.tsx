@@ -22,28 +22,9 @@ import Textarea from '../components/common/Textarea';
 import { Column } from '../components/common/Table';
 import MultiSelect from '../components/common/MultiSelect';
 import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from 'chart.js';
+import { ensureChartJsRegistered } from '../utils/chartSetup';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+ensureChartJsRegistered();
 
 export default function Circuits() {
   const { t } = useTranslation();

@@ -5,23 +5,15 @@ import {
   buildNextKnockoutPairings,
   canStartKnockoutPhase,
   computeSeriesState,
-  countSwissRounds,
   isKnockoutMatchComplete,
   isKnockoutPhaseActive,
   resolveKnockoutGameStarter,
   serializeSeriesMeta,
   seriesTargetForConfig,
-  tournamentHasKnockoutChampion,
 } from './knockout';
 import type { KnockoutSeries, KnockoutSize } from '../types/knockout';
 import { isKnockoutSize, resolveEffectiveKnockoutSize } from '../types/knockout';
-import type {
-  Match,
-  MatchResult,
-  PlayerStanding,
-  Tournament,
-  TournamentConfig,
-} from '../types/tournament';
+import type { PlayerStanding, Tournament, TournamentConfig } from '../types/tournament';
 import { calculateNumberOfRounds } from '../utils/tournament';
 
 export class RoundGenerationService {
@@ -69,57 +61,6 @@ export class RoundGenerationService {
       throw new Error('knockout_phase_active');
     }
     return SwissPairingService.createRoundFromPairings(tournamentId, roundNumber, pairings);
-  }
-
-  static async canFinalizeTournament(tournamentId: number): Promise<boolean> {
-    const [tournament, rounds, config] = await Promise.all([
-      DatabaseService.getTournamentById(tournamentId),
-      DatabaseService.getTournamentRounds(tournamentId),
-      DatabaseService.getTournamentConfig(tournamentId),
-    ]);
-    if (!tournament) return false;
-
-    if (tournament.competition_format === 'swiss_knockout') {
-      if (!isKnockoutPhaseActive(tournament, rounds)) return false;
-      const roundMatches = await Promise.all(
-        rounds.map((r) => DatabaseService.getRoundMatches(r.id!))
-      );
-      const allMatches = roundMatches.flat();
-      const allResults = await Promise.all(
-        allMatches.map((m) => DatabaseService.getMatchResults(m.id!))
-      );
-      const resultsByMatch: Record<number, MatchResult[]> = {};
-      const playersByMatch: Record<number, number[]> = {};
-      allMatches.forEach((m, i) => {
-        resultsByMatch[m.id!] = allResults[i] || [];
-      });
-      for (const m of allMatches) {
-        playersByMatch[m.id!] = (await DatabaseService.getMatchPlayers(m.id!)).map((p) => p.id!);
-      }
-      const matchesByRound = new Map<number, Match[]>();
-      rounds.forEach((r, i) => {
-        if (r.id) matchesByRound.set(r.id, roundMatches[i] ?? []);
-      });
-      if (
-        !tournamentHasKnockoutChampion(
-          rounds,
-          matchesByRound,
-          resultsByMatch,
-          playersByMatch,
-          Boolean(config?.knockout_play_bronze_match)
-        )
-      ) {
-        return false;
-      }
-      const lastKo = [...rounds].reverse().find((r) => r.phase === 'knockout');
-      if (!lastKo || lastKo.status !== 'completed') return false;
-      return true;
-    }
-
-    const maxSwiss = await this.getEffectiveMaxSwissRounds(tournament);
-    const swissDone =
-      countSwissRounds(rounds) >= maxSwiss && rounds.every((r) => r.status === 'completed');
-    return swissDone;
   }
 
   static async canStartKnockout(tournamentId: number): Promise<{
@@ -397,22 +338,5 @@ export class KnockoutPairingService {
     const { computeKnockoutFinalStandingsForTournament } = await import('./knockoutStandings');
     const standings = await computeKnockoutFinalStandingsForTournament(tournamentId);
     return { standings };
-  }
-
-  static async updateKnockoutConfig(
-    tournamentId: number,
-    updates: {
-      knockout_size?: KnockoutSize;
-      knockout_series?: KnockoutSeries;
-      knockout_play_bronze_match?: boolean;
-      knockout_match_starter?: 'random' | 'higher_swiss_seed';
-      knockout_series_alternate_starter?: boolean;
-    }
-  ): Promise<void> {
-    const tournament = await DatabaseService.getTournamentById(tournamentId);
-    if (tournament?.knockout_phase_started_at) {
-      throw new Error('knockout_already_started');
-    }
-    await DatabaseService.updateTournamentConfig(tournamentId, updates);
   }
 }

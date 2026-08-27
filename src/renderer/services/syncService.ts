@@ -3,10 +3,10 @@ import { SupabaseClient } from '../api/clients/SupabaseClient';
 import { isSupabaseConfigured, isRemoteSyncReady } from '../api/clients/supabaseConfig';
 import { shouldSkipPullLogInStoreMode } from './storePullFilter';
 import { filterRecordForLocalSQLite } from './syncLocalSchema';
-import { formatSyncError, syncLog } from '../utils/syncLogger';
+import { formatSyncError, isSyncLogVerbose, syncLog } from '../utils/syncLogger';
 import { invalidateAllLists } from './dbCache';
 import { SYSTEM_CITY_UUIDS } from '../constants';
-import { isStoreMode } from '../utils/storeMode';
+import { isStoreMode } from '../utils/appMode';
 
 export interface SyncQueueItem {
   id: number;
@@ -129,7 +129,7 @@ export class SyncService {
       if (typeof localStorage !== 'undefined' && localStorage.getItem('sync_pull_trace') === '1') {
         return 1;
       }
-      if (typeof localStorage !== 'undefined' && localStorage.getItem('sync_log_verbose') === '1') {
+      if (isSyncLogVerbose()) {
         return 1;
       }
       const raw =

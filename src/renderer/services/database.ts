@@ -6,7 +6,7 @@ import { DELETE_BLOCKED_BY_TOURNAMENTS_MESSAGE } from '../constants/deleteGuards
 import * as dbCache from './dbCache';
 import { getPlayerDisplayName } from '@utils/playerDisplayName';
 import { SyncService } from './syncService';
-import { isStoreMode } from '../utils/storeMode';
+import { isStoreMode } from '../utils/appMode';
 import {
   MatchWithResults,
   TiebreakCriterion,

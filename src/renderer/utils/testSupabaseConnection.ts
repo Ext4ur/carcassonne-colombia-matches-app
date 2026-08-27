@@ -7,7 +7,7 @@ import {
   hasSupabaseCredentials,
   getConfigError,
 } from '@api/clients/supabaseConfig';
-import { isStoreMode } from '@utils/storeMode';
+import { isStoreMode } from '@utils/appMode';
 
 /**
  * Utilidad para probar la conexión con Supabase

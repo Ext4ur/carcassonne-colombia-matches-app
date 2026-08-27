@@ -1,4 +1,4 @@
-import { isStoreMode } from '../utils/storeMode';
+import { isStoreMode } from '../utils/appMode';
 
 export type StoreActivationMode = 'manage' | 'join' | 'readonly';
 

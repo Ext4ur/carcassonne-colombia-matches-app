@@ -2,18 +2,10 @@
 import { Tournament, PlayerStanding, BuchholzByeMode } from '../../types/tournament';
 import { Bar } from 'react-chartjs-2';
 import { useTranslation } from 'react-i18next';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
 import { getBuchholzModeMeta } from '../../utils/buchholzModeMeta';
+import { ensureChartJsRegistered } from '../../utils/chartSetup';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+ensureChartJsRegistered();
 
 interface TournamentStatsProps {
   tournament: Tournament;

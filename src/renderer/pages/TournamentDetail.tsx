@@ -61,7 +61,7 @@ import { useTranslation } from 'react-i18next';
 import { knockoutStageI18nKey } from '../types/knockout';
 import type { KnockoutSeries } from '../types/knockout';
 import { formatUserError } from '../utils/formatUserError';
-import { isStoreMode } from '../utils/storeMode';
+import { isStoreMode } from '../utils/appMode';
 import { canEditStoreTournament } from '../services/storeLifecycle';
 import StoreFinalizeExportModal from '../components/store/StoreFinalizeExportModal';
 
